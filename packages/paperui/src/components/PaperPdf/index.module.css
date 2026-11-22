@@ -1,0 +1,201 @@
+.PaperPdf {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    /* a parent with no height of its own still leaves room to read */
+    min-height: var(--paper-size-panel-height-small);
+    overflow: hidden;
+    background: var(--paper-surface-inset);
+    color: var(--paper-text);
+}
+
+/* the loader and failures sit in the middle of the viewer */
+.overlay {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: fit-content;
+    height: fit-content;
+    max-width: 100%;
+}
+
+.scroller {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    /* the column stays centered whether or not a scrollbar shows */
+    scrollbar-gutter: stable both-edges;
+    /* one finger scrolls; two pinch the document, not the page */
+    touch-action: pan-x pan-y;
+    outline: none;
+}
+
+.scroller:focus-visible {
+    outline: var(--paper-thick-border-width) solid var(--paper-primary);
+    outline-offset: calc(-1 * var(--paper-thick-border-width));
+}
+
+/* sized by the laid-out column, never by its transform: a pinch that zooms
+   out doesn't shrink what can be scrolled */
+.stage {
+    width: max-content;
+    min-width: 100%;
+}
+
+.pages {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap);
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+    transform-origin: 0 0;
+}
+
+/* a pinch in progress scales the column on the compositor */
+.gesturing {
+    will-change: transform;
+}
+
+/* the last page clears the floating controls */
+.withControls .pages {
+    padding-bottom: calc(var(--paper-control-size-small) + var(--paper-uigap-double) + var(--paper-uigap-half));
+}
+
+/* A page: white paper in both themes, as the PDF itself is drawn. Its box
+   comes from its size in points (--paper-pdf-width and -height, set as
+   lengths with one point to the pixel) and the zoom, so every page is laid out
+   before any is drawn, and a zoom resizes them all at once. */
+.page {
+    --total-scale-factor: calc(var(--paper-pdf-scale) * var(--paper-pdf-unit));
+    position: relative;
+    flex: none;
+    width: round(down, var(--total-scale-factor) * var(--paper-pdf-width), var(--scale-round-x));
+    height: round(down, var(--total-scale-factor) * var(--paper-pdf-height), var(--scale-round-y));
+    overflow: hidden;
+    background: var(--paper-on-color);
+    box-shadow: var(--paper-element-shadow);
+    contain: strict;
+}
+
+/* a canvas drawn at an older zoom stretches until the sharp one replaces it */
+.canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    user-select: none;
+}
+
+/* a page that can't be drawn isn't paper: it takes the theme's surface, so
+   its message reads in both themes */
+.page.failed {
+    background: var(--paper-surface-raised);
+}
+
+.pageError {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: fit-content;
+    height: fit-content;
+    max-width: 100%;
+}
+
+.divider {
+    align-self: stretch;
+    width: var(--paper-border-width);
+    margin: var(--paper-uigap-onefourth) var(--paper-uigap-onefourth);
+    background: var(--paper-border);
+}
+
+/* ---------- text layer: pdf.js's TextLayer, kept from its viewer's CSS ---------- */
+
+.textLayer {
+    --min-font-size: 1;
+    --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+    --min-font-size-inv: calc(1 / var(--min-font-size));
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: clip;
+    opacity: 1;
+    line-height: 1;
+    text-align: initial;
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-size-adjust: none;
+    forced-color-adjust: none;
+    transform-origin: 0 0;
+    caret-color: CanvasText;
+    /* PaperUI pages are unselectable by default; a PDF's text is for copying */
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.textLayer :is(span, br) {
+    position: absolute;
+    color: transparent;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+    user-select: text;
+}
+
+.textLayer > :not(:global(.markedContent)),
+.textLayer :global(.markedContent) span:not(:global(.markedContent)) {
+    --font-height: 0;
+    --scale-x: 1;
+    --rotate: 0deg;
+    z-index: 1;
+    font-size: calc(var(--text-scale-factor) * var(--font-height));
+    transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer :global(.markedContent) {
+    display: contents;
+}
+
+.textLayer span[role="img"] {
+    user-select: none;
+    cursor: default;
+}
+
+.textLayer ::selection {
+    background: var(--paper-selection);
+    color: transparent;
+}
+
+.textLayer br::selection {
+    background: transparent;
+}
+
+.textLayer[data-main-rotation="90"] {
+    transform: rotate(90deg) translateY(-100%);
+}
+
+.textLayer[data-main-rotation="180"] {
+    transform: rotate(180deg) translate(-100%, -100%);
+}
+
+.textLayer[data-main-rotation="270"] {
+    transform: rotate(270deg) translateX(-100%);
+}
+
+/* after the spans' rule above, which it would otherwise lose to */
+.textLayer .endOfContent {
+    position: absolute;
+    inset: 100% 0 0;
+    z-index: 0;
+    display: block;
+    cursor: default;
+    user-select: none;
+}
+
+.textLayer.selecting .endOfContent {
+    top: 0;
+}

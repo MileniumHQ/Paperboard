@@ -15,6 +15,8 @@ export interface PaperPresenceProps {
     exitClass?: string;
     /** animate on first mount too, not only when `when` changes */
     appear?: boolean;
+    /** called each time the element has left the page, once its exit has ended */
+    onExited?: () => void;
     /** a single element */
     children: JSX.Element;
 }
@@ -121,7 +123,12 @@ export function PaperPresence(props: PaperPresenceProps) {
             appear={props.appear}
             onBeforeEnter={(el) => arriving.add(el)}
             onEnter={(el, done) => play(el, "enter", props.enterClass ?? `${styles.enter} ${preset()}`, done)}
-            onExit={(el, done) => play(el, "exit", props.exitClass ?? `${styles.exit} ${preset()}`, done)}
+            onExit={(el, done) =>
+                play(el, "exit", props.exitClass ?? `${styles.exit} ${preset()}`, () => {
+                    done();
+                    props.onExited?.();
+                })
+            }
         >
             <Show when={props.when}>{props.children}</Show>
         </Transition>

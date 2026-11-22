@@ -1,7 +1,7 @@
 // The part of a modal every dialog shares: the scrim, the stack of open
 // dialogs, Escape and the back gesture, focus going in and coming back, Tab
 // kept inside, and the way in and out. PaperModal draws a box with a header
-// in it; PaperPreview draws a file with its close button above it.
+// in it; PaperPreviewModal draws a file with its close button above it.
 
 import { createNavigationBack } from "../../utils/navigationBack";
 import styles from "./index.module.css";
@@ -37,6 +37,8 @@ export interface ModalLayerProps extends JSX.HTMLAttributes<HTMLDivElement> {
     backdropClass?: string;
     /** the dialog's content, drawn while open and held through the exit */
     content: () => JSX.Element;
+    /** called once a closed dialog has left the page, its exit over */
+    onExited?: () => void;
 }
 
 // open modals, newest last: only the top one answers the keyboard, so
@@ -117,6 +119,7 @@ export function ModalLayer(props: ModalLayerProps) {
         "concealed",
         "backdropClass",
         "content",
+        "onExited",
         "ref",
         "class",
         "children",
@@ -241,6 +244,7 @@ export function ModalLayer(props: ModalLayerProps) {
                 appear
                 enterClass={styles.backdropTransitionIn}
                 exitClass={styles.backdropTransitionOut}
+                onExited={() => local.onExited?.()}
             >
                 <div
                     class={cx(styles.backdrop, local.backdropClass)}

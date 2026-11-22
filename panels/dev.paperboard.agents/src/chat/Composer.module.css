@@ -148,8 +148,8 @@
 .chipThumb {
     width: var(--paper-control-size-small);
     height: var(--paper-control-size-small);
-    object-fit: cover;
     border-radius: var(--paper-border-radius-half);
+    color: var(--paper-text-muted);
 }
 
 .chipIcon {

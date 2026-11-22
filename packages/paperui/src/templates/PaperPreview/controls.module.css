@@ -1,0 +1,49 @@
+.host {
+    position: relative;
+}
+
+.controls {
+    position: absolute;
+    left: 50%;
+    bottom: var(--paper-uigap);
+    z-index: var(--paper-z-raised);
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    padding: var(--paper-uigap-onefourth);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius-pill);
+    background: color-mix(in srgb, var(--paper-surface-raised) 86%, transparent);
+    backdrop-filter: var(--paper-blur-medium);
+    box-shadow: var(--paper-element-shadow);
+    transform: translateX(-50%);
+    transition: opacity 200ms var(--paper-ease-standard);
+}
+
+/* a pointer that hovers sees them when it is over the file */
+@media (hover: hover) {
+    .controls {
+        opacity: 0;
+    }
+
+    .host:hover .controls,
+    .controls:focus-within {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .controls {
+        transition: none;
+    }
+}
+
+.readout {
+    min-width: var(--paper-control-size-medium);
+    padding: 0 var(--paper-uigap-half);
+    color: var(--paper-text-muted);
+    font-size: var(--paper-text-size-2);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+}

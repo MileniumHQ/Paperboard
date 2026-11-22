@@ -14,7 +14,7 @@ export interface PaperInlineChipProps
  * A pressable chip that sits in a line of text, like a file named in a
  * sentence: an icon and a label, exactly one line tall, so the text around
  * it keeps its spacing. What a press does is the caller's, such as opening
- * the file in a PaperPreview. A long label is cut short with an ellipsis.
+ * the file in a PaperPreviewModal. A long label is cut short with an ellipsis.
  */
 export function PaperInlineChip(props: PaperInlineChipProps) {
     const [local, rest] = splitProps(props, ["icon", "type", "class", "classList", "children"]);

@@ -28,9 +28,13 @@ export function createFiles(calls: ServiceCalls<typeof agentsContract>) {
     // web pictures messages show, by address, as blob URLs: the service fetches them, never this page
     const webImages = new Map<string, Promise<string>>();
 
+    // files on screen in the preview: their URLs stay alive however full the cache gets
+    const held = new Map<string, number>();
+
     const evict = () => {
         for (const [id, c] of cache) {
             if (cache.size <= CACHE_FILES && cached <= CACHE_BYTES) break;
+            if (held.has(id)) continue;
             cache.delete(id);
             cached -= c.bytes;
             void c.read.then((r) => URL.revokeObjectURL(r.url), () => undefined);
@@ -104,6 +108,23 @@ export function createFiles(calls: ServiceCalls<typeof agentsContract>) {
             });
             evict();
             return entry.read;
+        },
+
+        /**
+         * Keeps a file's blob URL alive while something reads from it over
+         * time (a PDF's pages, a film's seeking), until the returned release.
+         */
+        hold(id: string): () => void {
+            held.set(id, (held.get(id) ?? 0) + 1);
+            let released = false;
+            return () => {
+                if (released) return;
+                released = true;
+                const left = (held.get(id) ?? 1) - 1;
+                if (left > 0) held.set(id, left);
+                else held.delete(id);
+                evict();
+            };
         },
 
         /** What a file is, without reading it: for a chip that names it. */

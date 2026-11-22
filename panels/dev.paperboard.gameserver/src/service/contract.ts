@@ -278,7 +278,7 @@ const minecraftCalls = {
         input: shape.object({ path: shape.text() }),
         output: shape.either(
             shape.object({ kind: shape.oneOf("text"), text: shape.text(), version: shape.text() }),
-            shape.object({ kind: shape.oneOf("image"), src: shape.text(), alt: shape.text() }),
+            shape.object({ kind: shape.oneOf("preview"), src: shape.text(), type: shape.text() }),
             shape.object({ kind: shape.oneOf("unavailable"), reason: shape.text() }),
         ),
     },

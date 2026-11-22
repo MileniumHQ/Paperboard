@@ -25,3 +25,16 @@ export function formatByteProgress(done: number, total: number): string {
     const clamped = Math.min(Math.max(done, 0), total);
     return `${amount(clamped / divisor)} / ${amount(total / divisor)} ${UNITS[unit]}`;
 }
+
+/** A size as people read it: "820 bytes", "48 KB", "1.2 GB", in the same units and rounding as formatByteProgress. */
+export function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes < 0) throw new Error(`formatBytes needs a size, got ${bytes}`);
+    if (bytes < STEP) return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
+    let unit = 0;
+    let value = bytes / STEP;
+    while (unit < UNITS.length - 1 && value >= STEP) {
+        unit += 1;
+        value /= STEP;
+    }
+    return `${amount(value)} ${UNITS[unit]}`;
+}

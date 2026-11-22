@@ -1,0 +1,232 @@
+.centered {
+    margin: auto;
+}
+
+/* ---------- image ---------- */
+.imageFrame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    outline: none;
+    touch-action: none;
+    cursor: zoom-in;
+}
+
+.imageFrame.zoomed {
+    cursor: grab;
+}
+
+.imageFrame.dragging {
+    cursor: grabbing;
+}
+
+.imageFrame:focus-visible {
+    box-shadow: inset 0 0 0 var(--paper-thick-border-width) var(--paper-primary);
+}
+
+.image {
+    flex: none;
+    display: block;
+    max-width: none;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-inset);
+    transform-origin: center;
+    transition:
+        transform 220ms var(--paper-ease-emphasized),
+        border-radius 220ms var(--paper-ease-standard),
+        opacity 160ms var(--paper-ease-standard);
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* a zoomed picture fills the frame edge to edge */
+.zoomed .image {
+    border-radius: 0;
+}
+
+/* a pinch, a drag or a scroll follows the fingers exactly */
+.dragging .image {
+    transition: none;
+}
+
+/* past four screen pixels to one picture pixel, pixels stay square */
+.pixelated {
+    image-rendering: pixelated;
+}
+
+.hidden {
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .image {
+        transition: none;
+    }
+}
+
+/* ---------- pages: markdown, fonts, cards and messages ---------- */
+.sheet {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--paper-size-panel-large);
+    max-height: 100%;
+    margin: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--paper-uigap-double);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-element-shadow);
+}
+
+.document {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+/* on a pill of its own: under code or a table it sits on whatever is behind the preview */
+.cut {
+    flex-shrink: 0;
+    align-self: center;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-pill);
+    background: var(--paper-surface-raised);
+    text-align: center;
+}
+
+/* a message is a short sheet */
+.message {
+    max-width: var(--paper-size-panel-small);
+}
+
+/* ---------- code and text ---------- */
+/* code scrolls both ways inside its own block, so its copy button stays put */
+.code {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    max-width: var(--paper-size-panel-wide);
+    max-height: 100%;
+    min-height: 0;
+    margin: auto;
+}
+
+.code > :first-child {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-shadow: var(--paper-element-shadow);
+}
+
+/* a copyable block centres a short line beside its button; a file starts at its top */
+.codeBlock.codeBlock {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: flex-start;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+/* ---------- tables ---------- */
+.tableSheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    max-width: var(--paper-size-panel-wide);
+    max-height: 100%;
+    min-height: 0;
+    margin: auto;
+}
+
+.tableScroll {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-element-shadow);
+}
+
+/* the header row stays while the rows scroll under it */
+.table thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--paper-z-raised);
+}
+
+.table td,
+.table th {
+    white-space: nowrap;
+    max-width: var(--paper-size-field-wide);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- fonts ---------- */
+.font {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    color: var(--paper-text);
+}
+
+.fontHero {
+    font-size: var(--paper-text-size-17);
+    line-height: 1;
+}
+
+.fontAlphabet {
+    font-size: var(--paper-text-size-6);
+    line-height: var(--paper-leading-snug);
+    overflow-wrap: anywhere;
+}
+
+.fontSample {
+    margin: 0;
+    line-height: var(--paper-leading-snug);
+    overflow-wrap: anywhere;
+}
+
+/* ---------- a file with no viewer ---------- */
+.card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: var(--paper-size-panel-small);
+    text-align: center;
+}
+
+.cardIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--paper-avatar-size-xlarge);
+    height: var(--paper-avatar-size-xlarge);
+    margin-bottom: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-element);
+    color: var(--paper-primary);
+    font-size: var(--paper-icon-size-xlarge);
+}
+
+.cardName {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.cardActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap);
+}

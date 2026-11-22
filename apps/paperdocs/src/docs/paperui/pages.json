@@ -185,6 +185,10 @@
                     "name": "PaperModal",
                     "file": "paper-modal"
                 },
+                "papermodel": {
+                    "name": "PaperModel",
+                    "file": "paper-model"
+                },
                 "paperpageheader": {
                     "name": "PaperPageHeader",
                     "file": "paper-page-header"
@@ -193,6 +197,10 @@
                     "name": "PaperPagination",
                     "file": "paper-pagination"
                 },
+                "paperpdf": {
+                    "name": "PaperPdf",
+                    "file": "paper-pdf"
+                },
                 "paperpopover": {
                     "name": "PaperPopover",
                     "file": "paper-popover"
@@ -200,10 +208,6 @@
                 "paperpresence": {
                     "name": "PaperPresence",
                     "file": "paper-presence"
-                },
-                "paperpreview": {
-                    "name": "PaperPreview",
-                    "file": "paper-preview"
                 },
                 "paperprogress": {
                     "name": "PaperProgress",
@@ -315,6 +319,10 @@
                 "paperpanel": {
                     "name": "PaperPanel",
                     "file": "paper-panel"
+                },
+                "paperpreview": {
+                    "name": "PaperPreview",
+                    "file": "paper-preview"
                 },
                 "papersettinglist": {
                     "name": "PaperSettingList",

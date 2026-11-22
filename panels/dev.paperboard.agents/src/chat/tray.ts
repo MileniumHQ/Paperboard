@@ -11,17 +11,14 @@ import type { Agent } from "../lib/agent";
 export interface Chip {
     key: string;
     name: string;
-    /** a local picture of an image being sent, while it's here */
-    preview: string | null;
-    kind: "image" | "video" | "audio" | "file";
+    /** the file on this device, while it's here: what its thumbnail is made of */
+    url: string;
+    type: string;
     /** 0–1 while uploading */
     progress: number;
     file: Attachment | null;
     error: string | null;
 }
-
-const kindOf = (type: string): Chip["kind"] =>
-    type.startsWith("image/") ? "image" : type.startsWith("video/") ? "video" : type.startsWith("audio/") ? "audio" : "file";
 
 let keys = 0;
 
@@ -35,7 +32,7 @@ export function createTray(agent: Agent) {
     const release = (c: Chip) => {
         aborts.get(c.key)?.abort();
         aborts.delete(c.key);
-        if (c.preview) URL.revokeObjectURL(c.preview);
+        URL.revokeObjectURL(c.url);
     };
 
     const tray = {
@@ -45,10 +42,9 @@ export function createTray(agent: Agent) {
             const room = LIMITS.attachments.perMessage - chips().length;
             for (const f of files.slice(0, Math.max(0, room))) {
                 const key = `chip${++keys}`;
-                const kind = kindOf(f.type);
                 const abort = new AbortController();
                 aborts.set(key, abort);
-                setChips(list.length, { key, name: f.name, preview: kind === "image" ? URL.createObjectURL(f) : null, kind, progress: 0, file: null, error: null });
+                setChips(list.length, { key, name: f.name, url: URL.createObjectURL(f), type: f.type, progress: 0, file: null, error: null });
                 agent.files
                     .upload(f, (progress) => update(key, { progress }), abort.signal)
                     .then(

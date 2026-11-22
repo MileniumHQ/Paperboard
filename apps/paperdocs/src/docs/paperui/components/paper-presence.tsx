@@ -94,6 +94,12 @@ export function Example() {
                         <td>Plays the entrance on first mount too. Without it, an element that is already shown when the component mounts appears with no animation.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>onExited</PaperCode></td>
+                        <td><PaperCode>() =&gt; void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called each time the element has left the page, once its exit animation has ended. Not called when PaperPresence itself is removed.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>enterClass</PaperCode>, <PaperCode>exitClass</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>No default (the preset's classes)</td>

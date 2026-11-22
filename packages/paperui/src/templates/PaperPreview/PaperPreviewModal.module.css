@@ -1,0 +1,81 @@
+/* the file and the bar above it, as one column on the scrim, as tall as the
+   screen allows so each viewer has the room to fit itself */
+.PaperPreviewModal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    height: 100%;
+    max-width: var(--paper-size-panel-wide);
+    min-height: 0;
+}
+
+/* pictures, films, pages and models get the whole screen */
+.PaperPreviewModal[data-kind="image"],
+.PaperPreviewModal[data-kind="video"],
+.PaperPreviewModal[data-kind="pdf"],
+.PaperPreviewModal[data-kind="model"] {
+    max-width: 100%;
+}
+
+.PaperPreviewModal[data-kind="markdown"],
+.PaperPreviewModal[data-kind="font"] {
+    max-width: var(--paper-size-panel-large);
+}
+
+.PaperPreviewModal[data-kind="audio"],
+.PaperPreviewModal[data-kind="file"],
+.PaperPreviewModal[data-kind="error"] {
+    max-width: var(--paper-size-panel-small);
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap);
+    flex-shrink: 0;
+}
+
+/* on the scrim, which is dark in both themes */
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--paper-on-color);
+    font-size: var(--paper-text-size-3);
+    font-weight: 600;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.PaperPreviewModal .preview {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* a page and a model sit on a surface of their own, not on the scrim */
+.PaperPreviewModal[data-kind="pdf"] .preview,
+.PaperPreviewModal[data-kind="model"] .preview {
+    overflow: hidden;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-inset);
+    box-shadow: var(--paper-element-shadow);
+}
+
+/* a message or a card is as tall as what it says, not the screen */
+.PaperPreviewModal[data-kind="file"] .preview,
+.PaperPreviewModal[data-kind="error"] .preview {
+    container-type: normal;
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    margin: auto 0;
+}

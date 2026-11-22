@@ -1,0 +1,68 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 216 >>
+stream
+0.13 0.48 0.96 rg 72 652 180 40 re f
+0 g
+BT /F1 28 Tf 72 592 Td (PaperPdf sample) Tj ET
+BT /F1 14 Tf 72 558 Td (The quick brown fox jumps over the lazy dog.) Tj ET
+BT /F1 14 Tf 72 524 Td (First page of three.) Tj ET
+
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 164 >>
+stream
+0.13 0.48 0.96 rg 72 652 180 40 re f
+0 g
+BT /F1 28 Tf 72 592 Td (Second page) Tj ET
+BT /F1 14 Tf 72 558 Td (Pages scroll in one column, fitted to the width.) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 169 >>
+stream
+0.13 0.48 0.96 rg 72 472 180 40 re f
+0 g
+BT /F1 28 Tf 72 412 Td (Third page, landscape) Tj ET
+BT /F1 14 Tf 72 378 Td (A page turned sideways keeps its own shape.) Tj ET
+
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000000230 00000 n 
+0000000356 00000 n 
+0000000623 00000 n 
+0000000749 00000 n 
+0000000964 00000 n 
+0000001090 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /ID [<50617065725064664669787475726531> <50617065725064664669787475726531>] >>
+startxref
+1310
+%%EOF

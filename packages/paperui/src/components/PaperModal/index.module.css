@@ -64,7 +64,7 @@
     pointer-events: none;
 }
 
-/* every dialog: PaperModal's box, PaperPreview's file */
+/* every dialog: PaperModal's box, PaperPreviewModal's file */
 .dialog {
     position: relative;
     transform: translateZ(0);

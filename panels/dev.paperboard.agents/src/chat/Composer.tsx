@@ -4,7 +4,7 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, createPaperMobile, haptic, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, PaperPreviewThumbnail, createPaperMobile, haptic, showError } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Tray } from "./tray";
@@ -121,8 +121,8 @@ export default function Composer(props: {
                     <For each={tray().chips()}>
                         {(chip) => (
                             <li class={styles.chip} classList={{ [styles.chipFailed!]: !!chip.error }} title={chip.error ?? chip.name}>
-                                <Show when={chip.preview} fallback={<PaperIcon class={styles.chipIcon}>{chip.error ? "error" : chip.kind === "video" ? "movie" : chip.kind === "audio" ? "music_note" : "description"}</PaperIcon>}>
-                                    <img class={styles.chipThumb} src={chip.preview!} alt="" />
+                                <Show when={!chip.error} fallback={<PaperIcon class={styles.chipIcon}>error</PaperIcon>}>
+                                    <PaperPreviewThumbnail class={styles.chipThumb} src={chip.url} name={chip.name} type={chip.type} fit="cover" aria-hidden="true" />
                                 </Show>
                                 <span class={styles.chipName}>{chip.error ? `${chip.name}: ${chip.error}` : chip.name}</span>
                                 <Show when={!chip.file && !chip.error}>

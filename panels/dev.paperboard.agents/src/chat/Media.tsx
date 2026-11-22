@@ -1,6 +1,6 @@
 // Files in the conversation, shown: images, video and audio play where they
-// are, markdown, code and text are cards, and every one of them opens in a
-// PaperPreview. Anything a preview can't show is a card that saves it.
+// are, documents, code, models and the rest are cards, and every one of them
+// opens in a PaperPreviewModal. Anything a preview can't show is a card that saves it.
 // Agent messages show files through markdown: `![caption](attachment:<id>)`
 // on its own line, or `[name](attachment:<id>)` in a sentence, a chip that
 // opens it. They can show web images and YouTube thumbnails the same way. A
@@ -8,18 +8,20 @@
 // fetches it under the agent's network rule: a message, written by the model or
 // by a page it read, never gets this page to ask a host for anything.
 
-import { createContext, createMemo, createSignal, For, Match, Switch, useContext, type JSX, type ParentProps } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, For, Match, on, onCleanup, Switch, useContext, type JSX, type ParentProps } from "solid-js";
 import {
     PaperAudio,
     PaperButton,
     PaperIcon,
     PaperInlineChip,
     PaperLink,
-    PaperPreview,
+    PaperPreviewModal,
     PaperVideo,
     createRead,
+    previewIcon,
     previewKind,
     sameData,
+    showError,
     type MarkdownImage,
     type MarkdownLink,
 } from "@mileniumhq/paperui";
@@ -31,24 +33,7 @@ import { youTubeId } from "../lib/youtube";
 import styles from "./Media.module.css";
 
 /** The icon for a file, by how it shows. */
-function iconFor(file: Attachment): string {
-    switch (file.kind === "file" ? previewKind(file.name, file.type) : file.kind) {
-        case "image":
-            return "image";
-        case "video":
-            return "movie";
-        case "audio":
-            return "music_note";
-        case "markdown":
-            return "article";
-        case "code":
-            return "code";
-        case "text":
-            return "description";
-        default:
-            return "draft";
-    }
-}
+const iconFor = (file: Attachment) => previewIcon(file.kind === "file" ? previewKind(file.name, file.type) : file.kind);
 
 const previewable = (file: Attachment) => previewKind(file.name, file.type) !== null;
 
@@ -80,13 +65,30 @@ async function saveFile(files: Files, id: string) {
 export function MediaProvider(props: ParentProps<{ files: Files }>) {
     const [shown, setShown] = createSignal<{ id: string; name: string } | null>(null);
     const read = createRead((id: string) => props.files.read(id), { source: () => shown()?.id });
-    const [saveError, setSaveError] = createSignal<string | null>(null);
+    // the file in the preview keeps its URL while it's shown, and through the
+    // way out: a file the preview closes on lets go once it has left the screen
+    let leaving: (() => void)[] = [];
+    const left = () => {
+        for (const release of leaving) release();
+        leaving = [];
+    };
+    onCleanup(left);
+    createEffect(
+        on(
+            () => shown()?.id,
+            (id) => {
+                if (!id) return;
+                const release = props.files.hold(id);
+                onCleanup(() => {
+                    if (shown()) release();
+                    else leaving.push(release);
+                });
+            },
+        ),
+    );
     const media: Media = {
         files: props.files,
-        open: (id, name) => {
-            setSaveError(null);
-            setShown({ id, name });
-        },
+        open: (id, name) => setShown({ id, name }),
         save: (id) => saveFile(props.files, id),
     };
     const file = () => (read.loading() || read.error() ? undefined : read.value());
@@ -94,20 +96,22 @@ export function MediaProvider(props: ParentProps<{ files: Files }>) {
     return (
         <MediaContext.Provider value={media}>
             {props.children}
-            <PaperPreview
+            <PaperPreviewModal
                 open={shown() !== null}
                 onClose={() => setShown(null)}
+                onExited={left}
                 name={file()?.file.name ?? shown()?.name ?? ""}
                 type={file()?.file.type}
+                size={file()?.file.bytes}
                 src={file()?.url}
-                error={read.error() ? `${shown()?.name ?? "The file"} couldn't be read: ${read.error()}` : (saveError() ?? undefined)}
+                error={read.error() ? `${shown()?.name ?? "The file"} couldn't be read: ${read.error()}` : undefined}
                 actions={
                     <PaperButton
                         size="small"
                         disabled={!file()}
                         onClick={() => {
                             const f = file();
-                            if (f) media.save(f.file.id).catch((e) => setSaveError(`${f.file.name} couldn't be saved: ${errorMessage(e)}`));
+                            if (f) media.save(f.file.id).catch((e: unknown) => showError(`${f.file.name} couldn't be saved`, e));
                         }}
                     >
                         <PaperIcon zeroHeight>download</PaperIcon>
