@@ -44,8 +44,9 @@ export interface HomePersistence {
 // unreadable layout is shown as an error and never saved over by accident:
 // nothing is saved until it is read, and only Start over replaces it.
 // Saves are debounced and run one at a time, in order; whatever is still
-// unsaved when Home goes is saved then.
-export function createHomePersistence(phone: Accessor<boolean>): HomePersistence {
+// unsaved when Home goes is saved then. `glance` is the computer a Home
+// never arranged starts with at a glance.
+export function createHomePersistence(phone: Accessor<boolean>, glance: Accessor<string>): HomePersistence {
     const layoutId = () => (phone() ? HOME_PHONE_LAYOUT_ID : HOME_LAYOUT_ID);
     const [items, setItems] = createSignal<HomeItem[]>([]);
     const [loadState, setLoadState] = createSignal<HomeLoadState>("loading");
@@ -59,9 +60,10 @@ export function createHomePersistence(phone: Accessor<boolean>): HomePersistence
             setUnarranged(null);
             if (raw !== null && raw !== undefined) setItems(phone() ? parsePhoneLayout(raw) : parseHomeLayout(raw));
             else if (!phone()) {
-                // a Home never arranged starts with this computer at a glance;
+                // a Home never arranged starts with this computer at a glance
+                // (on a host without one, the first computer it lists);
                 // nothing is saved until it is changed
-                setItems(defaultHomeItems(HOME_LAYOUT_COMPUTER));
+                setItems(defaultHomeItems(glance()));
             } else {
                 // a phone never arranged shows the window's Home, laid out on
                 // pages as tall as the screen, until it is changed

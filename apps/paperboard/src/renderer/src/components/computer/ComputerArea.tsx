@@ -237,27 +237,24 @@ export default function ComputerArea(props: {
                         class={styles.frameLayer}
                         classList={{ [styles.away]: isShellTab(selectedTab()) }}
                     >
-                        {/* a frame is told mobile mode as it loads, so it waits for the launch options */}
-                        <Show when={props.navigation.layoutKnown()}>
-                            <PanelView
-                                panelHeading={panelHeading}
-                                mobile={props.navigation.mobile()}
-                                activePanel={selectedTab()}
-                                activeComputerId={activeComputerId()}
-                                computerName={(id) => props.computers.computers().find((c) => c.id === id)?.name || "This Computer"}
-                                openedPanels={props.panels.openedPanels()}
-                                reloadTokens={props.panels.reloadTokens()}
-                                onReloadPanel={props.restarts.bumpReloadToken}
-                                restartStates={props.restarts.restartStates()}
-                                onPanelFailed={(key) => void refreshPanelsForComputer(key.split("::")[0])}
-                                onCrumbs={setCrumbs}
-                                backs={frameBacks}
-                                onRestartPanel={(key) => {
-                                    const [compId, panelId] = key.split("::");
-                                    void props.restarts.restartPanel(compId, panelId, props.panelName(compId, panelId));
-                                }}
-                            />
-                        </Show>
+                        <PanelView
+                            panelHeading={panelHeading}
+                            mobile={props.navigation.mobile()}
+                            activePanel={selectedTab()}
+                            activeComputerId={activeComputerId()}
+                            computerName={(id) => props.computers.computers().find((c) => c.id === id)?.name || "This Computer"}
+                            openedPanels={props.panels.openedPanels()}
+                            reloadTokens={props.panels.reloadTokens()}
+                            onReloadPanel={props.restarts.bumpReloadToken}
+                            restartStates={props.restarts.restartStates()}
+                            onPanelFailed={(key) => void refreshPanelsForComputer(key.split("::")[0])}
+                            onCrumbs={setCrumbs}
+                            backs={frameBacks}
+                            onRestartPanel={(key) => {
+                                const [compId, panelId] = key.split("::");
+                                void props.restarts.restartPanel(compId, panelId, props.panelName(compId, panelId));
+                            }}
+                        />
                     </PaperFlex>
                 </PaperFlex>
             </PaperSlidePage>

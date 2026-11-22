@@ -17,6 +17,7 @@ import type { ComputerInfo } from "../../lib/shell";
 import {
     findFreeSpot,
     findPhoneSpot,
+    glanceComputerId,
     MAX_HOME_ITEMS,
     pageOf,
     PHONE_COLUMNS,
@@ -60,7 +61,7 @@ export interface HomeViewProps {
 const HomeView: Component<HomeViewProps> = (props) => {
     const phone = () => !!props.mobile;
     // the layout and its saves (homePersistence.ts)
-    const layout = createHomePersistence(phone);
+    const layout = createHomePersistence(phone, () => glanceComputerId(props.computers));
     const items = layout.items;
     const loadState = layout.loadState;
     const itemsById = createMemo(() => new Map(items().map((item) => [item.id, item])));

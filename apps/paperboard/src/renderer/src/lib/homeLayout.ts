@@ -9,6 +9,12 @@ import { parseWidgetOptionValues, parseWidgetSize, WIDGET_MAX_WIDTH, isWidgetId,
 export const HOME_LAYOUT_ID = "shell-home-layout";
 /** Home spans every computer, so its layout is this machine's, never a remote's. */
 export const HOME_LAYOUT_COMPUTER = "local";
+
+/** The computer a Home never arranged shows at a glance: this computer, or
+ * on a host without one, the first computer it lists. */
+export function glanceComputerId(computers: readonly { id: string; isLocal?: boolean }[]): string {
+    return computers.find((c) => c.isLocal)?.id ?? computers[0]?.id ?? HOME_LAYOUT_COMPUTER;
+}
 export const HOME_LAYOUT_VERSION = 2;
 /** The window gains and loses cells this many at a time, so cells stay a steady size. */
 export const CELL_STEP = WIDGET_MAX_WIDTH;

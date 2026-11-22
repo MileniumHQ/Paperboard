@@ -1,7 +1,6 @@
-import { createSignal } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import { showError } from "@mileniumhq/paperui";
-import { mobileMode } from "../lib/mobileMode";
-import { shownComputers, showsWelcome } from "../lib/phoneComputers";
+import { shownComputers } from "../lib/phoneComputers";
 import { askPanelToLeave, unsavedPanels } from "../lib/unsavedPanels";
 import type { useComputers } from "./useComputers";
 import type { useComputerSelection } from "./useComputerSelection";
@@ -12,6 +11,10 @@ export interface ShellNavigationOptions {
     panels: ReturnType<typeof usePanels>;
     selection: ReturnType<typeof useComputerSelection>;
     panelName: (computerId: string, panelId: string) => string;
+    /** the host's layout (AppProps.layout); it may change while the shell runs */
+    layout: () => "desktop" | "phone";
+    /** the computers leave out This Computer (AppProps.hidesThisComputer) */
+    hidesThisComputer: () => boolean;
 }
 
 // What the main area shows: Home (where Paperboard opens), App Settings, or
@@ -19,22 +22,36 @@ export interface ShellNavigationOptions {
 // the rail and panel list.
 export function useShellNavigation(options: ShellNavigationOptions) {
     const { computers, activeComputerId, setOfflineTarget } = options.computers;
-    const { setComputerTab } = options.panels;
+    const { getSelectedTab, setComputerTab } = options.panels;
     const selection = options.selection;
 
     const [railMode, setRailMode] = createSignal<"home" | "settings" | "computer">("home");
-    // --mobile: the phone layout. The rail and panel list fill the screen,
-    // and what's opened from them slides in over them as its own page.
-    // Home and the panel frames wait for it to be known: a phone keeps its
-    // own arrangement, and a frame is told it as it loads.
-    const mobile = () => mobileMode() === true;
-    const layoutKnown = () => mobileMode() !== null;
+    // the phone layout: the rail and panel list fill the screen, and what's
+    // opened from them slides in over them as its own page
+    const mobile = () => options.layout() === "phone";
     const [mobilePageOpen, setMobilePageOpen] = createSignal(false);
     // the rail's Settings opens as a page over whatever the rail shows
     const [mobileSettingsOpen, setMobileSettingsOpen] = createSignal(false);
-    // a phone lists only paired computers, and opens on a welcome until one is
-    const listedComputers = () => shownComputers(computers(), mobile());
-    const mobileWelcome = () => showsWelcome(computers(), mobile());
+    // the computers the shell lists
+    const listedComputers = () => shownComputers(computers(), options.hidesThisComputer());
+    // The layout can change under a running shell (a foldable opening or
+    // closing, an iPad going split view): what was open stays open, in the
+    // new layout's way. The shell never remounts, so no panel reloads.
+    createEffect(on(mobile, (phone) => {
+        if (phone) {
+            // settings and an open panel are pages over the rail
+            if (railMode() === "settings") {
+                setRailMode("home");
+                setMobileSettingsOpen(true);
+            }
+            setMobilePageOpen(railMode() === "computer" && getSelectedTab(activeComputerId()) !== "landing");
+        } else {
+            // beside the rail, nothing is a page
+            if (mobileSettingsOpen()) setRailMode("settings");
+            setMobileSettingsOpen(false);
+            setMobilePageOpen(false);
+        }
+    }, { defer: true }));
     const openMobilePage = () => {
         if (mobile()) setMobilePageOpen(true);
     };
@@ -92,13 +109,11 @@ export function useShellNavigation(options: ShellNavigationOptions) {
         railMode,
         railValue,
         mobile,
-        layoutKnown,
+        listedComputers,
         mobilePageOpen,
         setMobilePageOpen,
         mobileSettingsOpen,
         setMobileSettingsOpen,
-        listedComputers,
-        mobileWelcome,
         openMobilePage,
         selectRail,
         openComputerTab,
