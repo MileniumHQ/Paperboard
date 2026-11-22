@@ -54,10 +54,8 @@ const LIST_FILES = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // a name looked up from Mojang is trusted for an hour; renames are rare and
 // a roster of a thousand players must not ask again on every visit
-const NAME_TTL_MS = 60 * 60 * 1000;
-const MAX_NAME_CACHE = 2048;
+export const NAME_TTL_MS = 60 * 60 * 1000;
 const MAX_NAME_LOOKUPS = 4;
-const MAX_NAMES_PER_CALL = 200;
 
 async function readList(ctx: Server, path: string): Promise<ListEntry[]> {
     const content = await ctx.files.read(path, PANEL_ID);
@@ -225,8 +223,7 @@ export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
 export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming: BedrockNaming | null): Promise<Record<string, string>> {
     if (!Array.isArray(rawUuids)) throw new Error("uuids must be a list");
     const valid = [...new Set(rawUuids.map((u) => String(u ?? "").trim().toLowerCase()))]
-        .filter((u) => UUID_RE.test(u))
-        .slice(0, MAX_NAMES_PER_CALL);
+        .filter((u) => UUID_RE.test(u));
     const result: Record<string, string> = {};
     if (valid.length === 0) return result;
     const onlineMode = isOnlineMode(await readServerProperties(ctx));
@@ -246,7 +243,7 @@ export async function currentPlayerNames(ctx: Server, rawUuids: unknown, naming:
             try {
                 const name = await currentName(uuid, naming);
                 if (!name) continue;
-                rememberName(ctx, uuid, name);
+                minecraftOf(ctx).lists.names.set(uuid, { name, at: Date.now() });
                 result[uuid] = name;
             } catch (err) {
                 failures.push(errorMessage(err));
@@ -267,16 +264,6 @@ async function currentName(uuid: string, naming: BedrockNaming | null): Promise<
         return gamertag ? bedrockPlayerName(gamertag, naming) : null;
     }
     return (await profileForUuid(uuid))?.name ?? null;
-}
-
-function rememberName(ctx: Server, uuid: string, name: string): void {
-    minecraftOf(ctx).lists.names.delete(uuid);
-    minecraftOf(ctx).lists.names.set(uuid, { name, at: Date.now() });
-    while (minecraftOf(ctx).lists.names.size > MAX_NAME_CACHE) {
-        const oldest = minecraftOf(ctx).lists.names.keys().next();
-        if (oldest.done) break;
-        minecraftOf(ctx).lists.names.delete(oldest.value);
-    }
 }
 
 async function knownAccount(ctx: Server, name: string): Promise<{ uuid: string; name: string } | null> {

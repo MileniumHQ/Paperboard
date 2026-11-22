@@ -46,28 +46,22 @@ export function formatDistance(cm: number): string {
 /** A world's players by their numbers. */
 export interface Leaderboard {
     summaryOf(player: Ranked): PlayerStatSummary | undefined;
-    /** seconds played: the world's stats file, else what this session has counted */
+    /** seconds played from the world's stats file */
     playtimeSeconds(player: Ranked): number | undefined;
     /** highest first for stats, alphabetical for names */
     sort<P extends Ranked>(players: readonly P[], key: SortKey): P[];
 }
 
-/** `summaries` are the world's stats files by lowercased uuid; `playtime` is this session's count by lowercased name */
-export function createLeaderboard(summaries: Accessor<ReadonlyMap<string, PlayerStatSummary>>, playtime: Accessor<ReadonlyMap<string, number>>): Leaderboard {
+/** `summaries` are the world's stats files by lowercased uuid */
+export function createLeaderboard(summaries: Accessor<ReadonlyMap<string, PlayerStatSummary>>): Leaderboard {
     const summaryOf = (player: Ranked) => (player.uuid ? summaries().get(player.uuid.toLowerCase()) : undefined);
-    const counted = (player: Ranked) => playtime().get(player.name.toLowerCase());
-    const statNumber = (player: Ranked, key: Exclude<SortKey, "name">): number => {
-        if (key === "playtime") {
-            const stats = summaryOf(player);
-            return stats ? stats.playTimeTicks : (counted(player) ?? 0) * 20;
-        }
-        return summaryOf(player)?.[STAT_FIELDS[key]] ?? 0;
-    };
+    const statNumber = (player: Ranked, key: Exclude<SortKey, "name">): number =>
+        summaryOf(player)?.[key === "playtime" ? "playTimeTicks" : STAT_FIELDS[key]] ?? 0;
     return {
         summaryOf,
         playtimeSeconds: (player) => {
             const stats = summaryOf(player);
-            return stats ? Math.floor(stats.playTimeTicks / 20) : counted(player);
+            return stats ? Math.floor(stats.playTimeTicks / 20) : undefined;
         },
         sort: (players, key) => {
             const list = players.slice();

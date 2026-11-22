@@ -466,7 +466,6 @@ const minecraftCalls = {
     pardonPlayer: { input: shape.object({ player: shape.text() }), output: done },
     killPlayer: { input: shape.object({ player: shape.text() }), output: done },
     deletePlayerData: { input: shape.object({ player: shape.text(), uuid: shape.optional(shape.text()) }), output: done },
-    forgetPlayerData: { input: shape.object({ player: shape.text() }), output: done },
     getPlayerSkin: {
         input: shape.object({ player: shape.text(), uuid: shape.optional(shape.text()), size: shape.optional(shape.number()) }),
         output: shape.nullable(text),
@@ -780,7 +779,6 @@ export const serverStateShape = shape.object({
     playerStats: shape.record(
         shape.object({ health: shape.optional(shape.number()), food: shape.optional(shape.number()), xpLevel: shape.optional(shape.number()), xpProgress: shape.optional(shape.number()) }),
     ),
-    playerPlaytime: shape.record(shape.number()),
     /** latest known x/y/z and dimension per player key, read from the running server for the map; empty when offline */
     playerPositions: shape.record(shape.object({ x: shape.number(), y: shape.number(), z: shape.number(), dimension: shape.text() })),
     /** live gamerule values read from the running server (and optimistic offline edits) */

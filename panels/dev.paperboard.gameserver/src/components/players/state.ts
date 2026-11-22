@@ -1,11 +1,10 @@
 // What the Players tab knows and does: the roster (the server's lists plus
-// everyone with data in this world), the names players have now, who is
-// banned, which player is open, and every change to them. The tab draws it:
-// what couldn't be read stands above the roster, a change that failed is a toast.
+// everyone with data in this world), the names players have now, which player
+// is open, and every change to them. The tab draws it: what couldn't be read
+// stands above the roster, a change that failed is a toast.
 import { keepUnchanged, createLatest, createPolling, createRead, showError } from "@mileniumhq/paperui";
 import { batch, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import { useServer } from "../../lib/server";
-import { type CallName } from "../../service/contract";
 import type { BedrockNaming } from "../../core/bedrock";
 import { errorMessage } from "../../lib/failure";
 import { createLeaderboard } from "./leaderboard";
@@ -18,45 +17,29 @@ export interface PlayerInfo {
     uuid?: string;
     whitelisted: boolean;
     op: boolean;
-}
-
-/** service/playerLists.ts RosterEntry */
-interface RosterEntry extends PlayerInfo {
-    uuid: string;
     banned: boolean;
     banReason: string | null;
 }
 
 export type PlayerFlagField = "op" | "whitelisted";
 
+const playerKey = (player: Pick<PlayerInfo, "name" | "uuid">) => (player.uuid ?? player.name).toLowerCase();
+
 export function createPlayers() {
     const server = useServer();
     const { calls, onlinePlayerNames, seenPlayerNames } = server;
-    const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
-    // banned players by lowercased name, with the reason the ban list gives
-    const [bannedNames, setBannedNames] = createSignal<Map<string, string | null>>(new Map());
-    // the names players have now, by uuid: a renamed player is shown by
-    // their new name even before they rejoin
-    const [currentNames, setCurrentNames] = createSignal<Map<string, string>>(new Map());
-    // asked or being asked this visit; a failed ask is asked again
+    const [listed, setListed] = createSignal<PlayerInfo[]>([]);
+    // asked or being asked this visit; the service caches answers for an hour
     const requestedNames = new Set<string>();
-    const [openName, setOpenName] = createSignal<string | undefined>();
+    const [openKey, setOpenKey] = createSignal<string | undefined>();
     // why the lists or who is online couldn't be read, until they are read again
     const [rosterError, setRosterError] = createSignal("");
     const [onlineError, setOnlineError] = createSignal("");
     // how Floodgate names Bedrock players; null without crossplay
     const [bedrock, setBedrock] = createSignal<BedrockNaming | null>(null);
 
-    const nameOf = (player: PlayerInfo) =>
-        (player.uuid && currentNames().get(player.uuid.toLowerCase())) || player.name;
-
-    // rows keep their objects (PlayerRoster rebuilds a row whose object
-    // changes), so a new name replaces only the renamed player's entry
-    const withCurrentNames = (list: PlayerInfo[]) =>
-        list.map((p) => (nameOf(p) === p.name ? p : { ...p, name: nameOf(p) }));
-
-    // asks Mojang (through the service) once per uuid per visit; the
-    // service caches answers for an hour
+    // asks Mojang (through the service) once per uuid per visit; the service
+    // holds the single name cache and returns fresh names on subsequent reads
     const refreshNames = (uuids: string[]) => {
         const wanted = uuids.map((u) => u.toLowerCase()).filter((u) => !requestedNames.has(u));
         if (wanted.length === 0) return;
@@ -64,31 +47,21 @@ export function createPlayers() {
         calls
             .currentPlayerNames({ uuids: wanted })
             .then((names) => {
-                const entries = Object.entries(names ?? {});
-                if (entries.length === 0) return;
-                // keep the open player open under their new name
-                const open = openPlayer();
+                const resolved = new Map(Object.entries(names ?? {}).map(([u, name]) => [u.toLowerCase(), name]));
+                if (resolved.size === 0) return;
                 batch(() => {
-                    setCurrentNames((prev) => {
-                        const next = new Map(prev);
-                        for (const [uuid, name] of entries) next.set(uuid.toLowerCase(), name);
-                        return next;
-                    });
-                    // a ban is shown by name: carry it over to the new one
-                    const renamed = players().filter((p) => p.uuid && names[p.uuid.toLowerCase()]);
-                    setBannedNames((prev) => {
-                        const next = new Map(prev);
-                        for (const p of renamed) {
-                            const old = p.name.toLowerCase();
-                            if (!next.has(old)) continue;
-                            const reason = next.get(old)!;
-                            next.delete(old);
-                            next.set(names[p.uuid!.toLowerCase()].toLowerCase(), reason);
-                        }
-                        return next;
-                    });
-                    setPlayers(withCurrentNames);
-                    if (open?.uuid && names[open.uuid.toLowerCase()]) setOpenName(names[open.uuid.toLowerCase()]);
+                    setListed((prev) =>
+                        prev.map((p) => {
+                            const next = p.uuid ? resolved.get(p.uuid.toLowerCase()) : undefined;
+                            return next && next !== p.name ? { ...p, name: next } : p;
+                        }),
+                    );
+                    stats.set((prev) =>
+                        prev?.map((entry) => {
+                            const next = resolved.get(entry.uuid.toLowerCase());
+                            return next && next !== entry.name ? { ...entry, name: next } : entry;
+                        }),
+                    );
                 });
             })
             .catch((err) => {
@@ -103,14 +76,11 @@ export function createPlayers() {
     const loadRoster = async (): Promise<void> => {
         const current = latestRoster();
         try {
-            const answer = await calls.listRoster();
+            const roster = (await calls.listRoster()) ?? [];
             if (!current()) return;
-            const roster = answer ?? [];
-            const listed = withCurrentNames(roster.map(({ banned: _banned, banReason: _reason, ...player }) => player));
             batch(() => {
                 setRosterError("");
-                setPlayers(listed);
-                setBannedNames(new Map(listed.flatMap((p, i) => (roster[i].banned ? [[p.name.toLowerCase(), roster[i].banReason] as const] : []))));
+                setListed(roster);
             });
             refreshNames(roster.map((p) => p.uuid));
         } catch (err) {
@@ -155,29 +125,27 @@ export function createPlayers() {
     // (by uuid, else by name) for as long as nothing about them changes, so
     // their row, and its head, stays while the rest of the roster updates.
     let known = new Map<string, PlayerInfo>();
-    const playerKey = (player: PlayerInfo) => (player.uuid ?? player.name).toLowerCase();
     const allPlayers = createMemo(() => {
         const byUuid = new Map<string, PlayerInfo>();
         const list: PlayerInfo[] = [];
-        for (const player of players()) {
+        for (const player of listed()) {
             list.push(player);
             if (player.uuid) byUuid.set(player.uuid.toLowerCase(), player);
         }
         for (const summary of playerStatSummaries().values()) {
             const uuid = summary.uuid.toLowerCase();
             if (byUuid.has(uuid)) continue;
-            const entry = { name: summary.name, uuid, whitelisted: false, op: false };
-            entry.name = nameOf(entry);
+            const entry: PlayerInfo = { name: summary.name, uuid, whitelisted: false, op: false, banned: false, banReason: null };
             byUuid.set(uuid, entry);
             list.push(entry);
         }
         // online and recently seen players not on file yet (their first
         // session has not been saved)
-        const listed = new Set(list.map((p) => p.name.toLowerCase()));
+        const seenNames = new Set(list.map((p) => p.name.toLowerCase()));
         for (const name of [...seenPlayerNames(), ...onlinePlayerNames()]) {
-            if (listed.has(name)) continue;
-            listed.add(name);
-            list.push({ name, whitelisted: false, op: false });
+            if (seenNames.has(name)) continue;
+            seenNames.add(name);
+            list.push({ name, whitelisted: false, op: false, banned: false, banReason: null });
         }
         const kept = new Map<string, PlayerInfo>();
         const stable = list.map((player) => {
@@ -193,16 +161,20 @@ export function createPlayers() {
 
     const find = (name: string) => allPlayers().find((p) => p.name === name);
     const openPlayer = createMemo(() => {
-        const name = openName();
-        return name === undefined ? undefined : find(name);
+        const key = openKey();
+        return key === undefined ? undefined : allPlayers().find((p) => playerKey(p) === key);
     });
-    const isBanned = (name: string) => bannedNames().has(name.toLowerCase());
-    /** why a banned player is banned, as the ban list says; null when it says nothing or they aren't */
-    const banReason = (name: string) => bannedNames().get(name.toLowerCase()) ?? null;
+    const setOpenName = (name: string | undefined) => {
+        if (name === undefined) {
+            setOpenKey(undefined);
+            return;
+        }
+        const player = find(name);
+        setOpenKey(player ? playerKey(player) : name.toLowerCase());
+    };
 
     // a failed change is a toast whose title names what did not happen: "Couldn't ban Steve"
     const callPlayerAction = async (
-        actionId: CallName,
         playerName: string,
         failure: (name: string) => string,
         run: () => Promise<unknown>,
@@ -218,12 +190,13 @@ export function createPlayers() {
 
     /** sets a player's flag as stored, adding a player who was on no list */
     const markFlag = (playerName: string, uuid: string | undefined, field: PlayerFlagField, value: boolean) => {
-        const key = playerName.toLowerCase();
-        setPlayers((prev) =>
-            prev.some((p) => p.name.toLowerCase() === key)
-                ? prev.map((p) => (p.name.toLowerCase() === key ? { ...p, [field]: value } : p))
+        const key = (uuid ?? playerName).toLowerCase();
+        const lower = playerName.toLowerCase();
+        setListed((prev) =>
+            prev.some((p) => playerKey(p) === key || p.name.toLowerCase() === lower)
+                ? prev.map((p) => (playerKey(p) === key || p.name.toLowerCase() === lower ? { ...p, [field]: value } : p))
                 // a player known only from their stats or a session joins the lists
-                : [...prev, { name: playerName, uuid, whitelisted: false, op: false, [field]: value }],
+                : [...prev, { name: playerName, uuid, whitelisted: false, op: false, banned: false, banReason: null, [field]: value }],
         );
     };
 
@@ -238,7 +211,7 @@ export function createPlayers() {
                 ? value ? `make ${name} an operator` : `remove ${name} as an operator`
                 : value ? `whitelist ${name}` : `remove ${name} from the whitelist`;
         const player = find(playerName);
-        if (!(await callPlayerAction(actionId, playerName, failure, () => calls[actionId]({ player: playerName, uuid: player?.uuid })))) return false;
+        if (!(await callPlayerAction(playerName, failure, () => calls[actionId]({ player: playerName, uuid: player?.uuid })))) return false;
         // the service answers once the list is written, by the server or itself: read it back.
         // Floodgate writes a Bedrock player's whitelist a moment later, so the switch keeps
         // what it will write; a player taken off every list has left the roster
@@ -250,8 +223,8 @@ export function createPlayers() {
     /** bans or pardons; the service answers once the server has written its ban list, which is read back */
     const setBanned = async (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
         const done = banned
-            ? await callPlayerAction("banPlayer", playerName, (name) => `ban ${name}`, () => calls.banPlayer({ player: playerName, reason }))
-            : await callPlayerAction("pardonPlayer", playerName, (name) => `pardon ${name}`, () => calls.pardonPlayer({ player: playerName }));
+            ? await callPlayerAction(playerName, (name) => `ban ${name}`, () => calls.banPlayer({ player: playerName, reason }))
+            : await callPlayerAction(playerName, (name) => `pardon ${name}`, () => calls.pardonPlayer({ player: playerName }));
         if (done) await loadRoster();
         return done;
     };
@@ -264,26 +237,10 @@ export function createPlayers() {
         await calls.whitelistPlayer({ player: name });
         // the list now holds the account's own casing; Floodgate writes a Bedrock player's a moment later
         await loadRoster();
-        const added = players().find((p) => p.name.toLowerCase() === name.toLowerCase());
+        const added = listed().find((p) => p.name.toLowerCase() === name.toLowerCase());
         batch(() => {
             if (!added) markFlag(name, undefined, "whitelisted", true);
-            setOpenName(added ? nameOf(added) : name);
-        });
-    };
-
-    // what the service forgot of a player whose data it deleted, before its
-    // push says so; their uuid also drops the offline stats, which would
-    // otherwise list them again until the next stats poll
-    const forget = (name: string, uuid?: string) => {
-        const key = name.toLowerCase();
-        const without = <V,>(map: ReadonlyMap<string, V>) => Object.fromEntries([...map].filter(([k]) => k !== key));
-        if (uuid) stats.set((prev) => prev?.filter((entry) => entry.uuid.toLowerCase() !== uuid.toLowerCase()));
-        server.patch({
-            seenPlayers: server.seenPlayers().filter((n) => n !== key),
-            onlinePlayers: server.onlinePlayers().filter((n) => n !== key),
-            playerStats: without(server.playerStats()),
-            playerPlaytime: without(server.playerPlaytime()),
-            playerPositions: without(server.playerPositions()),
+            setOpenKey(added ? playerKey(added) : name.toLowerCase());
         });
     };
 
@@ -300,12 +257,14 @@ export function createPlayers() {
             showError(`Couldn't delete ${player.name}'s data`, errorMessage(err));
             return;
         }
-        forget(player.name, player.uuid);
-        // a player on the whitelist, an operator or banned stays listed,
-        // now without data; anyone else leaves the roster
-        await loadRoster();
-        await stats.reload();
-        if (!find(player.name)) setOpenName(undefined);
+        // the service already cleared its state for this player; reload lists,
+        // stats and state so a player on no list leaves the roster right away
+        await Promise.all([
+            loadRoster(),
+            stats.reload(),
+            server.refresh().catch((err) => showError("Couldn't refresh the server state", errorMessage(err))),
+        ]);
+        if (!openPlayer()) setOpenKey(undefined);
     };
 
     return {
@@ -317,22 +276,19 @@ export function createPlayers() {
         askOnline,
         /** why the world's stats files couldn't be read, and whether a read is out */
         stats: { error: stats.error, loading: stats.loading, reload: stats.reload },
-        /** the players' numbers: the world's stats files, else this session's count */
-        leaderboard: createLeaderboard(playerStatSummaries, server.playerPlaytime),
+        /** the players' numbers from the world's stats files */
+        leaderboard: createLeaderboard(playerStatSummaries),
         /** the server's lists, without players known only from their data */
-        listed: players,
+        listed,
         all: allPlayers,
         find,
-        isBanned,
-        banReason,
         bedrock,
-        openName,
         setOpenName,
         openPlayer,
         setFlag,
         setBanned,
-        kick: (playerName: string, reason?: string) => callPlayerAction("kickPlayer", playerName, (name) => `kick ${name}`, () => calls.kickPlayer({ player: playerName, reason })),
-        kill: (playerName: string) => callPlayerAction("killPlayer", playerName, (name) => `kill ${name}`, () => calls.killPlayer({ player: playerName })),
+        kick: (playerName: string, reason?: string) => callPlayerAction(playerName, (name) => `kick ${name}`, () => calls.kickPlayer({ player: playerName, reason })),
+        kill: (playerName: string) => callPlayerAction(playerName, (name) => `kill ${name}`, () => calls.killPlayer({ player: playerName })),
         whitelistName,
         deleteOpenData,
     };

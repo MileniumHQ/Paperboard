@@ -135,12 +135,12 @@ export default function Players() {
                         <Show when={player.whitelisted}>
                             <PaperBadge>WL</PaperBadge>
                         </Show>
-                        <Show when={roster.isBanned(player.name)}>
+                        <Show when={player.banned}>
                             <PaperBadge variant="danger">Banned</PaperBadge>
                         </Show>
                     </>
                 )}
-                status={(player) => statusColor(isPlayerOn(player.name), roster.isBanned(player.name))}
+                status={(player) => statusColor(isPlayerOn(player.name), player.banned)}
                 open={roster.openPlayer()?.name}
                 onOpen={roster.setOpenName}
             >
@@ -148,8 +148,6 @@ export default function Players() {
                     player={roster.openPlayer()}
                     leaderboard={roster.leaderboard}
                     bedrock={roster.openPlayer() ? isBedrockPlayer(roster.openPlayer()!, roster.bedrock()) : false}
-                    banned={roster.isBanned(roster.openPlayer()?.name ?? "")}
-                    banReason={roster.banReason(roster.openPlayer()?.name ?? "")}
                     flag={(field) => {
                         // the player it was made for, even once another is open
                         const name = roster.openPlayer()!.name;

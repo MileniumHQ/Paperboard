@@ -46,7 +46,7 @@ describe("deleting a player", () => {
     test("removes their files from both layouts to the trash, and their usercache entry and roster state", async () => {
         const mc = minecraftServer({
             files: { "server.properties": "level-name=survival\n", "usercache.json": usercache, ...playerFiles("survival") },
-            state: { seenPlayers: ["steve", "alex"], playerPlaytime: { steve: 60, alex: 30 }, playerStats: { steve: { health: 20 } } },
+            state: { seenPlayers: ["steve", "alex"], playerStats: { steve: { health: 20 } } },
         });
         await deletePlayerData(mc.server, "Steve");
         const live = liveFiles(mc);
@@ -59,7 +59,6 @@ describe("deleting a player", () => {
         expect(JSON.parse(fs.readFileSync(path.join(mc.dir, "usercache.json"), "utf8")).map((e: { name: string }) => e.name)).toEqual(["Alex"]);
         const state = mc.server.state;
         expect(state.seenPlayers).toEqual(["alex"]);
-        expect(state.playerPlaytime).toEqual({ alex: 30 });
         expect(state.playerStats).toEqual({});
     });
 

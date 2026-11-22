@@ -1,3 +1,4 @@
+import { minecraftOf } from "../games/minecraft/state";
 import type { Server } from "./server";
 import { errorMessage } from "./api";
 import { listDirectory } from "./filesystem";
@@ -7,6 +8,7 @@ import {
 } from "../core/playerStats";
 import { PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
+import { NAME_TTL_MS } from "./playerLists";
 
 const UUID_FILE_RE =
     /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.json$/;
@@ -95,6 +97,8 @@ export async function listPlayerStats(
     const statsDir = await resolveStatsDir(ctx, level);
     if (!statsDir) return [];
     const entries = await listDirectory(ctx, statsDir);
+    const cached = minecraftOf(ctx).lists.names;
+    const now = Date.now();
     const out: PlayerStatSummary[] = [];
     for (const entry of entries) {
         if (out.length >= MAX_PLAYER_STATS) {
@@ -108,7 +112,9 @@ export async function listPlayerStats(
         const uuid = match[1].toLowerCase();
         const parsed = parsePlayerStats(await readJson(ctx, `${statsDir}/${entry}`));
         if (!parsed) continue;
-        out.push({ uuid, name: names.get(uuid) ?? uuid, ...parsed });
+        const known = cached.get(uuid);
+        const name = known && now - known.at < NAME_TTL_MS ? known.name : (names.get(uuid) ?? uuid);
+        out.push({ uuid, name, ...parsed });
     }
     return out;
 }

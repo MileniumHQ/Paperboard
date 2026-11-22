@@ -38,9 +38,6 @@ export default function PlayerInspector(props: {
     player?: PlayerInfo;
     leaderboard: Leaderboard;
     bedrock: boolean;
-    banned: boolean;
-    /** why they are banned, as the ban list says */
-    banReason: string | null;
     /** the open player's op or whitelist switch, made once per player shown */
     flag: (field: PlayerFlagField) => SavedSetting<boolean>;
     onAction: (action: "kick" | "ban") => void;
@@ -140,9 +137,9 @@ export default function PlayerInspector(props: {
                         </PaperText>
                         <PaperFlex direction="row" gap="onefourth" align="center" wrap>
                             <PaperBadge
-                                variant={props.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
+                                variant={props.player?.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
                             >
-                                {props.banned
+                                {props.player?.banned
                                     ? "Banned"
                                     : isPlayerOnline()
                                         ? "Online"
@@ -158,7 +155,7 @@ export default function PlayerInspector(props: {
                                 <PaperBadge variant="monochrome">Bedrock</PaperBadge>
                             </Show>
                         </PaperFlex>
-                        <Show when={props.banned && props.banReason}>
+                        <Show when={props.player?.banned && props.player.banReason}>
                             {(reason) => <PaperText size={2} color="text-subtle">Ban reason: {reason()}</PaperText>}
                         </Show>
                         <Show when={props.player?.uuid}>
@@ -192,7 +189,7 @@ export default function PlayerInspector(props: {
                         <PaperIcon>logout</PaperIcon>Kick
                     </PaperButton>
                     <Show
-                        when={!props.banned}
+                        when={!props.player?.banned}
                         fallback={
                             <PaperButton
                                 variant="primary"
