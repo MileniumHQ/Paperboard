@@ -1,7 +1,7 @@
 // The part of a modal every dialog shares: the scrim, the stack of open
 // dialogs, Escape and the back gesture, focus going in and coming back, Tab
 // kept inside, and the way in and out. PaperModal draws a box with a header
-// in it; PaperPreview draws a file with its close button above it.
+// in it; PaperPreviewModal draws a file with its close button above it.
 
 import { createNavigationBack } from "../../utils/navigationBack";
 import styles from "./index.module.css";

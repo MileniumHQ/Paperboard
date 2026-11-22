@@ -1,0 +1,30 @@
+/* The preview fills the space it's given and centres what it shows. It is a
+   size container, so a viewer can fit itself to the preview's height; with
+   no height from its parent it keeps a panel's short height instead of none. */
+.PaperPreview {
+    container-type: size;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: var(--paper-size-panel-height-small);
+}
+
+/* viewers that draw their own surface take all of it */
+.fill {
+    width: 100%;
+    height: 100%;
+}
+
+/* a film is as big as the preview, short of its own control bar */
+.video {
+    --paper-video-max-height: calc(100cqh - var(--paper-control-size-medium) - var(--paper-uigap));
+}
+
+.audio {
+    max-width: var(--paper-size-panel-small);
+}

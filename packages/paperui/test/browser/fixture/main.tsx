@@ -761,6 +761,12 @@ const scenarios: Record<string, () => JSX.Element> = {
     },
 };
 
+// suites with many scenarios keep them in fixture/scenarios/<suite>.tsx,
+// each exporting a `scenarios` record that joins this one
+for (const module of Object.values(import.meta.glob<{ scenarios: Record<string, () => JSX.Element> }>("./scenarios/*.tsx", { eager: true }))) {
+    Object.assign(scenarios, module.scenarios);
+}
+
 async function mount() {
     const scenario = scenarios[query.get("s") ?? ""];
     if (!scenario) throw new Error(`no scenario named ${JSON.stringify(query.get("s"))}`);

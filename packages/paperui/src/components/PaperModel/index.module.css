@@ -1,0 +1,41 @@
+/* the viewer fills its container, or keeps a small panel's height in one
+   that gives it none; it is see-through, so the model sits on whatever
+   surface the viewer is on, in either theme */
+.PaperModel {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: var(--paper-size-panel-height-small);
+    overflow: hidden;
+    color: var(--paper-text);
+}
+
+/* the canvas fills the viewer; the renderer sizes its pixels to it */
+.stage {
+    position: absolute;
+    inset: 0;
+}
+
+.stage canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.stage canvas:focus-visible {
+    box-shadow: inset 0 0 0 var(--paper-thick-border-width) var(--paper-primary);
+}
+
+/* the loader and failures sit in the middle of the viewer */
+.overlay {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: fit-content;
+    height: fit-content;
+    max-width: 100%;
+}

@@ -25,7 +25,8 @@ export type PaperFileContent =
           /** set to say why this file opens read-only */
           readOnly?: string;
       }
-    | { kind: "image"; src: string; alt?: string }
+    /** a file PaperPreview shows: a picture, a film, a PDF, a 3D model and the rest, by its type and name */
+    | { kind: "preview"; src: string; type?: string }
     | { kind: "unavailable"; reason: string };
 
 export interface PaperFileSaveResult {

@@ -30,7 +30,36 @@ const MIME: Record<string, string> = {
     ".woff2": "font/woff2",
     ".svg": "image/svg+xml",
     ".png": "image/png",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".wasm": "application/wasm",
+    ".json": "application/json",
+    ".pdf": "application/pdf",
+    ".glb": "model/gltf-binary",
+    ".gltf": "model/gltf+json",
+    ".stl": "model/stl",
+    ".obj": "model/obj",
+    ".jpg": "image/jpeg",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".ttf": "font/ttf",
+    ".csv": "text/csv; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
 };
+
+// The policy Paperboard serves every panel under (apps/daemon/src/panels/panelNet.ts,
+// kept in step with it): a page opened with ?csp=panel gets it, so a suite
+// proves a component works where panels run, not only on an unrestricted page.
+const PANEL_CSP = [
+    "default-src 'self' panel: data: blob:",
+    "script-src 'self'",
+    "worker-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' panel: data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' panel: blob: data: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:* https:",
+    "media-src 'self' panel: blob:",
+].join("; ");
 
 /** One second of 8 kHz mono 16-bit silence: a real, decodable WAV. */
 function silentWav(): Buffer {
@@ -113,8 +142,9 @@ export default async function setup(project: TestProject) {
             res.writeHead(403).end();
             return;
         }
+        const csp = target.endsWith("index.html") && url.searchParams.get("csp") === "panel" ? { "Content-Security-Policy": PANEL_CSP } : {};
         readFile(target).then(
-            (body) => res.writeHead(200, { "Content-Type": MIME[extname(target)] ?? "application/octet-stream" }).end(body),
+            (body) => res.writeHead(200, { "Content-Type": MIME[extname(target)] ?? "application/octet-stream", ...csp }).end(body),
             (err: NodeJS.ErrnoException) => {
                 if (err.code !== "ENOENT") console.error("[paperui fixture server]", err);
                 res.writeHead(err.code === "ENOENT" ? 404 : 500).end(String(err.code));

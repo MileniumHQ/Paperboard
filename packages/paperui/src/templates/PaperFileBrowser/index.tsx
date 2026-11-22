@@ -8,6 +8,7 @@ import { PaperIcon } from "../../components/PaperIcon";
 import { PaperLoader } from "../../components/PaperLoader";
 import { PaperModal } from "../../components/PaperModal";
 import { PaperText } from "../../components/PaperText";
+import { PaperPreview } from "../PaperPreview/PaperPreview";
 import { PaperSplit } from "../PaperSplit";
 import { copyText } from "../../utils/clipboard";
 import { escapeAttributeValue } from "../../utils/selector";
@@ -438,11 +439,9 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                     <Match when={docIn("ready")?.content}>
                         {(content) => (
                             <Switch>
-                                <Match when={content().kind === "image" && (content() as Extract<PaperFileContent, { kind: "image" }>)}>
-                                    {(image) => (
-                                        <div class={styles.imagePreview}>
-                                            <img src={image().src} alt={image().alt ?? baseName(openPath() ?? "")} />
-                                        </div>
+                                <Match when={content().kind === "preview" && (content() as Extract<PaperFileContent, { kind: "preview" }>)}>
+                                    {(preview) => (
+                                        <PaperPreview class={styles.preview} src={preview().src} type={preview().type} name={baseName(openPath() ?? "")} />
                                     )}
                                 </Match>
                                 <Match when={content().kind === "unavailable" && (content() as Extract<PaperFileContent, { kind: "unavailable" }>)}>

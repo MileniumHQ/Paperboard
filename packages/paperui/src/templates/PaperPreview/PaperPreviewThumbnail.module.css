@@ -1,0 +1,44 @@
+/* a box the host sizes; an avatar's largest size until it does */
+.PaperPreviewThumbnail {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--paper-avatar-size-xlarge);
+    height: var(--paper-avatar-size-xlarge);
+    container-type: size;
+    overflow: hidden;
+    color: var(--paper-primary);
+}
+
+.picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    animation: appear 160ms var(--paper-ease-standard);
+}
+
+.cover .picture {
+    object-fit: cover;
+}
+
+/* the symbol scales with the box, from a list row's to a grid tile's */
+.symbol {
+    font-size: 45cqmin;
+}
+
+@keyframes appear {
+    from {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .picture {
+        animation: none;
+    }
+}
