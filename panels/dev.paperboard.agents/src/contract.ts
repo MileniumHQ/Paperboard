@@ -810,7 +810,7 @@ export const agentsContract = defineContract(PANEL_ID, {
         attachPut: { input: object({ id: text(), offset: number(), data: text() }), output: nothing() },
         attachFinish: { input: byId, output: attachment },
         attachCancel: { input: byId, output: nothing() },
-        attachRead: { input: object({ id: text(), offset: number() }), output: object({ data: text(), done: boolean(), file: attachment }) },
+        attachRead: { input: object({ id: text(), offset: number() }), output: object({ data: text(), file: attachment }) },
         attachInfo: { input: byId, output: attachment },
         /** a web picture an agent's message shows, fetched by the service under the browser's network rule; its bytes in base64 */
         webImage: { input: object({ url: text() }), output: object({ type: text(), data: text() }) },

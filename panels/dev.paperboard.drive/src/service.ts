@@ -17,7 +17,6 @@ const UPLOADS_FOLDER = ".uploads";
 let drive: Drive | null = null;
 let context: Ctx | null = null;
 
-
 function ready(): Drive {
     if (!drive) throw new Error("Drive is still starting.");
     return drive;
