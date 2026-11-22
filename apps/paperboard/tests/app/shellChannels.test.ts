@@ -73,24 +73,21 @@ afterAll(async () => {
     await host?.close();
 });
 
-// Inventory: Core contracts — browser mode serves exactly the calls and sends the contract gives it, each reading its args first.
-test("browser mode serves the declared browser calls and sends, refusing args the contract doesn't name, and nothing else", async () => {
+// Inventory: Core contracts — browser mode serves the browser calls and sends the contract gives it, and nothing else.
+test("browser mode serves the declared browser calls and sends, and refuses window-only and unknown channels", async () => {
     for (const [channel, definition] of Object.entries(SHELL_CALLS)) {
-        const answer = await post(`/_shell/invoke/${channel}`, { args: { notAField: true } });
-        if ("browser" in definition) {
-            expect({ channel, status: answer.status }).toEqual({ channel, status: 200 });
-            const { ok, error } = JSON.parse(answer.body);
-            expect({ channel, ok, error }).toEqual({ channel, ok: false, error: expect.stringContaining(`The shell's ${channel} call was refused: `) });
-        } else {
-            expect({ channel, status: answer.status, body: answer.body }).toEqual({ channel, status: 404, body: `Channel not available in browser mode: ${channel}` });
-        }
+        if ("browser" in definition) continue;
+        const answer = await post(`/_shell/invoke/${channel}`, {});
+        expect({ channel, status: answer.status, body: answer.body }).toEqual({ channel, status: 404, body: `Channel not available in browser mode: ${channel}` });
     }
+    const version = await post("/_shell/invoke/app-version", {});
+    expect(version.status).toBe(200);
+    expect(JSON.parse(version.body)).toEqual({ ok: true, result: "0.0.0-test" });
+
     for (const [channel, definition] of Object.entries(SHELL_SENDS)) {
-        const answer = await post(`/_shell/send/${channel}`, { args: { notAField: true } });
-        expect({ channel, status: answer.status }).toEqual({ channel, status: "browser" in definition ? 400 : 404 });
+        const answer = await post(`/_shell/send/${channel}`, { args: { level: "info", message: "ok" } });
+        expect({ channel, status: answer.status }).toEqual({ channel, status: "browser" in definition ? 204 : 404 });
     }
-    const switched = JSON.parse((await post("/_shell/invoke/computer-switch", { args: { id: 7 } })).body);
-    expect(switched.error).toBe(`The shell's computer-switch call was refused: the field "id": expected text, got number`);
     expect((await post("/_shell/invoke/not-a-channel", {})).status).toBe(404);
 });
 

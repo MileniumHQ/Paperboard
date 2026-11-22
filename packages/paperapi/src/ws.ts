@@ -1,6 +1,6 @@
 // WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import { debug, debugErr } from "./debug";
-import { PROTOCOL_VERSION, readEvent, readResult, readValue, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
+import { PROTOCOL_VERSION, readValue, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
 import { shape, type Infer } from "./shape";
 import { newClientId } from "./channels";
 import { TransportRegistry, type ActionHandler } from "./transport/registry";
@@ -492,11 +492,10 @@ export class CraneTransport {
     // refuses with a typed error.
     private static readonly MAX_PENDING_CALLS = 1000;
 
-    /** Asks the daemon; the answer is checked against the action's shape (protocol/rpc.ts). */
+    /** Asks the daemon; params and answer types come from protocol/rpc.ts. */
     public call<A extends RpcAction>(action: A, params: RpcParams<A>, timeoutMs?: number | null): Promise<RpcResult<A>>;
     /**
      * @deprecated Name no type: the action's own answer type is the one above.
-     * The answer is checked all the same; T is what its caller reads it as.
      */
     public call<T = never>(action: RpcAction, params: [T] extends [never] ? never : Record<string, unknown>, timeoutMs?: number | null): Promise<T>;
     public call(action: RpcAction, params: Record<string, unknown>, timeoutMs: number | null = 30_000): Promise<unknown> {
@@ -505,11 +504,11 @@ export class CraneTransport {
 
     /**
      * Asks the daemon with params as a caller of invoke() gave them, which
-     * the daemon checks; the answer is checked as call's is.
+     * the daemon checks.
      */
     public async callAsGiven<A extends RpcAction>(action: A, params: Record<string, unknown>, timeoutMs: number | null = 30_000): Promise<RpcResult<A>> {
         await this.ensureConnected();
-        return readResult(action, await this.request(action, params, timeoutMs));
+        return (await this.request(action, params, timeoutMs)) as RpcResult<A>;
     }
 
     private request(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000, routed = true): Promise<unknown> {
@@ -553,10 +552,8 @@ export class CraneTransport {
     }
 
     /**
-     * Hears an event, its payload read against its shape (protocol/events.ts)
-     * first: one that doesn't fit is reported and not heard. Any number of
-     * listeners may hear one event; the daemon is told of it once. Returns
-     * the unsubscribe.
+     * Hears an event pushed by the daemon. Any number of listeners may hear
+     * one event; the daemon is told of it once. Returns the unsubscribe.
      */
     public subscribeEvent<E extends string>(event: E, cb: (payload: EventPayload<E>) => void): () => void {
         let set = this.listeners.get(event);
@@ -565,7 +562,7 @@ export class CraneTransport {
             this.listeners.set(event, set);
             this.scheduleSubSync();
         }
-        const listener: Listener = (payload) => cb(readEvent(event, payload));
+        const listener: Listener = (payload) => cb(payload as EventPayload<E>);
         set.add(listener);
         return () => this.unsubscribeEvent(event, listener);
     }

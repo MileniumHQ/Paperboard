@@ -8,7 +8,6 @@ import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolve
 import { buildPanelCsp as daemonPanelCsp } from "daemon/panels/panelNet";
 import { type LibraryToShellMessage, parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
 import { PanelPermissionStore } from "../../src/main/panelPermissions";
-import { SHELL_CALLS } from "../../src/shared/shellContract";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, installBuiltPanel, type BuiltApp } from "../platform/app/support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
 import { domCondition, launchElectron, SHELL, shellReady, type ElectronApp } from "../platform/app/support/electron";
@@ -75,15 +74,9 @@ describe("the shell's IPC, navigation, daemon origin and file server", () => {
         expect(isRefusedFrame({ senderFrame: { url: "paperboard://shell/index.html" } })).toBe(false);
     }, WAIT_MS * 2);
 
-    // Inventory: Core contracts — the window serves every call the shell's contract declares, each reading its args first.
-    test("the window answers every declared call, and refuses args its contract doesn't name with the channel and the field", async () => {
-        const refusals = await electron.evalIn<Record<string, string>>(SHELL, `Promise.all(${JSON.stringify(Object.keys(SHELL_CALLS))}.map((channel) =>
-            window.paperboardShell.invoke(channel, { notAField: true }).then(() => [channel, "answered"], (err) => [channel, err.message]))).then(Object.fromEntries)`);
-        for (const [channel, refusal] of Object.entries(refusals)) {
-            expect({ channel, refusal }).toEqual({ channel, refusal: expect.stringContaining(`The shell's ${channel} call was refused: `) });
-        }
-        expect(refusals["computer-switch"]).toEndWith('there is no field "notAField"');
-        // a channel the contract doesn't declare never leaves the window
+    // Inventory: Core contracts — the preload allows declared channels and blocks undeclared ones.
+    test("the window serves declared channels and the preload refuses undeclared ones", async () => {
+        expect(typeof (await electron.evalIn(SHELL, `window.paperboardShell.invoke("app-version")`))).toBe("string");
         expect(await electron.evalIn(SHELL, `window.paperboardShell.invoke("screenshot:operation").then(() => "answered", (err) => err.message)`)).toBe(
             "[paperboard] IPC channel not allowed: screenshot:operation",
         );
