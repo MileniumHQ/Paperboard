@@ -84,7 +84,7 @@
     align-items: center;
     gap: var(--paper-uigap-half);
     max-width: 100%;
-    line-height: 1;
+    line-height: var(--paper-leading-none);
 }
 
 /* a long panel name ends in an ellipsis instead of leaving the overlay */

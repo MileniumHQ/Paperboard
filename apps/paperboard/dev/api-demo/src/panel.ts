@@ -17,7 +17,7 @@ app.innerHTML = `
 <section aria-labelledby="files-title">
     <h2 id="files-title">Files</h2>
     <label for="note">The note, saved as ${NOTE} in this panel's storage</label>
-    <textarea id="note"></textarea>
+    <textarea id="note" rows="4"></textarea>
     <div class="row">
         <button type="button" data-do="save">Save note</button>
         <button type="button" data-do="export">Export note…</button>
