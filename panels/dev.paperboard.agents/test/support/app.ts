@@ -7,6 +7,7 @@ import path from "node:path";
 import { DEFAULT_STATE, type AiState, type ChatEntry, type Settings } from "../../src/contract";
 import { AiApp, findProgram, type AppHost } from "../../src/service/app";
 import { TestBlocks } from "./blocks";
+import { ptyTerminals } from "./pty";
 import { brainPackage, fakeEnv, fakeLog, packageHost, Recorder, TestHost, tempDir } from "./host";
 
 export interface AppRig {
@@ -46,6 +47,8 @@ export async function appRig(o: { settings?: Settings; downloads?: ("antigravity
         readSettings: async () => o.settings ?? { name: "Ada", color: "blue", harness: "codex", model: null, compaction: "summarize" },
         writeSettings: async () => {},
         findProgram,
+        // the agent's shells on the user's computer: bash in a real terminal, with only the rig's folder as home
+        terminals: await ptyTerminals({ shell: "/bin/bash", env: { PATH: "/usr/bin:/bin", HOME: root } }),
         // a brain on the machine running the tests is never the one under test
         findBrain: () => null,
         tools: {

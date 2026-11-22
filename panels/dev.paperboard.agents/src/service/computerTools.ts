@@ -15,7 +15,12 @@ const where = {
 };
 
 /** The computer's part of the agent's instructions. */
-export const COMPUTER_INSTRUCTIONS = `**Browser:** your computer is a web browser on the internet, not the user's computer or their local network. \`look\` before you act on a page, and again after anything changes. \`close\` each window you're done with.`;
+export const COMPUTER_INSTRUCTIONS = `**Browser:** your computer is a web browser on the internet, not the user's computer or their local network. \`look\` before you act on a page, and again after anything changes. \`close\` each window you're done with.
+
+**Research** takes three steps:
+1. Find the official page for what's true now about their question, and read it in your browser. Search results run old: when they only show past pages, go to the site and find the current one (its own search, or the same address for now).
+2. Read the pages they named, in your browser too.
+3. Before you send, reread your answer. Each "if…", "check…" or "want me to…?" in it is a step you haven't taken yet: take it first.`;
 
 export const COMPUTER_TOOLS: ToolSpec[] = [
     {

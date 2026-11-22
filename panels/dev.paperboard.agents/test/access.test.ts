@@ -1,11 +1,25 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AccessEntry, AccessView } from "../src/contract";
+import type { AccessEntry, AccessView, SudoEntry } from "../src/contract";
 import { Access } from "../src/service/access";
-import { findProgram } from "../src/service/which";
+import type { Terminals } from "../src/service/userShells";
+
+/** these tests open no shell (userShells.test.ts does): a terminal asked for is a failure */
+const NO_TERMINALS: Terminals = {
+    create: async () => {
+        throw new Error("no terminal in this test");
+    },
+    write: async () => {
+        throw new Error("no terminal in this test");
+    },
+    destroy: async () => undefined,
+    exists: async () => false,
+    onData: () => () => undefined,
+    onForeground: () => () => undefined,
+    onExit: () => () => undefined,
+};
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -30,13 +44,10 @@ function setup(o: { turning?: boolean } = {}) {
     const deps = {
         file: path.join(storage, "access.json"),
         home,
-        findProgram: (command: string, args: readonly string[]) => findProgram(command, args),
-        exec: async (command: string, args: string[], x: { cwd: string; timeoutMs: number }) => {
-            const r = spawnSync(command, args, { cwd: x.cwd, timeout: x.timeoutMs, encoding: "utf8" });
-            if (r.error) throw r.error;
-            return { stdout: r.stdout, stderr: r.stderr, exitCode: r.status ?? -1 };
+        terminals: NO_TERMINALS,
+        post: (e: AccessEntry | SudoEntry) => {
+            if (e.kind === "access") posted.push(structuredClone(e));
         },
-        post: (e: AccessEntry) => posted.push(structuredClone(e)),
         tell: (t: string) => notices.push(t),
         turning: () => turning,
         onChange: (v: AccessView) => views.push(v),
@@ -53,9 +64,6 @@ function setup(o: { turning?: boolean } = {}) {
     return { root, home, project, storage, access, deps, posted, notices, views, call, ask, setTurning: (t: boolean) => (turning = t) };
 }
 
-// the program the tests run: the one running them, everywhere CI does
-const RUNTIME = process.execPath;
-
 describe("the agent on the user's computer", () => {
     test("nothing is reachable before the user allows it", async () => {
         const s = setup();
@@ -64,13 +72,13 @@ describe("the agent on the user's computer", () => {
             ["user_computer_read", { path: path.join(s.project, "src", "index.ts") }],
             ["user_computer_search", { path: s.project, text: "answer" }],
             ["user_computer_write", { path: path.join(s.project, "new.txt"), content: "x" }],
-            ["user_computer_run", { command: [RUNTIME, "--version"], folder: s.project }],
         ] as const) {
             const r = await s.call(name, args);
             expect(r.isError).toBe(true);
             expect(r.text).toContain("isn't in a folder the user allowed");
         }
         expect(fs.existsSync(path.join(s.project, "new.txt"))).toBe(false);
+        expect((await s.call("user_shell_open", { task: "Build it", folder: s.project })).text).toContain("A shell isn't allowed");
     });
 
     test("a read pages through multi-byte text by characters and refuses a file too big to load", async () => {
@@ -161,35 +169,35 @@ describe("the agent on the user's computer", () => {
         const tools = again.toolset();
         expect((await tools.call("user_computer_list", { path: s.project }, { fromFlow: false })).isError).toBeFalsy();
 
-        again.revoke({ kind: "folder", path: s.project });
+        await again.revoke({ kind: "folder", path: s.project });
         expect((await tools.call("user_computer_list", { path: s.project }, { fromFlow: false })).isError).toBe(true);
         const third = new Access(s.deps);
         third.load();
         expect(third.view().grants).toEqual([]);
-        expect(() => third.revoke({ kind: "folder", path: s.project })).toThrow("nothing to take back");
+        expect(third.revoke({ kind: "folder", path: s.project })).rejects.toThrow("nothing to take back");
     });
 
-    test("a command runs exactly as allowed, in an allowed folder; more arguments only when it said so", async () => {
+    test("shells allowed for good last across a restart and are taken back as one grant", async () => {
         const s = setup();
-        const exact = [RUNTIME, "-e", "console.log(process.cwd())"];
-        s.access.answer((await s.ask([{ kind: "folder", path: s.project }, { kind: "command", command: exact }])).id, "always");
+        s.access.answer((await s.ask([{ kind: "folder", path: s.project }, { kind: "shell" }])).id, "always");
+        const again = new Access(s.deps);
+        again.load();
+        expect(again.view().grants).toMatchObject([
+            { kind: "folder", path: s.project, once: false },
+            { kind: "shell", once: false },
+        ]);
+        await again.revoke({ kind: "shell" });
+        const third = new Access(s.deps);
+        third.load();
+        expect(third.view().grants).toMatchObject([{ kind: "folder", path: s.project }]);
+    });
 
-        const ran = await s.call("user_computer_run", { command: exact, folder: path.join(s.project, "src") });
-        expect(ran.isError).toBeFalsy();
-        expect(ran.text).toContain(path.join(s.project, "src"));
-
-        // a folder alone doesn't let it run anything else, nor more arguments on an exact command
-        expect((await s.call("user_computer_run", { command: [RUNTIME, "-e", "1"], folder: s.project })).text).toContain("isn't allowed");
-        expect((await s.call("user_computer_run", { command: [...exact, "more"], folder: s.project })).text).toContain("isn't allowed");
-        // nor in a folder it wasn't given
-        expect((await s.call("user_computer_run", { command: exact, folder: s.home })).text).toContain("isn't in a folder the user allowed");
-
-        s.access.answer((await s.ask([{ kind: "command", command: [RUNTIME, "-e"], anyArguments: true }])).id, "once");
-        const any = await s.call("user_computer_run", { command: [RUNTIME, "-e", "process.exit(3)"], folder: s.project });
-        expect(any.isError).toBe(true);
-        expect(any.text).toContain("exited with 3");
-        // the prefix itself must match: a different program isn't covered
-        expect((await s.call("user_computer_run", { command: ["sh", "-e", "x"], folder: s.project })).text).toContain("isn't allowed");
+    test("an access.json from before shells keeps its folders; its single commands are no longer grants", async () => {
+        const s = setup();
+        fs.writeFileSync(s.deps.file, JSON.stringify({ folders: [{ path: s.project, at: 1 }], commands: [{ command: ["npm", "install"], anyArguments: true, at: 2 }] }));
+        const a = new Access(s.deps);
+        a.load();
+        expect(a.view()).toEqual({ grants: [{ kind: "folder", path: s.project, at: 1, once: false }], shells: [], error: null });
     });
 
     test("a declined request grants nothing and tells the agent not to ask again", async () => {
@@ -219,7 +227,7 @@ describe("the agent on the user's computer", () => {
         expect((await s.call("request_access", { reason: "  ", items: [{ kind: "folder", path: s.project }] })).isError).toBe(true);
         expect((await s.call("request_access", { reason: "x", items: [{ kind: "folder", path: "project" }] })).text).toContain("isn't a full path");
         expect((await s.call("request_access", { reason: "x", items: [{ kind: "folder", path: path.join(s.home, "nope") }] })).text).toContain("doesn't exist");
-        expect((await s.call("request_access", { reason: "x", items: [{ kind: "command", command: ["rm -rf /"] }] })).text).toContain("just the program");
+        expect((await s.call("request_access", { reason: "x", items: [{ kind: "command", command: ["rm", "-rf", "/"] }] })).text).toContain('"folder" or "shell"');
         expect(s.posted).toEqual([]);
     });
 
@@ -227,7 +235,8 @@ describe("the agent on the user's computer", () => {
         const s = setup();
         const tools = s.access.toolset();
         expect((await tools.tools({ fromFlow: true })).map((t) => t.name)).not.toContain("request_access");
-        expect((await tools.tools({ fromFlow: false })).map((t) => t.name)).toContain("request_access");
+        expect((await tools.tools({ fromFlow: true })).map((t) => t.name)).not.toContain("request_sudo");
+        expect((await tools.tools({ fromFlow: false })).map((t) => t.name)).toEqual(expect.arrayContaining(["request_access", "request_sudo"]));
     });
 
     test("an unreadable access.json allows nothing, says so, and is never written over", async () => {

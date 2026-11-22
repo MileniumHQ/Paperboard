@@ -1,4 +1,4 @@
-import { blocksApi, configApi, definePanelService, fileApi, packageApi, processApi, secretsApi, type CallHandlers } from "@mileniumhq/paperapi";
+import { blocksApi, configApi, definePanelService, fileApi, packageApi, processApi, secretsApi, terminalApi, type CallHandlers } from "@mileniumhq/paperapi";
 import { PANEL_ID, agentsContract } from "./contract";
 import { AiApp, findProgram, type AppHost } from "./service/app";
 import { fetchWebImage } from "./service/webImage";
@@ -34,6 +34,15 @@ const host: AppHost = {
         await configApi.set(s, PANEL_ID);
     },
     findProgram,
+    terminals: {
+        create: (id, o) => terminalApi.create(id, o),
+        write: (id, data) => terminalApi.write(id, data),
+        destroy: (id) => terminalApi.destroy(id),
+        exists: (id) => terminalApi.exists(id),
+        onData: (id, cb) => terminalApi.onData(id, cb),
+        onForeground: (id, cb) => terminalApi.onForeground(id, cb),
+        onExit: (id, cb) => terminalApi.onExit(id, cb),
+    },
     tools: {
         write: (id, data) => processApi.write(id, data),
         readTools: () => configApi.get(PANEL_ID, TOOLS_PATH),
@@ -130,6 +139,10 @@ const calls: CallHandlers<typeof agentsContract> = {
     access: ready(() => app.access.view()),
     answerAccess: ready((i) => void app.access.answer(i.id, i.how)),
     revokeAccess: ready((i) => app.access.revoke(i.grant)),
+    closeShell: ready((i) => app.access.closeShell(i.id)),
+    setColorScheme: ready((i) => app.computer.windows.setColorScheme(i.scheme)),
+    answerSudo: ready((i) => app.access.sudo.answer(i.id, i.password)),
+    declineSudo: ready((i) => app.access.sudo.decline(i.id)),
     answerToolServer: ready(async (i) => void (await app.serverTools.answer(i.id, i.allow))),
     pages: ready(() => app.pages.list()),
     openPage: ready((i) => app.pages.open(i.name)),

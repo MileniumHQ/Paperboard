@@ -105,7 +105,7 @@ export class SignIns {
         }
 
         const id = crypto.randomBytes(8).toString("hex");
-        const r = await this.deps.prepare({ id, window, fields: picks.map((p) => p.mark), ...(submit === undefined ? {} : { submit }) });
+        const r = await this.deps.prepare({ id, window, fields: picks.map((p) => p.mark), labels: picks.map((p) => p.label), ...(submit === undefined ? {} : { submit }) });
         if (r.isError) return r;
         let info: { site: string; fields: { secret: boolean }[] };
         try {

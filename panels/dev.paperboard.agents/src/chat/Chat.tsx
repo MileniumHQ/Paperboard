@@ -4,7 +4,7 @@ import { createStore, reconcile } from "solid-js/store";
 import { AGENT_FACE_PX, Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
-import type { AccessEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, StatusEntry, StatusTone, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
+import type { AccessEntry, SudoEntry, ChatEntry, PageEntry, PromptEntry, SignInEntry, StatusEntry, StatusTone, ToolServerEntry, ToolSignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import PageCard from "../pages/PageCard";
 import type { Launcher } from "../pages/launcher";
@@ -15,6 +15,7 @@ import History from "./History";
 import { createSwipeReply } from "./swipeReply";
 import SignIn, { type SignInDraft } from "./SignIn";
 import AccessRequest from "./AccessRequest";
+import SudoRequest from "./SudoRequest";
 import Prompt from "./Prompt";
 import ToolServerRequest from "./ToolServerRequest";
 import ToolSignIn from "./ToolSignIn";
@@ -38,7 +39,7 @@ interface Row {
     entry: ChatEntry | null;
     /** a message not yet read by the agent */
     waiting: WaitingMessage | null;
-    side: "me" | "them" | "note" | "card" | "access" | "prompt" | "tool-server" | "tool-sign-in" | "app" | "status";
+    side: "me" | "them" | "note" | "card" | "access" | "sudo" | "prompt" | "tool-server" | "tool-sign-in" | "app" | "status";
     /** a timestamp to show above this row, if any */
     stamp: number | null;
     joinsPrev: boolean;
@@ -357,6 +358,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
                                 <Show when={row.side === "access"}>
                                     <AccessRequest agent={props.agent} entry={row.entry as AccessEntry} name={name()} />
                                 </Show>
+                                <Show when={row.side === "sudo"}>
+                                    <SudoRequest agent={props.agent} entry={row.entry as SudoEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
+                                </Show>
                                 <Show when={row.side === "prompt"}>
                                     <Prompt agent={props.agent} entry={row.entry as PromptEntry} name={name()} draft={draftOf(row.key)} onDone={() => drafts.delete(row.key)} />
                                 </Show>
@@ -453,7 +457,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; pages:
     );
 }
 
-const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app", status: "status" };
+const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", access: "access", sudo: "sudo", prompt: "prompt", "tool-server": "tool-server", "tool-sign-in": "tool-sign-in", app: "app", status: "status" };
 const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
 
 /**
