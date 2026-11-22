@@ -160,6 +160,39 @@ describe("each server is a Blocks project with its game's blocks", () => {
         await expect(read("files", { folder: ".." })).rejects.toThrow();
     });
 
+    test("the values read the players online, and a kick announces the change before a fresh read shows it", async () => {
+        const state = servicesState();
+        const changed = new Set<string>();
+        let kickAnnounced = () => {};
+        const off = ["player-count", "online-players", "server-status"].map((value) => blocksApi.onChange(PANEL_ID, value, () => { changed.add(value); if (changed.has("player-count") && changed.has("online-players")) kickAnnounced(); }, "s-a"));
+        try {
+            await settle();
+            expect(await run("start-server")).toBeNull();
+            await state.waitFor("s-a", (s) => s.serverStatus === "online" && s.onlinePlayers.length === 2, "s-a online with its players");
+            expect(await read("server-status")).toBe("online");
+            expect(await read("player-count")).toBe(2);
+            expect(await read("online-players")).toEqual(["alice", "bob"]);
+            expect(changed.has("server-status")).toBe(true);
+            // whether a player is online is read on the server that asks
+            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-a" })).toBe(true);
+            expect(await blocksApi.property(`${PANEL_ID}:player`, "online", "alice", { project: "s-t" })).toBe(false);
+            // a Player input starts as a dropdown of who's online on its server, or on any
+            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-a" })).toEqual([{ label: "alice", value: "alice" }, { label: "bob", value: "bob" }]);
+            expect(await blocksApi.typeChoices(`${PANEL_ID}:player`, { project: "s-t" })).toEqual([]);
+            expect((await blocksApi.typeChoices(`${PANEL_ID}:player`)).map((c) => c.value)).toEqual(["alice", "bob"]);
+
+            changed.clear();
+            const announced = new Promise<void>((resolve) => (kickAnnounced = resolve));
+            expect(await run("kick-player", { player: "alice", reason: "testing" })).toBeNull();
+            await state.waitFor("s-a", (s) => s.onlinePlayers.length === 1, "alice to leave");
+            await announced;
+            expect(await read("online-players")).toEqual(["bob"]);
+            expect(await read("player-count")).toBe(1);
+        } finally {
+            for (const unsubscribe of off) unsubscribe();
+        }
+    });
+
     test("a kick naming no player, or one that isn't a player name, is refused before the server sees it", async () => {
         await expect(blocksApi.run(PANEL_ID, "kick-player", {}, { project: "s-a" })).rejects.toThrow('Kick Player: "Player" is required');
         await expect(blocksApi.run(PANEL_ID, "kick-player", { player: 7 }, { project: "s-a" })).rejects.toThrow('"Player": expected text');
