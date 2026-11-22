@@ -288,7 +288,7 @@ export function Installing(props: { open: boolean; failed: boolean; onDismiss: (
             <PaperTextList>
                 <li>Something that failed is a <PaperLink href="/docs/paperui/papertoast/">toast</PaperLink>. A note that needs attention in the page is <PaperLink href="/docs/paperui/paperquote/">PaperQuote</PaperLink>.</li>
                 <li>A short list of actions at a point is <PaperLink href="/docs/paperui/papercontextmenu/">PaperContextMenu</PaperLink>.</li>
-                <li>A file shown over the page, such as an image, a video, or a text file, is <PaperLink href="/docs/paperui/paperpreview/">PaperPreview</PaperLink>.</li>
+                <li>A file shown over the page, such as an image, a PDF, or a 3D model, is <PaperLink href="/docs/paperui/paperpreview/">PaperPreviewModal</PaperLink>.</li>
             </PaperTextList>
         </PaperFlex>
     );

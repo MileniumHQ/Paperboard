@@ -228,7 +228,7 @@ export function Recording(props: { url: string; onFailure: (message: string) => 
             <PaperText preset="subheader" as="h3" id="neighbors">Choosing a neighbor</PaperText>
             <PaperTextList>
                 <li>Sound with no picture is <PaperLink href="/docs/paperui/paperaudio/">PaperAudio</PaperLink>.</li>
-                <li>A video, or any other file, shown over the page is <PaperLink href="/docs/paperui/paperpreview/">PaperPreview</PaperLink>, which plays videos with PaperVideo.</li>
+                <li>A video, or any other file, shown over the page is <PaperLink href="/docs/paperui/paperpreview/">PaperPreviewModal</PaperLink>, which plays videos with PaperVideo.</li>
             </PaperTextList>
         </PaperFlex>
     );

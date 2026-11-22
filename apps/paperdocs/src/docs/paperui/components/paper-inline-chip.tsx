@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperInlineChip,
     PaperLink,
-    PaperPreview,
+    PaperPreviewModal,
     PaperTable,
     PaperText,
     PaperTextList,
@@ -22,7 +22,7 @@ export default function PaperInlineChipDoc() {
             <PaperText preset="body" as="p">
                 PaperInlineChip is a button that sits in a line of text, like a file named in a sentence.
                 It shows an icon and a label, and it is exactly one line tall, so the paragraph's line spacing does not change.
-                What a press does is yours to decide, such as opening the file in a <PaperLink href="/docs/paperui/paperpreview/">PaperPreview</PaperLink>.
+                What a press does is yours to decide, such as opening the file in a <PaperLink href="/docs/paperui/paperpreview/">PaperPreviewModal</PaperLink>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="usage">Usage</PaperText>
@@ -34,11 +34,11 @@ export default function PaperInlineChipDoc() {
                 <PaperText preset="body" as="p">
                     The steps are in <PaperInlineChip icon="description" onClick={() => setOpen(true)}>notes.md</PaperInlineChip> if you need them again.
                 </PaperText>
-                <PaperPreview open={open()} onClose={() => setOpen(false)} src={notes} name="notes.md" type="text/markdown" />
+                <PaperPreviewModal open={open()} onClose={() => setOpen(false)} src={notes} name="notes.md" type="text/markdown" />
             </PaperCard>
             <PaperCode block language="tsx">
 {`import { createSignal } from "solid-js";
-import { PaperInlineChip, PaperPreview, PaperText } from "@mileniumhq/paperui";
+import { PaperInlineChip, PaperPreviewModal, PaperText } from "@mileniumhq/paperui";
 
 export function Example(props: { url: string }) {
     const [open, setOpen] = createSignal(false);
@@ -52,7 +52,7 @@ export function Example(props: { url: string }) {
                 </PaperInlineChip>{" "}
                 if you need them again.
             </PaperText>
-            <PaperPreview open={open()} onClose={() => setOpen(false)} src={props.url} name="notes.md" />
+            <PaperPreviewModal open={open()} onClose={() => setOpen(false)} src={props.url} name="notes.md" />
         </>
     );
 }`}

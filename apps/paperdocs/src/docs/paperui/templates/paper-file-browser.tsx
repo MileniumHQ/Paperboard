@@ -54,7 +54,7 @@ export default function PaperFileBrowserDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">PaperFileBrowser</PaperText>
             <PaperText preset="body" as="p">
-                PaperFileBrowser is a file explorer: a lazy folder tree beside a viewer that edits text files, previews images, and explains what it cannot show.
+                PaperFileBrowser is a file explorer: a lazy folder tree beside a viewer that edits text files, previews pictures, films, PDFs and 3D models with PaperPreview, and explains what it cannot show.
                 Use it to let people read and change the files a panel manages, such as a game server's configuration.
                 It owns no data: three functions you pass reach whatever holds the files.
             </PaperText>
@@ -218,7 +218,7 @@ type PaperFileContent =
           /** set to say why this file opens read-only */
           readOnly?: string;
       }
-    | { kind: "image"; src: string; alt?: string }
+    | { kind: "preview"; src: string; type?: string }
     | { kind: "unavailable"; reason: string };
 
 interface PaperFileSaveResult {
@@ -258,7 +258,7 @@ interface PaperFileBrowserRef {
                 <li>A <PaperCode>text</PaperCode> file opens in <PaperLink href="/docs/paperui/papereditor/">PaperEditor</PaperLink>. Ctrl+S or Cmd+S saves. A status bar shows the cursor position, a read-only reason if there is one, and the language.</li>
                 <li>A text file is read-only when <PaperCode>readOnly</PaperCode> is set on its content, with that text as the reason, or when the browser has no <PaperCode>write</PaperCode> ("This browser is read-only").</li>
                 <li>The language comes from the content's <PaperCode>language</PaperCode>, else from the file extension. Extensions it has no grammar for are shown by name without highlighting, and anything unknown is "Plain text".</li>
-                <li>An <PaperCode>image</PaperCode> file is previewed from <PaperCode>src</PaperCode>. An <PaperCode>unavailable</PaperCode> file shows "This file can't be shown here" and the reason, for binary or oversized files.</li>
+                <li>A <PaperCode>preview</PaperCode> file is shown from <PaperCode>src</PaperCode> in a PaperPreview, which picks its viewer from <PaperCode>type</PaperCode> and the file's name. An <PaperCode>unavailable</PaperCode> file shows "This file can't be shown here" and the reason, for binary or oversized files.</li>
                 <li>Opening another file, closing the open one, or reloading while edits are unsaved asks to save, discard, or cancel first. A dot on the file's row and in the breadcrumb marks unsaved edits.</li>
             </PaperTextList>
 
