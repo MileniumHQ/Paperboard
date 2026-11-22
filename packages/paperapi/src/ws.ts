@@ -10,7 +10,6 @@ import { webSocketImpl, type TransportSocket } from "./transport/socket";
 import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
 import { errorMessage } from "./errors";
 import type { BlockSchema } from "./blocksSchema";
-import type { ActionSchema } from "./schema";
 import { isRecord } from "./records";
 
 export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
@@ -114,9 +113,8 @@ export class CraneTransport {
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
-    private registry = new TransportRegistry();
-    // the Blocks registry (blocksApi): its own names, handlers and replay
-    private blocksRegistry = new TransportRegistry("blocks");
+    // the Blocks registry (blocksApi): its names, handlers and replay
+    private blocksRegistry = new TransportRegistry();
     // null tunnel means remote frames must fail
     private tunnelId: string | null = null;
     private isNode =
@@ -436,8 +434,7 @@ export class CraneTransport {
                 this.keepConnected();
                 return;
             case "action_call":
-                // A Blocks call names its registry; an Actions call names none.
-                answerActionCall(frame.registry === "blocks" ? this.blocksRegistry : this.registry, frame, (reply) => this.frame(reply));
+                answerActionCall(this.blocksRegistry, frame, (reply) => this.frame(reply));
                 return;
             case "response": {
                 const id = typeof frame.id === "number" ? frame.id : null;
@@ -669,44 +666,6 @@ export class CraneTransport {
         return resolveDefaultPanelId(this.opts.panelId);
     }
 
-    public async registerAction(
-        panelId: string,
-        actionName: string,
-        handler: ActionHandler,
-        schema?: ActionSchema,
-    ): Promise<void> {
-        this.registry.addAction(panelId, actionName, handler, schema);
-        await this.ensureConnected();
-        await this.call("actions:register", { panelId, action: actionName, schema });
-    }
-
-    public async registerMultipleActions(
-        panelId: string,
-        actionsMap: Record<string, ActionHandler>,
-    ): Promise<void> {
-        const names = this.registry.addActions(panelId, actionsMap);
-        await this.ensureConnected();
-        await this.call("actions:register", { panelId, actions: names });
-    }
-
-    public async unregisterAction(panelId: string, actionName: string): Promise<void> {
-        this.registry.removeAction(panelId, actionName);
-        await this.ensureConnected();
-        await this.call("actions:unregister", { panelId, action: actionName });
-    }
-
-    public async defineProject(panelId: string, project: { id: string; name: string; icon?: string }): Promise<void> {
-        await this.ensureConnected();
-        await this.call("actions:project-define", { panelId, project: project.id, name: project.name, icon: project.icon });
-        this.registry.addProject({ panelId, ...project });
-    }
-
-    public async removeProject(panelId: string, projectId: string): Promise<void> {
-        this.registry.removeProject(panelId, projectId);
-        await this.ensureConnected();
-        await this.call("actions:project-remove", { panelId, project: projectId });
-    }
-
     /** Registers one Blocks entry ("kind.id" or "project/kind.id") and its handler. */
     public async registerBlock(panelId: string, entry: string, handler: ActionHandler, schema: BlockSchema): Promise<void> {
         this.blocksRegistry.addAction(panelId, entry, handler, schema);
@@ -745,10 +704,6 @@ export class CraneTransport {
             this.request("process:attach", { id }).catch((err) => debugErr(`process:attach ${id}`, err));
         }
 
-        await this.registry.resubscribe(
-            (action, params) => this.request(action, params),
-            (label, err) => debugErr(label, err),
-        );
         await this.blocksRegistry.resubscribe(
             (action, params) => this.request(action, params),
             (label, err) => debugErr(label, err),

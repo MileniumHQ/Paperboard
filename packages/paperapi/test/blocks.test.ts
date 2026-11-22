@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { actionsApi } from "../src/actions";
 import { blocksApi, memoryBlocks, validateBlockDefinitions, valueProblem, type BlockSet } from "../src/blocks";
 import { closeTransport, getTransport } from "../src/ipc";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
@@ -77,10 +76,6 @@ describe("a panel's blocks reach the registry as data", () => {
             inputs: { world: { type: "text", name: "World", dynamicChoices: true }, times: { type: "number", name: "Times", default: 1, min: 1 } },
         });
         expect(await blocksApi.projects(PANEL)).toEqual([{ panelId: PANEL, id: "s1", name: "Survival", icon: "dns" }]);
-    });
-
-    test("blocks are their own registry: Actions lists none of them", async () => {
-        expect(await actionsApi.list(PANEL)).toEqual([]);
     });
 });
 

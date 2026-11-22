@@ -26,8 +26,6 @@ const registryChange = object({
     type: anyText(),
     panelId: shape.optional(typed<string>()),
     entry: shape.optional(typed<string>()),
-    action: shape.optional(typed<string>()),
-    actions: shape.optional(typed<string[]>()),
     project: shape.optional(typed<unknown>()),
 });
 
@@ -54,7 +52,6 @@ export const EVENTS = {
     // null names no source, or a backup that ended
     [BACKUP_PROGRESS_EVENT]: object({ panelId: anyText(), sourceId: shape.optional(shape.nullable(anyText())), progress: shape.optional(shape.nullable(typed<BackupProgress>())) }),
     [PROBLEMS_EVENT]: object({ panelId: anyText(), problems: list(typed<PanelProblem>()) }),
-    "actions:registry-updated": registryChange,
     "blocks:registry-updated": registryChange,
 } as const satisfies Record<string, Shape<unknown>>;
 

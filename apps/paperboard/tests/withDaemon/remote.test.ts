@@ -411,9 +411,9 @@ describe("tunnels and scoped credentials", () => {
 			expect((await tunnelClosed(anonymous, "t0")).code).toBe("AUTH_REQUIRED");
 
 			const owner = await local.host();
-			await owner.ok("actions:register", { panelId: "test.answerer", action: "ask" });
+			await owner.ok("blocks:register", { panelId: "test.answerer", entry: "command.ask", schema: { kind: "command", id: "ask", name: "Ask" } });
 			const caller = await local.host();
-			const answer = caller.call("actions:call", { panelId: "test.answerer", action: "ask", args: [] });
+			const answer = caller.call("blocks:call", { panelId: "test.answerer", entry: "command.ask", request: { inputs: {} } });
 			const call = await owner.next((f) => f.type === "action_call");
 			anonymous.send({ type: "action_reply", callId: call.callId, result: "forged" });
 			// the anonymous socket's frames are handled in order: this answer comes after the forged reply was seen
@@ -577,7 +577,7 @@ describe("tunnels and scoped credentials", () => {
 				["secrets:get", { name: "x" }],
 				["config:get", {}],
 				["file:read", { path: "x.txt" }],
-				["actions:register", { action: "x" }],
+				["blocks:register", { entry: "command.x" }],
 			] as const) {
 				expect({ action, code: (await relay.fail(action, params)).code }).toEqual({ action, code: "FORBIDDEN" });
 			}

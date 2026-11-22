@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi } from "../src/blocks";
-import { createPanelBridge } from "../src/bridge";
+import { serviceClient } from "../src/contract";
 import { closeTransport, getTransport } from "../src/ipc";
-import { serviceApi } from "../src/serviceCalls";
 import { getWidgetChoices } from "../src/widgetChoices";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { SERVICE, serviceContract } from "./helpers/contract";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
 const FRAME_SCRIPT = join(import.meta.dir, "helpers", "panelFrame.ts");
@@ -15,7 +15,6 @@ setDefaultTimeout(60_000);
 
 // a panel's page and its service talk over internal blocks, through the
 // real daemon: this test process is the page (the host, as the shell is)
-const SERVICE = "dev.test.service";
 const OTHER = "dev.test.caller";
 let daemon: Daemon;
 let panels: PanelProcess[] = [];
@@ -32,44 +31,52 @@ afterAll(async () => {
 });
 
 test("the page reads the service's state, calls it, and hears each change and event", async () => {
-    const bridge = createPanelBridge<{ items: string[] }>({ panelId: SERVICE, defaultState: { items: [] } });
+    const client = serviceClient(serviceContract);
     try {
-        expect(await bridge.refreshState()).toEqual({ items: [] });
+        expect(await client.state.refresh()).toEqual({ items: [] });
         const heard: unknown[] = [];
-        // wakes whoever waits for the next state patch or event
         let woke = () => {};
         const until = async (check: () => boolean) => {
             while (!check()) await new Promise<void>((resolve) => (woke = resolve));
         };
-        const offState = bridge.onStateChange(() => woke());
-        const off = bridge.on("item:added", (payload) => {
+        const offState = client.state.subscribe(() => woke());
+        const off = client.events.itemAdded((payload) => {
             heard.push(payload);
             woke();
         });
         await getTransport().subscriptionsSettled();
-        expect(await bridge.call<number>("addItem", { name: "apple" })).toBe(1);
-        expect(await bridge.calls.addItem({ name: "pear" })).toBe(2);
-        await until(() => bridge.getState().items.length === 2 && heard.length === 2);
-        expect(bridge.getState().items).toEqual(["apple", "pear"]);
+        expect(await client.calls.addItem({ name: "apple" })).toBe(1);
+        expect(await client.calls.addItem({ name: "pear" })).toBe(2);
+        await until(() => client.state.current().items.length === 2 && heard.length === 2);
+        expect(client.state.current().items).toEqual(["apple", "pear"]);
         expect(heard).toEqual([{ name: "apple", count: 1 }, { name: "pear", count: 2 }]);
         off();
         offState();
     } finally {
-        bridge.dispose();
+        client.state.dispose();
     }
 });
 
-test("a call that gives nothing back answers null, and one that throws fails with its message", async () => {
-    expect(await serviceApi.call(SERVICE, "forget")).toBeNull();
-    await expect(serviceApi.call(SERVICE, "fail")).rejects.toThrow("the service said no");
-    await expect(serviceApi.call(SERVICE, "missing")).rejects.toThrow();
+test("a call that gives nothing back answers undefined, and one that throws fails with its message", async () => {
+    const client = serviceClient(serviceContract);
+    try {
+        expect(await client.calls.forget()).toBeUndefined();
+        await expect(client.calls.fail()).rejects.toThrow("the service said no");
+    } finally {
+        client.state.dispose();
+    }
 });
 
 test("Home asks a widget option's choices from the service", async () => {
-    await serviceApi.call(SERVICE, "addItem", { name: "plum" });
-    const choices = await getWidgetChoices("", SERVICE, "pinned", "item");
-    expect(choices.map((c) => c.value)).toContain("plum");
-    await expect(getWidgetChoices("", SERVICE, "pinned", "nope")).rejects.toThrow('no choices for widget "pinned" option "nope"');
+    const client = serviceClient(serviceContract);
+    try {
+        await client.calls.addItem({ name: "plum" });
+        const choices = await getWidgetChoices("", SERVICE, "pinned", "item");
+        expect(choices.map((c) => c.value)).toContain("plum");
+        await expect(getWidgetChoices("", SERVICE, "pinned", "nope")).rejects.toThrow('no choices for widget "pinned" option "nope"');
+    } finally {
+        client.state.dispose();
+    }
 });
 
 test("none of it is listed, and another panel is refused the service's calls", async () => {

@@ -19,7 +19,6 @@ import type { PortClaim, PortPolicy } from "../ports";
 import type { PanelProblem } from "../problemShape";
 import type { GpuInfo, UsageReport } from "../system";
 import type { InstalledPackageRecord, PendingPackageUpdate } from "../package";
-import type { ActionInfo, ProjectInfo } from "../actions";
 import type { BlockInfo, BlockProjectInfo } from "../blocks";
 import type { BlockSchema } from "../blocksSchema";
 import type { InvalidPanel } from "../panels";
@@ -182,17 +181,6 @@ const pairingStatus = object({
     active: shape.boolean(),
     computers: list(object({ name: opt(anyText()), pairedAt: anyText() })),
 });
-
-// registry actions answer under both the current and the 0.1 spelling
-const actionRegister = { params: object({ panelId: panelId(), action: opt(text(256)), actions: opt(list(text(256))), schema: shape.optional(shape.json()) }), result: ack };
-const actionUnregister = { params: object({ panelId: panelId(), action: opt(text(256)) }), result: ack };
-const actionCall = {
-    params: object({ panelId: panelId(), action: text(256), args: shape.optional(shape.json()), timeoutMs: shape.optional(callTimeout()) }),
-    result: object({ result: shape.json() }),
-};
-const actionList = { params: object({ panelId: panelFilter }), result: object({ actions: list(typed<ActionInfo>()) }) };
-const actionEmit = { params: object({ panelId: panelId(), event: text(256), payload: shape.optional(shape.json()) }), result: ack };
-const triggerEmit = { params: object({ panelId: panelId(), trigger: text(256), output: shape.optional(shape.json()) }), result: ack };
 
 export interface RpcDefinition {
     readonly params: ObjectShape;
@@ -417,24 +405,6 @@ export const RPC = {
     },
     // an event firing, or a value saying it changed
     "blocks:emit": { params: object({ panelId: panelId(), entry: entry(), payload: shape.optional(shape.json()) }), result: ack },
-
-    // the Actions registry (Blocks' predecessor)
-    "actions:register": actionRegister,
-    "action:register": actionRegister,
-    "actions:unregister": actionUnregister,
-    "action:unregister": actionUnregister,
-    "actions:project-define": { params: object({ panelId: panelId(), project: text(64), name: text(128), icon: opt(text(128)) }), result: ack },
-    "actions:project-remove": { params: object({ panelId: panelId(), project: text(64) }), result: ack },
-    "actions:projects": { params: object({ panelId: panelFilter }), result: object({ projects: list(typed<ProjectInfo>()) }) },
-    "actions:call": actionCall,
-    "action:call": actionCall,
-    "actions:list": actionList,
-    "action:list": actionList,
-    "actions:emit": actionEmit,
-    "action:emit": actionEmit,
-    "event:emit": actionEmit,
-    "triggers:emit": triggerEmit,
-    "trigger:emit": triggerEmit,
 } as const satisfies Record<string, RpcDefinition>;
 
 export type RpcAction = keyof typeof RPC;

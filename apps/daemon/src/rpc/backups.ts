@@ -3,7 +3,7 @@ import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
 import { resourcePanelId } from "../security/principal";
 import { BackupService } from "../backups/service";
-import { actionsRegistry, blocksRegistry } from "../server/actions";
+import { blocksRegistry } from "../server/actions";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // one service per engine; it lives as long as the engine does
@@ -25,12 +25,10 @@ function panelFor({ panelId, sourceId }: { panelId: string; sourceId?: string },
 }
 
 // A backup or restore stops its panel's service while it runs. When that
-// service asked for it from inside an action or a block (duringCall names the
-// call), it is gone before it can answer, so the call is answered with the
-// outcome. Call ids are unique across both registries; each checks that the
-// call went to this connection.
+// service asked for it from inside a block (duringCall names the call), it
+// is gone before it can answer, so the call is answered with the outcome.
 async function carrying<T>(callId: string | undefined, ctx: RpcContext, operation: () => Promise<T>): Promise<T> {
-    const finish = callId === undefined ? null : actionsRegistry.carryCall(callId, ctx.ws) ?? blocksRegistry.carryCall(callId, ctx.ws);
+    const finish = callId === undefined ? null : blocksRegistry.carryCall(callId, ctx.ws);
     try {
         const result = await operation();
         finish?.({ result });

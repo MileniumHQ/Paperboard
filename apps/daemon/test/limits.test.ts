@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { MAX_ACTION_SCHEMA_BYTES, MAX_ACTIONS_PER_SOCKET, MAX_PENDING_CALLS, MAX_PENDING_CALLS_PER_SOCKET } from "../src/server/actions";
 import { DriveBackupStore } from "../src/backups/driveStore";
 import { S3BackupStore } from "../src/backups/s3Store";
 import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId } from "../src/backups/types";
@@ -10,8 +9,7 @@ import { MAX_LIVE_CLIENTS, spawnSupervisedClient } from "../src/engine/superviso
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, request, startDaemon } from "testkit/inproc";
-import type { Rpc } from "testkit/rpc";
-import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
+import { TEST_TIMEOUT_MS } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -29,59 +27,8 @@ afterAll(async () => {
 	else process.env.PAPERCRANE_DAV_MAX_UPLOAD = previousCap;
 });
 
-const registered = async (rpc: Rpc, panelId: string) =>
-	((await rpc.ok("actions:list")).actions as Array<{ panelId: string; action: string }>).filter((a) => a.panelId === panelId).map((a) => a.action);
-
 // The daemon refuses oversize or unbounded input instead of exhausting memory or disk.
 describe("resource limits", () => {
-	test("an action schema over the cap and actions past the per-socket budget are refused and register nothing", async () => {
-		const owner = await daemon.rpc();
-		const big = { description: "x".repeat(MAX_ACTION_SCHEMA_BYTES) };
-		expect((await owner.fail("actions:register", { panelId: "test.limits", action: "too-big", schema: big })).code).toBe("INVALID_PARAMS");
-		await owner.ok("actions:register", { panelId: "test.limits", action: "fits", schema: { description: "x".repeat(MAX_ACTION_SCHEMA_BYTES - 64) } });
-		expect(await registered(owner, "test.limits")).toEqual(["fits"]);
-
-		const many = await daemon.rpc();
-		const names = Array.from({ length: MAX_ACTIONS_PER_SOCKET }, (_, i) => `a${i}`);
-		await many.ok("actions:register", { panelId: "test.many", actions: names });
-		expect((await many.fail("actions:register", { panelId: "test.many", action: "one-more" })).code).toBe("INVALID_PARAMS");
-		expect((await registered(many, "test.many")).length).toBe(MAX_ACTIONS_PER_SOCKET);
-		await many.close();
-		await owner.close();
-	});
-
-	test("one socket holds at most 1000 outstanding action calls, and closing it frees them", async () => {
-		const owner = await daemon.rpc();
-		await owner.ok("actions:register", { panelId: "test.slow", action: "hang" });
-		const callers: Rpc[] = [];
-		const callerCount = MAX_PENDING_CALLS / MAX_PENDING_CALLS_PER_SOCKET;
-		const reached = (n: number) => waitFor(`${n} calls to reach the owner`, () => owner.frames.filter((f) => f.type === "action_call").length === n, { timeoutMs: 30_000 });
-		const fill = async (c: number) => {
-			const caller = await daemon.rpc();
-			callers.push(caller);
-			for (let i = 0; i < MAX_PENDING_CALLS_PER_SOCKET; i++) {
-				caller.send({ id: `c${c}-${i}`, action: "actions:call", params: { panelId: "test.slow", action: "hang", args: [], timeoutMs: 60_000 } });
-			}
-			await reached((c + 1) * MAX_PENDING_CALLS_PER_SOCKET);
-		};
-		await fill(0);
-		const refused = await callers[0]!.fail("actions:call", { panelId: "test.slow", action: "hang", args: [] });
-		expect(refused.code).toBe("FORBIDDEN");
-		expect(refused.error).toContain("on this connection");
-		for (let c = 1; c < callerCount; c++) await fill(c);
-
-		// every slot in the daemon is now taken; closing one caller frees its thousand
-		const fresh = await daemon.rpc();
-		expect((await fresh.fail("actions:call", { panelId: "test.slow", action: "hang", args: [] })).error).toContain("global cap");
-		await callers[0]!.close();
-		const answered = fresh.call("actions:call", { panelId: "test.slow", action: "hang", args: [] });
-		const call = await owner.next((f) => f.type === "action_call" && owner.frames.filter((g) => g.type === "action_call").length > MAX_PENDING_CALLS);
-		owner.send({ type: "action_reply", callId: call.callId, result: "freed" });
-		expect((await answered).result).toEqual({ result: "freed" });
-		for (const caller of callers.slice(1)) await caller.close();
-		await fresh.close();
-		await owner.close();
-	});
 
 	test("a file read over its byte cap and a config write over its cap are refused; just under works and nothing is overwritten", async () => {
 		const panel = await daemon.panelRpc("test.caps");

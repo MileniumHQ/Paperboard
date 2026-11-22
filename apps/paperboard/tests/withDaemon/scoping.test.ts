@@ -87,7 +87,7 @@ describe("panel RPCs take their panel from the token claim", () => {
 				["file:read", { targetPath: 42 }],
 				["config:get", { id: "../etc" }],
 				["secrets:get", { name: "k" }],
-				["actions:call", { panelId: "Not A Panel", action: "x" }],
+				["blocks:call", { panelId: "Not A Panel", entry: "command.x" }],
 			] as const) {
 				expect((await panel.fail(action, params)).code).toBe("INVALID_PARAMS");
 			}

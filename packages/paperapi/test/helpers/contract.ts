@@ -41,3 +41,20 @@ export const notesContract = defineContract(NOTES, {
         drafts: shape.object({ text: shape.text(), words: shape.number() }),
     },
 });
+
+export const SERVICE = "dev.test.service";
+
+export const serviceContract = defineContract(SERVICE, {
+    calls: {
+        addItem: { input: shape.object({ name: shape.text() }), output: shape.number() },
+        forget: { output: shape.nothing() },
+        fail: { output: shape.nothing() },
+    },
+    events: {
+        itemAdded: shape.object({ name: shape.text(), count: shape.number() }),
+    },
+    state: {
+        shape: shape.object({ items: shape.list(shape.text()) }),
+        initial: { items: [] as string[] },
+    },
+});

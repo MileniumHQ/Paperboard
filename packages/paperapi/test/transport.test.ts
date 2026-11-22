@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, jest, setDefaultTimeout, test } from "bun:test";
-import { actionsApi } from "../src/actions";
 import { backupApi } from "../src/backups";
 import { blocksApi } from "../src/blocks";
 import net from "node:net";
@@ -68,40 +67,41 @@ async function flushMicrotasks(): Promise<void> {
 
 // Handlers are owned by the panel that registers them.
 describe("handlers are owned by the panel that registers them", () => {
-    test("the same action name under two panels dispatches by panelId:action and removing one leaves the other", async () => {
+    const pingSchema = { kind: "command", id: "ping", name: "Ping" } as const;
+    test("the same block name under two panels dispatches by panelId:entry and removing one leaves the other", async () => {
         const t = transport({ panelId: "dev.ambient" });
-        await t.registerAction("dev.a", "ping", () => "from a");
-        await t.registerAction("dev.b", "ping", () => "from b");
+        await t.registerBlock("dev.a", "command.ping", () => "from a", pingSchema);
+        await t.registerBlock("dev.b", "command.ping", () => "from b", pingSchema);
         const reply = async (callId: string, panelId: string | undefined, action: string) => {
-            server.sendRaw({ type: "action_call", callId, panelId, action, args: [] });
+            server.sendRaw({ type: "action_call", registry: "blocks", callId, panelId, action, args: [] });
             return (await server.next(`the reply to ${callId}`, (f) => f.msg?.type === "action_reply" && f.msg.callId === callId)).msg;
         };
-        expect(await reply("1", "dev.a", "ping")).toEqual({ type: "action_reply", callId: "1", result: "from a" });
-        expect(await reply("2", "dev.b", "ping")).toEqual({ type: "action_reply", callId: "2", result: "from b" });
+        expect(await reply("1", "dev.a", "command.ping")).toEqual({ type: "action_reply", callId: "1", result: "from a" });
+        expect(await reply("2", "dev.b", "command.ping")).toEqual({ type: "action_reply", callId: "2", result: "from b" });
         // a bare name or the ambient panel owns nothing
-        expect((await reply("3", undefined, "ping")).error).toBe("Handler for action 'ping' not found");
-        expect((await reply("4", "dev.ambient", "ping")).error).toBe("Handler for action 'ping' not found");
+        expect((await reply("3", undefined, "command.ping")).error).toBe("Handler for action 'command.ping' not found");
+        expect((await reply("4", "dev.ambient", "command.ping")).error).toBe("Handler for action 'command.ping' not found");
 
-        await t.unregisterAction("dev.a", "ping");
-        expect((await reply("5", "dev.a", "ping")).error).toBe("Handler for action 'ping' not found");
-        expect(await reply("6", "dev.b", "ping")).toEqual({ type: "action_reply", callId: "6", result: "from b" });
+        await t.unregisterBlock("dev.a", "command.ping");
+        expect((await reply("5", "dev.a", "command.ping")).error).toBe("Handler for action 'command.ping' not found");
+        expect(await reply("6", "dev.b", "command.ping")).toEqual({ type: "action_reply", callId: "6", result: "from b" });
     });
 
     test("a reply that finishes after the connection closed is reported loudly, never thrown into the service", async () => {
         const t = transport({ panelId: "dev.ambient" });
         const entered = { ok: deferred(), fail: deferred() };
         const finish = { ok: deferred<string>(), fail: deferred<void>() };
-        await t.registerAction("dev.a", "slow", () => {
+        await t.registerBlock("dev.a", "command.slow", () => {
             entered.ok.resolve(undefined);
             return finish.ok.promise;
-        });
-        await t.registerAction("dev.a", "doomed", async () => {
+        }, { kind: "command", id: "slow", name: "Slow" });
+        await t.registerBlock("dev.a", "command.doomed", async () => {
             entered.fail.resolve(undefined);
             await finish.fail.promise;
             throw new Error("boom");
-        });
-        server.sendRaw({ type: "action_call", callId: "late-ok", panelId: "dev.a", action: "slow", args: [] });
-        server.sendRaw({ type: "action_call", callId: "late-fail", panelId: "dev.a", action: "doomed", args: [] });
+        }, { kind: "command", id: "doomed", name: "Doomed" });
+        server.sendRaw({ type: "action_call", registry: "blocks", callId: "late-ok", panelId: "dev.a", action: "command.slow", args: [] });
+        server.sendRaw({ type: "action_call", registry: "blocks", callId: "late-fail", panelId: "dev.a", action: "command.doomed", args: [] });
         await Promise.all([entered.ok.promise, entered.fail.promise]);
 
         const unhandled: unknown[] = [];
@@ -118,8 +118,8 @@ describe("handlers are owned by the panel that registers them", () => {
             // one macrotask turn: where an unhandled rejection is reported
             await new Promise((r) => setImmediate(r));
             expect(unhandled).toEqual([]);
-            expect(lines.some((l) => l.includes("reply to dev.a:slow (call late-ok) was not delivered") && l.includes("connection closed"))).toBe(true);
-            expect(lines.some((l) => l.includes("reply to dev.a:doomed (call late-fail) was not delivered") && l.includes("connection closed"))).toBe(true);
+            expect(lines.some((l) => l.includes("reply to dev.a:command.slow (call late-ok) was not delivered") && l.includes("connection closed"))).toBe(true);
+            expect(lines.some((l) => l.includes("reply to dev.a:command.doomed (call late-fail) was not delivered") && l.includes("connection closed"))).toBe(true);
         } finally {
             console.error = consoleError;
             process.off("unhandledRejection", onUnhandled);
@@ -129,43 +129,44 @@ describe("handlers are owned by the panel that registers them", () => {
 
 // Reconnect replays registrations faithfully.
 describe("reconnect replays registrations faithfully", () => {
-    test("every registration is re-sent once under its own panel and schema, projects before their actions", async () => {
+    test("every registration is re-sent once under its own panel and schema, projects before their blocks", async () => {
         const t = transport({ panelId: "dev.ambient" });
-        const schema = { id: "start", name: "Start", description: "Starts it" };
-        await t.registerAction("dev.a", "start", () => null, schema);
-        await t.registerAction("dev.b", "stop", () => null);
-        await t.defineProject("dev.a", { id: "server1", name: "Server 1" });
-        await t.defineProject("dev.a", { id: "server10", name: "Server 10", icon: "dns" });
-        await t.registerAction("dev.a", "server1/start", () => null);
-        await t.registerAction("dev.a", "server10/start", () => null);
+        const startSchema = { kind: "command", id: "start", name: "Start", description: "Starts it" } as const;
+        const stopSchema = { kind: "command", id: "stop", name: "Stop" } as const;
+        await t.registerBlock("dev.a", "command.start", () => null, startSchema);
+        await t.registerBlock("dev.b", "command.stop", () => null, stopSchema);
+        await t.defineBlocksProject("dev.a", { id: "server1", name: "Server 1" });
+        await t.defineBlocksProject("dev.a", { id: "server10", name: "Server 10", icon: "dns" });
+        await t.registerBlock("dev.a", "server1/command.start", () => null, startSchema);
+        await t.registerBlock("dev.a", "server10/command.start", () => null, startSchema);
 
         await server.dropConnections();
-        await server.next("the replayed server10/start", (f) => f.conn === 1 && f.msg?.action === "actions:register" && f.msg.params.action === "server10/start");
+        await server.next("the replayed server10/command.start", (f) => f.conn === 1 && f.msg?.action === "blocks:register" && f.msg.params.entry === "server10/command.start");
         const replay = server.frames.filter(on_(1));
-        const registers = replay.filter(isAction("actions:register")).map((f) => ({ panelId: f.msg.params.panelId, action: f.msg.params.action, schema: f.msg.params.schema }));
-        expect(registers.sort((a, b) => (`${a.panelId} ${a.action}` < `${b.panelId} ${b.action}` ? -1 : 1))).toEqual([
-            { panelId: "dev.a", action: "server1/start", schema: undefined },
-            { panelId: "dev.a", action: "server10/start", schema: undefined },
-            { panelId: "dev.a", action: "start", schema },
-            { panelId: "dev.b", action: "stop", schema: undefined },
+        const registers = replay.filter(isAction("blocks:register")).map((f) => ({ panelId: f.msg.params.panelId, entry: f.msg.params.entry, schema: f.msg.params.schema }));
+        expect(registers.sort((a, b) => (`${a.panelId} ${a.entry}` < `${b.panelId} ${b.entry}` ? -1 : 1))).toEqual([
+            { panelId: "dev.a", entry: "command.start", schema: startSchema },
+            { panelId: "dev.a", entry: "server1/command.start", schema: startSchema },
+            { panelId: "dev.a", entry: "server10/command.start", schema: startSchema },
+            { panelId: "dev.b", entry: "command.stop", schema: stopSchema },
         ]);
-        const defines = replay.filter(isAction("actions:project-define")).map((f) => f.msg.params);
+        const defines = replay.filter(isAction("blocks:project-define")).map((f) => f.msg.params);
         expect(defines.map((p) => ({ panelId: p.panelId, project: p.project, name: p.name, icon: p.icon }))).toEqual([
             { panelId: "dev.a", project: "server1", name: "Server 1", icon: undefined },
             { panelId: "dev.a", project: "server10", name: "Server 10", icon: "dns" },
         ]);
-        const lastDefine = Math.max(...replay.map((f, i) => (f.msg?.action === "actions:project-define" ? i : -1)));
-        const firstRegister = replay.findIndex((f) => f.msg?.action === "actions:register");
+        const lastDefine = Math.max(...replay.map((f, i) => (f.msg?.action === "blocks:project-define" ? i : -1)));
+        const firstRegister = replay.findIndex((f) => f.msg?.action === "blocks:register");
         expect(lastDefine).toBeLessThan(firstRegister);
 
-        // removing server1 forgets only its own actions, never server10's
-        await t.removeProject("dev.a", "server1");
+        // removing server1 forgets only its own blocks, never server10's
+        await t.removeBlocksProject("dev.a", "server1");
         await server.dropConnections();
-        await server.next("the second replay", (f) => f.conn === 2 && f.msg?.action === "actions:register" && f.msg.params.action === "server10/start");
-        await server.next("the second replay's dev.b stop", (f) => f.conn === 2 && f.msg?.action === "actions:register" && f.msg.params.action === "stop");
-        const second = server.frames.filter((f) => f.conn === 2 && f.msg?.action === "actions:register").map((f) => f.msg.params.action);
-        expect(second.sort()).toEqual(["server10/start", "start", "stop"]);
-        expect(server.frames.filter((f) => f.conn === 2 && f.msg?.action === "actions:project-define").map((f) => f.msg.params.project)).toEqual(["server10"]);
+        await server.next("the second replay", (f) => f.conn === 2 && f.msg?.action === "blocks:register" && f.msg.params.entry === "server10/command.start");
+        await server.next("the second replay's dev.b stop", (f) => f.conn === 2 && f.msg?.action === "blocks:register" && f.msg.params.entry === "command.stop");
+        const second = server.frames.filter((f) => f.conn === 2 && f.msg?.action === "blocks:register").map((f) => f.msg.params.entry);
+        expect(second.sort()).toEqual(["command.start", "command.stop", "server10/command.start"]);
+        expect(server.frames.filter((f) => f.conn === 2 && f.msg?.action === "blocks:project-define").map((f) => f.msg.params.project)).toEqual(["server10"]);
     });
 });
 
@@ -396,26 +397,26 @@ describe("long operations are not cut off by the default deadline", () => {
         }
     });
 
-    test("actionsApi.call honours timeoutMs: a number bounds the call, null waits", async () => {
+    test("blocksApi.run honours timeoutMs: a number bounds the call, null waits", async () => {
         await initPaperApi({ port: server.port, token: server.token });
         const held = deferred();
-        server.answer = (action, params) => (action === "actions:call" && params.timeoutMs === null ? held.promise : new Promise(() => {}));
+        server.answer = (action, params) => (action === "blocks:call" && params.timeoutMs === null ? held.promise : new Promise(() => {}));
         jest.useFakeTimers();
         try {
-            const bounded = track(actionsApi.call("dev.a", "slow", {}, { timeoutMs: 1_000 }));
-            const unboundedCall = actionsApi.call("dev.a", "install", {}, { timeoutMs: null, extra: 1 });
+            const bounded = track(blocksApi.run("dev.a", "slow", {}, { timeoutMs: 1_000 }));
+            const unboundedCall = blocksApi.run("dev.a", "install", { extra: 1 }, { timeoutMs: null });
             const unbounded = track(unboundedCall);
             const calls = async () => {
-                await server.next("the bounded call", (f) => f.msg?.action === "actions:call" && f.msg.params.action === "slow");
-                return server.next("the unbounded call", (f) => f.msg?.action === "actions:call" && f.msg.params.action === "install");
+                await server.next("the bounded call", (f) => f.msg?.action === "blocks:call" && f.msg.params.entry === "command.slow");
+                return server.next("the unbounded call", (f) => f.msg?.action === "blocks:call" && f.msg.params.entry === "command.install");
             };
             const unboundedFrame = await calls();
-            expect(server.frames.find((f) => f.msg?.params?.action === "slow")?.msg.params.timeoutMs).toBe(1_000);
+            expect(server.frames.find((f) => f.msg?.params?.entry === "command.slow")?.msg.params.timeoutMs).toBe(1_000);
             expect(unboundedFrame.msg.params.timeoutMs).toBeNull();
-            expect(unboundedFrame.msg.params.args).toEqual([{}, { extra: 1 }]);
+            expect(unboundedFrame.msg.params.request).toEqual({ inputs: { extra: 1 } });
             jest.advanceTimersByTime(1_001);
             await flushMicrotasks();
-            expect(bounded.error?.message).toBe("PaperCrane 'actions:call' timed out");
+            expect(bounded.error?.message).toBe("PaperCrane 'blocks:call' timed out");
             jest.advanceTimersByTime(60 * 60_000);
             await flushMicrotasks();
             expect(unbounded.settled).toBe(false);
@@ -683,7 +684,6 @@ describe("a backup progress listener that can't connect yet", () => {
 describe("a subscription made while the daemon is down", () => {
     const subscriptions = [
         { name: "Blocks' registry", event: "blocks:registry-updated", payload: { type: "registered", panelId: "dev.a" }, listen: (cb: (p: unknown) => void) => blocksApi.onRegistryChange(cb) },
-        { name: "Actions' registry", event: "actions:registry-updated", payload: { type: "registered", panelId: "dev.a" }, listen: (cb: (p: unknown) => void) => actionsApi.onRegistryChange(cb) },
         { name: "a process's output", event: "process:data", payload: { id: "p1", data: "up", stream: "stdout" }, listen: (cb: (p: unknown) => void) => on("process-data:p1", (_e: unknown, data: unknown) => cb({ id: "p1", data, stream: "stdout" })) },
     ];
     for (const sub of subscriptions) {
@@ -743,35 +743,5 @@ describe("a panel bridge's first read that fails reaches the person", () => {
         } finally {
             bridge.dispose();
         }
-    });
-});
-
-// Event and trigger subscriptions are scoped to a panel.
-describe("event and trigger subscriptions are scoped to a panel", () => {
-    test("on and onTrigger throw without a panel identity and refuse the wildcard", async () => {
-        await initPaperApi({ port: server.port, token: server.token });
-        expect(() => actionsApi.on("joined", () => {})).toThrow("could not resolve this panel's id");
-        expect(() => actionsApi.onTrigger("joined", () => {})).toThrow("could not resolve this panel's id");
-        expect(() => actionsApi.on("*", "joined", () => {})).toThrow('does not accept "*"');
-        expect(() => actionsApi.on("dev.a", "*", () => {})).toThrow('does not accept "*"');
-        expect(() => actionsApi.onTrigger("*", "joined", () => {})).toThrow('does not accept "*"');
-        expect(() => actionsApi.onTrigger("dev.a", "*", () => {})).toThrow('does not accept "*"');
-    });
-
-    test("the two-argument onTrigger hears only this panel's trigger, never another's of the same name", async () => {
-        await initPaperApi({ port: server.port, token: server.token, panelId: "dev.me" });
-        const heard: unknown[] = [];
-        const arrived = deferred();
-        const off = actionsApi.onTrigger("joined", (output, payload) => {
-            heard.push({ output, payload });
-            arrived.resolve(null);
-        });
-        const subscribed = await server.next("the trigger subscription", (f) => f.msg?.action === "events:subscribe");
-        expect(subscribed.msg.params.events).toEqual(["triggers:dev.me:joined"]);
-        server.emit("triggers:dev.other:joined", { who: "intruder" });
-        server.emit("triggers:dev.me:joined", { who: "friend" });
-        await arrived.promise;
-        expect(heard).toEqual([{ output: { who: "friend" }, payload: { panelId: "dev.me", trigger: "joined", output: { who: "friend" } } }]);
-        off();
     });
 });

@@ -1,8 +1,6 @@
-// The Blocks registry (Actions API v2, PaperAPI's blocksApi): panels
-// register types, commands, values and events here, each one entry named
-// "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls
-// them. It is the Actions registry's machinery as a separate registry, so
-// v1 actions and v2 blocks never see each other's names.
+// The Blocks registry (PaperAPI's blocksApi): panels register types,
+// commands, values and events here, each one entry named "kind.id"
+// (or "project/kind.id"), and the Blocks panel lists and calls them.
 import { blocksRegistry } from "../server/actions";
 import { ErrorCode } from "../core/protocol";
 import type { RpcContext } from "./context";
