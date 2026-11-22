@@ -8,8 +8,12 @@ function setup(fill: (args: { id: string; values: string[] }) => Promise<unknown
     const posted: SignInEntry[] = [];
     const notices: string[] = [];
     const fills: { id: string; values: string[] }[] = [];
+    const prepared: Record<string, unknown>[] = [];
     const signIns = new SignIns({
-        prepare: async (args) => ({ text: JSON.stringify({ site: "example.com", fields: (args.fields as number[]).map((_, i) => ({ secret: i === 1 })) }), images: [{ data: "aW1n", type: "image/png" }] }),
+        prepare: async (args) => {
+            prepared.push(structuredClone(args));
+            return { text: JSON.stringify({ site: "example.com", fields: (args.fields as number[]).map((_, i) => ({ secret: i === 1 })) }), images: [{ data: "aW1n", type: "image/png" }] };
+        },
         fill: async (args) => {
             fills.push(structuredClone(args));
             return fill(args);
@@ -22,7 +26,7 @@ function setup(fill: (args: { id: string; values: string[] }) => Promise<unknown
         expect(r.isError).toBeFalsy();
         return posted.at(-1)!.id;
     };
-    return { signIns, posted, notices, fills, ask };
+    return { signIns, posted, notices, fills, prepared, ask };
 }
 
 // Site credentials reach only the computer, once.
@@ -52,5 +56,16 @@ describe("signing in for the agent", () => {
         expect(s.fills).toHaveLength(1);
         expect(s.posted.at(-1)).toMatchObject({ status: "failed", error: "the page changed" });
         expect(JSON.stringify([s.posted, s.notices])).not.toContain(PASSWORD);
+    });
+
+    test("the card's picture names each field as the agent labels it, and a field without a name is refused", async () => {
+        const s = setup(async () => ({ ok: true }));
+        await s.ask();
+        expect(s.prepared).toMatchObject([{ window: 1, fields: [3, 4], labels: ["Email", "Password"], submit: 5 }]);
+
+        const unnamed = await s.signIns.toolset().call("ask_to_sign_in", { window: 1, fields: [{ mark: 3, label: " " }] }, { fromFlow: false });
+        expect(unnamed).toMatchObject({ isError: true });
+        expect(unnamed.text).toContain("each field has a label");
+        expect(s.prepared).toHaveLength(1);
     });
 });
