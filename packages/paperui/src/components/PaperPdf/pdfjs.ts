@@ -72,23 +72,57 @@ class BundledData {
     }
 }
 
-let worker: Promise<PDFWorker> | null = null;
+/** A document's hold on the shared worker; released once the document is destroyed. */
+export interface PdfWorkerLease {
+    worker: PDFWorker;
+    release(): void;
+}
+
+interface SharedWorker {
+    worker: PDFWorker;
+    /** the thread it runs on; null when documents are read on the page's thread */
+    thread: Worker | null;
+    /** documents holding it */
+    users: number;
+    /** it died: no new document gets it, and it is ended once the last one lets go */
+    dead: boolean;
+}
+
+let shared: Promise<SharedWorker> | null = null;
 
 /**
  * The worker every document shares. Starting one costs a module load and a
  * parse of pdf.js's core, so it starts on the first document and stays.
  * Each document is handed it explicitly: pdf.js then leaves it running when
- * that document is destroyed, while others still use it.
+ * that document is destroyed, while others still use it. Release the lease
+ * once the document is destroyed.
  */
-export function pdfWorker(): Promise<PDFWorker> {
-    worker ??= startWorker().catch((err: unknown) => {
-        worker = null;
+export async function leasePdfWorker(): Promise<PdfWorkerLease> {
+    shared ??= startWorker().catch((err: unknown) => {
+        shared = null;
         throw err;
     });
-    return worker;
+    const held = await shared;
+    held.users++;
+    let released = false;
+    return {
+        worker: held.worker,
+        release() {
+            if (released) return;
+            released = true;
+            held.users--;
+            endIfDead(held);
+        },
+    };
 }
 
-async function startWorker(): Promise<PDFWorker> {
+function endIfDead(held: SharedWorker) {
+    if (!held.dead || held.users > 0) return;
+    held.worker.destroy();
+    held.thread?.terminate();
+}
+
+async function startWorker(): Promise<SharedWorker> {
     let thread: Worker;
     try {
         thread = new Worker(workerUrl, { type: "module" });
@@ -119,15 +153,26 @@ async function startWorker(): Promise<PDFWorker> {
             { signal: done.signal },
         );
     });
-    // pdf.js types `port` as null, but takes any MessagePort-like: a Worker is what it means
-    if (failure === null) {
-        // a worker that dies later (out of memory on a hostile file) isn't
-        // handed to the next document: that one starts a fresh worker
-        thread.addEventListener("error", () => (worker = null), { once: true });
-        return new PDFWorker({ port: thread as unknown as null, verbosity: VerbosityLevel.ERRORS });
+    if (failure !== null) {
+        thread.terminate();
+        return mainThreadWorker(failure);
     }
-    thread.terminate();
-    return mainThreadWorker(failure);
+    // pdf.js types `port` as null, but takes any MessagePort-like: a Worker is what it means
+    const held: SharedWorker = { worker: new PDFWorker({ port: thread as unknown as null, verbosity: VerbosityLevel.ERRORS }), thread, users: 0, dead: false };
+    const mine = shared;
+    // a worker that dies later (out of memory on a hostile file) isn't handed
+    // to the next document, which starts a fresh one, and its thread ends
+    // once the documents on it are destroyed: an uncaught error doesn't stop a worker
+    thread.addEventListener(
+        "error",
+        () => {
+            held.dead = true;
+            if (shared === mine) shared = null;
+            endIfDead(held);
+        },
+        { once: true },
+    );
+    return held;
 }
 
 /**
@@ -137,10 +182,10 @@ async function startWorker(): Promise<PDFWorker> {
  * loads as a script here; it sets `globalThis.pdfjsWorker`, which is where
  * pdf.js looks for it, and leaves the page's messages alone.
  */
-async function mainThreadWorker(reason: unknown): Promise<PDFWorker> {
+async function mainThreadWorker(reason: unknown): Promise<SharedWorker> {
     console.warn("PaperPdf: the PDF worker didn't start, so PDFs are read on the page's thread:", reason);
     await import(/* @vite-ignore */ workerUrl);
-    return new PDFWorker({ verbosity: VerbosityLevel.ERRORS });
+    return { worker: new PDFWorker({ verbosity: VerbosityLevel.ERRORS }), thread: null, users: 0, dead: false };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describePdfError, openPdf, pdfWorker } from "./pdfjs";
+import { describePdfError, leasePdfWorker, openPdf } from "./pdfjs";
 
 /**
  * Draws page 1 of the PDF at `src` with its longer edge `size` pixels long,
@@ -8,9 +8,12 @@ import { describePdfError, openPdf, pdfWorker } from "./pdfjs";
 export async function renderPdfThumbnail(src: string, size: number, signal?: AbortSignal): Promise<Blob> {
     if (!Number.isFinite(size) || size < 1) throw new RangeError(`A PDF thumbnail needs a size of at least 1 pixel, not ${size}`);
     signal?.throwIfAborted();
-    const thread = await pdfWorker();
-    signal?.throwIfAborted();
-    const task = openPdf(src, thread);
+    const lease = await leasePdfWorker();
+    if (signal?.aborted) {
+        lease.release();
+        throw signal.reason;
+    }
+    const task = openPdf(src, lease.worker);
     let stop: () => void = () => void task.destroy();
     const onAbort = () => stop();
     signal?.addEventListener("abort", onAbort, { once: true });
@@ -44,5 +47,6 @@ export async function renderPdfThumbnail(src: string, size: number, signal?: Abo
         signal?.removeEventListener("abort", onAbort);
         // quiet: closing a document that failed to open can itself reject; the failure was already thrown
         await task.destroy().catch(() => {});
+        lease.release();
     }
 }
