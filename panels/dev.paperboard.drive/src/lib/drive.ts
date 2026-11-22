@@ -12,7 +12,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
-import { CHUNK_BYTES, type DriveEntry } from "./contract";
+import { baseOf, CHUNK_BYTES, joinPath, parentOf, type DriveEntry } from "./contract";
 
 /** A name's most bytes, as most filesystems allow. */
 export const NAME_BYTES = 255;
@@ -67,9 +67,6 @@ export function pathParts(rel: unknown): string[] {
     return parts;
 }
 
-const joinPath = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
-const parentOf = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
-const baseOf = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1);
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException)?.code === "ENOENT";
 
 /** "photo.jpg", then "photo 2.jpg", "photo 3.jpg"; a folder or a dotfile counts on its whole name. */
@@ -150,8 +147,9 @@ export class Drive {
         return { name: baseOf(rel), path: rel, kind: "file", size: st.size, modified: st.mtimeMs };
     }
 
+    /** Anything there, a broken link included: existsSync follows links, and a rename would replace one it called free. */
     private taken(folderFull: string, name: string): boolean {
-        return fs.existsSync(path.join(folderFull, name));
+        return fs.lstatSync(path.join(folderFull, name), { throwIfNoEntry: false }) !== undefined;
     }
 
     // ---------------------------------------------------------------- reading
@@ -226,14 +224,17 @@ export class Drive {
     async rename(rel: unknown, name: unknown): Promise<DriveEntry> {
         const { full } = await this.item(rel);
         const clean = checkName(name);
-        const parent = parentOf(rel as string);
-        const target = path.join(path.dirname(full), clean);
         if (clean === baseOf(rel as string)) return this.entry(rel as string, full);
-        // a change of case alone is the same file to a disk that ignores case
-        const sameFile = clean.toLowerCase() === baseOf(rel as string).toLowerCase();
-        if (!sameFile && this.taken(path.dirname(full), clean)) throw new Error(`There's already something called “${clean}” here.`);
+        const target = path.join(path.dirname(full), clean);
+        // a disk that ignores case finds the new name already there when only
+        // the case changes; that is allowed only when it is the same file
+        const there = fs.lstatSync(target, { throwIfNoEntry: false });
+        if (there) {
+            const self = fs.lstatSync(full);
+            if (there.dev !== self.dev || there.ino !== self.ino) throw new Error(`There's already something called “${clean}” here.`);
+        }
         fs.renameSync(full, target);
-        return this.entry(joinPath(parent, clean), target);
+        return this.entry(joinPath(parentOf(rel as string), clean), target);
     }
 
     /** Moves each into `folder`; a folder can't go into itself, and a name already there is refused before anything moves. */
@@ -241,6 +242,8 @@ export class Drive {
         if (!Array.isArray(paths) || paths.length === 0) throw new Error("Nothing to move.");
         const into = await this.folder(folder);
         const items = await Promise.all(paths.map((p) => this.item(p)));
+        // from here to the last rename nothing awaits, so no other call can
+        // put a file at a name these checks found free
         const names = new Set<string>();
         for (const item of items) {
             const name = baseOf(item.rel);
@@ -249,14 +252,12 @@ export class Drive {
             if (names.has(name) || this.taken(into, name)) throw new Error(`There's already something called “${name}” there.`);
             names.add(name);
         }
-        const moved: DriveEntry[] = [];
-        for (const item of items) {
-            const name = baseOf(item.rel);
-            const target = path.join(into, name);
+        const targets = items.map((item) => {
+            const target = path.join(into, baseOf(item.rel));
             fs.renameSync(item.full, target);
-            moved.push(await this.entry(joinPath(folder as string, name), target));
-        }
-        return moved;
+            return { rel: joinPath(folder as string, baseOf(item.rel)), target };
+        });
+        return Promise.all(targets.map((t) => this.entry(t.rel, t.target)));
     }
 
     /** Deletes each for good; a folder goes with all it holds, a link goes as a link. */

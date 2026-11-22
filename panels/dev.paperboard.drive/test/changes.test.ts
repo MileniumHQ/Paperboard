@@ -42,6 +42,27 @@ describe("the drive", () => {
         expect((await drive.list("Writing")).length).toBe(2);
     });
 
+    test("a change of case never replaces a different file whose name differs only in case", async () => {
+        const { drive, root, put } = await openDrive();
+        put("notes.txt", "lower");
+        put("Notes.txt", "UPPER");
+        await expect(drive.rename("notes.txt", "Notes.txt")).rejects.toThrow("already something called “Notes.txt”");
+        expect(fs.readFileSync(path.join(root, "notes.txt"), "utf8")).toBe("lower");
+        expect(fs.readFileSync(path.join(root, "Notes.txt"), "utf8")).toBe("UPPER");
+    });
+
+    test("a broken link holds its name: nothing is renamed or moved over it", async () => {
+        const { drive, root, put } = await openDrive();
+        put("a.txt", "a");
+        put("Box/keep.txt", "keep");
+        fs.symlinkSync(path.join(root, "gone"), path.join(root, "b.txt"));
+        fs.symlinkSync(path.join(root, "gone"), path.join(root, "Box/a.txt"));
+        await expect(drive.rename("a.txt", "b.txt")).rejects.toThrow("already something called “b.txt”");
+        await expect(drive.move(["a.txt"], "Box")).rejects.toThrow("already something called “a.txt”");
+        expect(fs.readFileSync(path.join(root, "a.txt"), "utf8")).toBe("a");
+        expect(fs.lstatSync(path.join(root, "b.txt")).isSymbolicLink()).toBe(true);
+    });
+
     test("moves into folders, but never into itself, onto a name there, or where it already is", async () => {
         const { drive, root, put } = await openDrive();
         put("a.txt", "a");

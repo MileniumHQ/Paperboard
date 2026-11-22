@@ -1,11 +1,10 @@
 // Drive's blocks for the Blocks panel: a flow lists, reads, writes and
 // rearranges what is in the drive, through the same Drive the page uses.
 import type { BlockSet } from "@mileniumhq/paperapi";
-import type { DriveEntry } from "./lib/contract";
+import { parentOf, type DriveEntry } from "./lib/contract";
 import type { Drive } from "./lib/drive";
 
 const CATEGORY = "Drive";
-const parentOf = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 /** What the blocks change goes through `changed`, so open windows list those folders again. */
 export function driveBlocks(drive: Drive, changed: (folders: string[]) => void): BlockSet {

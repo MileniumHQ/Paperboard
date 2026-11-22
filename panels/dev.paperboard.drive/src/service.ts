@@ -6,7 +6,7 @@
 import path from "node:path";
 import { blocksApi, definePanelService, fileApi, type CallHandlers, type ContractContext } from "@mileniumhq/paperapi";
 import { driveBlocks } from "./blocks";
-import { DRIVE_FOLDER, driveContract, PANEL_ID } from "./lib/contract";
+import { DRIVE_FOLDER, driveContract, PANEL_ID, parentOf } from "./lib/contract";
 import { Drive } from "./lib/drive";
 
 type Ctx = ContractContext<typeof driveContract>;
@@ -17,7 +17,6 @@ const UPLOADS_FOLDER = ".uploads";
 let drive: Drive | null = null;
 let context: Ctx | null = null;
 
-const parentOf = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 function ready(): Drive {
     if (!drive) throw new Error("Drive is still starting.");

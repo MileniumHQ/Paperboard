@@ -11,6 +11,11 @@ export const DRIVE_FOLDER = "Drive";
 /** The most of a file one call carries: the page uploads and reads files in pieces this size. */
 export const CHUNK_BYTES = 4 * 1024 * 1024;
 
+// Paths in the drive are "/"-joined from its top, and "" is the top itself.
+export const joinPath = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
+export const parentOf = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
+export const baseOf = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1);
+
 const entry = shape.object({
     name: shape.text(),
     /** "/"-joined from the drive's top; never "" (that is the drive itself) */

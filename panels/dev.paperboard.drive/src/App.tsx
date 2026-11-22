@@ -4,6 +4,7 @@
 // next one while it's open.
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import {
+    ancestorPaths,
     createPaperFileViewDropTarget,
     PaperButton,
     PaperContextMenu,
@@ -34,7 +35,7 @@ import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import { fileApi } from "@mileniumhq/paperapi";
 import { drive } from "./client";
-import { DRIVE_FOLDER, PANEL_ID, type DriveEntry } from "./lib/contract";
+import { baseOf, DRIVE_FOLDER, PANEL_ID, parentOf, type DriveEntry } from "./lib/contract";
 import { createFiles, mediaType, PREVIEW_MAX_BYTES, THUMBNAIL_MAX_BYTES } from "./lib/files";
 import { createUploads } from "./lib/uploads";
 import styles from "./App.module.css";
@@ -46,13 +47,6 @@ const SMALL_THUMBNAIL = 40;
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = (e: KeyboardEvent) => (isMac() ? e.metaKey : e.ctrlKey);
 const keyName = (key: string) => (isMac() ? `⌘${key}` : `Ctrl+${key}`);
-const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
-const baseOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-const ancestors = (path: string) => {
-    if (path === "") return [""];
-    const parts = path.split("/");
-    return ["", ...parts.map((_, i) => parts.slice(0, i + 1).join("/"))];
-};
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 // the view lists what the service gave it, so its entries are the service's
 const asDrive = (entry: PaperFileViewEntry) => entry as DriveEntry;
@@ -290,7 +284,7 @@ export default function App() {
     const [menuOn, setMenuOn] = createSignal<PaperFileViewEntry[]>([]);
     const menuEntry = () => (menuOn().length === 1 ? menuOn()[0] : null);
 
-    const crumbs = createMemo(() => ancestors(folder()));
+    const crumbs = createMemo(() => ["", ...ancestorPaths(folder())]);
     const title = () => (folder() === "" ? ROOT : baseOf(folder()));
 
     return (
