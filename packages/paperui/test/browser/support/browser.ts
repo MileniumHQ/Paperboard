@@ -33,7 +33,16 @@ const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
     ArrowDown: { code: "ArrowDown", keyCode: 40 },
     ArrowLeft: { code: "ArrowLeft", keyCode: 37 },
     ArrowRight: { code: "ArrowRight", keyCode: 39 },
+    Delete: { code: "Delete", keyCode: 46 },
+    F2: { code: "F2", keyCode: 113 },
+    // a letter as a key press, which keydown hears (Page.type sends text, which it doesn't)
+    ...Object.fromEntries(
+        [..."abcdefghijklmnopqrstuvwxyz"].map((letter) => [letter, { code: `Key${letter.toUpperCase()}`, keyCode: letter.toUpperCase().charCodeAt(0), text: letter }]),
+    ),
 };
+
+/** CDP's modifier bits, for Page.press */
+export const MODIFIERS = { alt: 1, ctrl: 2, meta: 4, shift: 8 } as const;
 
 export interface Point {
     x: number;

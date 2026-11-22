@@ -129,6 +129,10 @@
                     "name": "PaperError",
                     "file": "paper-error"
                 },
+                "paperfileview": {
+                    "name": "PaperFileView",
+                    "file": "paper-file-view"
+                },
                 "papergrid": {
                     "name": "PaperGrid",
                     "file": "paper-grid"
