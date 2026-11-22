@@ -71,7 +71,7 @@ You'll be prompted to explain your issue and select a harness. Once the issue is
 
 More information about contributing is available in [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome!
 
-The overwhelming majority of this codebase is built with agents, therefore it's agent-first and has an (agent-generated) AGENTS.md containing a list of rules for agents (and contributors) to follow.
+The overwhelming majority of this codebase is built with agents, therefore it's agent-first and has an AGENTS.md containing a list of rules for agents (and contributors) to follow.
 
 The code license varies by project, but most code here is under PolyForm Noncommercial...with exceptions! PaperUI, PaperAPI, and PaperDocs are all MIT licensed. Due to that variation, the project has no root license.
 
