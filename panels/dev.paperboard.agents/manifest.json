@@ -92,6 +92,14 @@
             {
                 "name": "just-bash",
                 "detail": "The agent's shell, run over its own home folder"
+            },
+            {
+                "name": "PDF.js",
+                "detail": "Mozilla's PDF reader, for PDFs in previews, Apache-2.0"
+            },
+            {
+                "name": "three.js",
+                "detail": "3D models in previews, MIT"
             }
         ],
         "requirements": [
