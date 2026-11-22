@@ -1,11 +1,13 @@
 // The messages toolset: how the agent texts. Each send_message call puts one
 // bubble in the conversation right away, even in the middle of a turn, so
 // the agent can send a short heads-up before long work and keep going. The
-// answer itself is one message.
+// answer itself is one message. Between texts, send_status puts a short line
+// outside the bubbles that says how the work is going.
 
 import { errorMessage } from "@mileniumhq/paperapi";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
+import { LIMITS, STATUS_TONES, type StatusTone } from "../contract";
 import { USER_TURN, type Toolset } from "./toolsets";
 
 // How the agent texts is in the core of its instructions (harness.ts); this is only the tool.
@@ -22,6 +24,18 @@ const MESSAGE_TOOLS: ToolSpec[] = [
                 reply_to: { type: "string", description: "Id of an earlier message (theirs or yours), like k3x9f2 from [k3x9f2], when this answers one of several or something said earlier. Optional." },
             },
             required: ["text"],
+        },
+    },
+    {
+        name: "send_status",
+        description: `Show a short status line in the chat, outside the bubbles, with an icon for its tone: how your work is going, between texts. It isn't a text: no question or answer goes in one. At most ${LIMITS.status} characters.`,
+        inputSchema: {
+            type: "object",
+            properties: {
+                tone: { type: "string", enum: [...STATUS_TONES], description: "done: a step worked. failed: a step didn't. info: what you're on now. warning: something they should know about." },
+                text: { type: "string", description: "A few words, like \"Found 3 flights\" or \"The site is down, trying another\". No full stop at the end." },
+            },
+            required: ["tone", "text"],
         },
     },
 ];
@@ -46,13 +60,27 @@ const MESSAGE_FLOW_TOOLS: ToolSpec[] = [
 /** What the conversation lets the toolset do: add the agent's bubble. Throws if the text, the files or the reply target is refused. */
 export interface Texter {
     say(text: string, replyTo: string | null, files?: string[]): { id: string };
+    /** a status line; throws if it's refused */
+    status(tone: StatusTone, text: string): void;
 }
 
 export function messagesToolset(texter: Texter): Toolset {
     return {
         id: "messages",
         tools: (mode) => (mode.fromFlow ? MESSAGE_FLOW_TOOLS : MESSAGE_TOOLS),
+        // a status line is no text: writing one isn't typing
+        writes: ["send_message"],
         call: async (name, args, mode = USER_TURN): Promise<ToolResult> => {
+            if (name === "send_status") {
+                if (typeof args.tone !== "string" || !(STATUS_TONES as readonly string[]).includes(args.tone)) return { text: `tone must be one of ${STATUS_TONES.join(", ")}`, isError: true };
+                if (typeof args.text !== "string") return { text: "text must be a string", isError: true };
+                try {
+                    texter.status(args.tone as StatusTone, args.text);
+                    return { text: "shown" };
+                } catch (e) {
+                    return { text: errorMessage(e), isError: true };
+                }
+            }
             if (name !== "send_message") return { text: `unknown tool ${name}`, isError: true };
             if (typeof args.text !== "string") return { text: "text must be a string", isError: true };
             if (args.reply_to !== undefined && args.reply_to !== null && typeof args.reply_to !== "string") {

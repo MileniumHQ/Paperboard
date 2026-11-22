@@ -156,15 +156,55 @@ describe("messages during a turn", () => {
     }, SLOW);
 });
 
-// Replies are texts: one typing session each, never plain output.
+// Replies are texts, never plain output; the agent types only while it writes one.
 describe("replies", () => {
-    test("answering is one typing session from the turn's start to the text, through the agent's work on the way", async () => {
+    test("the agent types only while it writes its text: never while it thinks aloud or works", async () => {
         rig = await conversationRig({ harness: "claude-code" });
         rig.conversation.send("look it up [[work]]");
+        await rig.host.printed(turnId, "fake.holding");
+        expect(rig.states.last()!.busy).toBe(true);
+        expect(rig.states.items.some((s) => s.typing)).toBe(false);
+        release(rig.root);
         await settled(rig);
         expect(said(rig)).toEqual(["ok"]);
         const typing = rig.states.items.map((s) => s.typing).filter((t, i, all) => i === 0 || t !== all[i - 1]);
         expect(typing).toEqual([false, true, false]);
+    }, SLOW);
+
+    test("the typing bubble shows while the agent writes its text, and goes when the text lands", async () => {
+        rig = await conversationRig({ harness: "claude-code" });
+        rig.conversation.send("hi [[slowtext]]");
+        await rig.host.printed(turnId, "fake.holding");
+        expect(rig.states.last()!.typing).toBe(true);
+        expect(said(rig)).toEqual([]);
+        release(rig.root);
+        await settled(rig);
+        expect(said(rig)).toEqual(["ok"]);
+        expect(rig.states.last()!.typing).toBe(false);
+    }, SLOW);
+
+    test("writing a card is typing too: a sign-in types until its call arrives", async () => {
+        rig = await conversationRig({ harness: "claude-code" });
+        plan(rig.root, { ask: [{ name: "ask_to_sign_in", arguments: { window: 1, fields: [{ mark: 3, label: "Email" }], submit: 5 } }] });
+        rig.conversation.send("sign me in [[ask]] [[slowask]]");
+        await rig.host.printed(turnId, "fake.holding");
+        expect(rig.states.last()!.typing).toBe(true);
+        expect(rig.entries.items.some((e) => e.kind === "sign-in")).toBe(false);
+        release(rig.root);
+        await settled(rig);
+        expect(rig.entries.items.filter((e) => e.kind === "sign-in")).toHaveLength(1);
+        expect(said(rig)).toEqual(["ok"]);
+        expect(rig.states.last()!.typing).toBe(false);
+    }, SLOW);
+
+    test("a call that arrives before the line saying it began is done: the late line doesn't bring the bubble back", async () => {
+        rig = await conversationRig({ harness: "claude-code" });
+        rig.conversation.send("hi [[lateline]]");
+        await rig.host.printed(turnId, "fake.holding");
+        expect(said(rig)).toEqual(["ok"]);
+        expect(rig.states.last()!.typing).toBe(false);
+        release(rig.root);
+        await settled(rig);
     }, SLOW);
 
     test("a reply left as plain output is never shown: the agent is told once, in the same thread, to text it", async () => {

@@ -240,7 +240,7 @@ export class AiApp {
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => browserTool(this.computer, name, args), instructions: () => COMPUTER_INSTRUCTIONS, context: () => this.computer.openWindowsNote() },
-            messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files) }),
+            messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files), status: (tone, text) => this.conversation.status(tone, text) }),
             shellToolset(home),
             pages.toolset(),
             checkpoints.toolset(),
@@ -258,7 +258,6 @@ export class AiApp {
             mcpToolset(this.servers),
             blocksToolset({ registry: t.blocks, enabled: () => this.servers.config.blocks }),
         ], () => this.conversation?.mode() ?? { fromFlow: false });
-        // any tool but its messages means the agent is working, not typing, whatever its harness reports
         this.tools = {
             ...tools,
             // a flow's turn ends with the user's instructions for it: the flow's own, or else the ones in settings
@@ -269,9 +268,10 @@ export class AiApp {
                 return custom ? { ...own, now: [...own.now, customSection(custom)] } : own;
             },
             call: async (name, args) => {
+                // a call that arrives is written, even one refused below: whatever the agent was typing is done, whatever its harness reports
+                this.conversation?.called(name);
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
-                if (name !== "send_message") this.conversation?.working();
                 if (!this.turnLog) return tools.call(name, args);
                 const started = Date.now();
                 try {
@@ -308,6 +308,7 @@ export class AiApp {
             problem: (h) => this.brainProblem(h),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
+            writes: (tool) => this.tools!.writes(tool),
             emit: (entry) => {
                 this.ctx.emit("entry", entry);
                 if (entry.kind === "agent") {

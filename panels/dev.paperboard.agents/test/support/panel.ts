@@ -96,12 +96,12 @@ export interface FakeBrain {
     plan?: Record<string, unknown>;
 }
 
-/** each harness's program, as the fake brain acts it, and the file in its storage that says it's signed in */
-const PROGRAMS: Record<Harness, { program: string; signedIn: string }> = {
-    codex: { program: "codex", signedIn: "auth.json" },
-    antigravity: { program: "agy", signedIn: "signed-in" },
-    "claude-code": { program: "claude", signedIn: "signed-in" },
-    opencode: { program: "opencode", signedIn: "auth.json" },
+/** each harness's program, as the fake brain acts it, its home in the panel's storage (Brains.home), and the file there that says it's signed in */
+const PROGRAMS: Record<Harness, { program: string; home: string; signedIn: string }> = {
+    codex: { program: "codex", home: "codex", signedIn: "auth.json" },
+    antigravity: { program: "agy", home: "antigravity", signedIn: "signed-in" },
+    "claude-code": { program: "claude", home: "claude", signedIn: "signed-in" },
+    opencode: { program: "opencode", home: "opencode", signedIn: "auth.json" },
 };
 
 export interface BootOptions {
@@ -145,14 +145,14 @@ export async function bootPanel(o: BootOptions = {}): Promise<BootedPanel> {
     const brains = { ...(o.codexOnPath ? { codex: o.codexOnPath } : {}), ...o.brainsOnPath };
     const choices: Record<string, string> = {};
     for (const [harness, brain] of Object.entries(brains) as [Harness, FakeBrain][]) {
-        const { program, signedIn } = PROGRAMS[harness];
+        const { program, home, signedIn } = PROGRAMS[harness];
         // the fake brain acts as the program its file is named for
         fs.copyFileSync(FAKE_BRAIN, path.join(fake, `${program}.mjs`));
         const env = fakeEnv(fake);
         fs.writeFileSync(path.join(bin, program), `#!/bin/sh\nFAKE_DIR='${env.FAKE_DIR}' FAKE_FIXTURES='${env.FAKE_FIXTURES}' exec '${process.execPath}' '${path.join(fake, `${program}.mjs`)}' "$@"\n`, { mode: 0o755 });
         if (brain.plan) plan(fake, brain.plan);
-        fs.mkdirSync(path.join(storage, "brains", harness), { recursive: true });
-        if (brain.signedIn) fs.writeFileSync(path.join(storage, "brains", harness, signedIn), "{}");
+        fs.mkdirSync(path.join(storage, "brains", home), { recursive: true });
+        if (brain.signedIn) fs.writeFileSync(path.join(storage, "brains", home, signedIn), "{}");
         if (brain.chosen) choices[harness] = path.join(bin, program);
     }
     if (Object.keys(choices).length) fs.writeFileSync(path.join(storage, "brains", "choices.json"), JSON.stringify(choices));

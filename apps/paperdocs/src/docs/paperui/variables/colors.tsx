@@ -313,7 +313,7 @@ export default function ColorsDoc() {
                     <tr><td><PaperCode>--paper-panel-gameserver</PaperCode></td><td><PaperCode>#ee3865</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-ai</PaperCode></td><td><PaperCode>#00f5d4</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-actions</PaperCode></td><td><PaperCode>#2454bd</PaperCode></td></tr>
-                    <tr><td><PaperCode>--paper-panel-botcreator</PaperCode></td><td><PaperCode>#5865f2</PaperCode></td></tr>
+                    <tr><td><PaperCode>--paper-panel-botcreator</PaperCode></td><td><PaperCode>#2b44c8</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-agents</PaperCode></td><td><PaperCode>#43bb79</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-panel-blocks</PaperCode></td><td><PaperCode>#f6c748</PaperCode></td></tr>
                     <tr><td><PaperCode>--paper-marketing-ink</PaperCode></td><td><PaperCode>#080c12</PaperCode></td></tr>

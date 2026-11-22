@@ -62,7 +62,9 @@ export class AcpRpcError extends Error {
 
 type Reply = { ok: (result: any) => void; fail: (e: Error) => void };
 
-const isSendMessage = (name: string) => name === `${MCP_SERVER}_send_message` || name === `mcp_${MCP_SERVER}_send_message`;
+/** A panel tool's own name, from the harness's name for it (`paperboard_x`, or Antigravity's `mcp_paperboard_x`); null for any other tool. */
+const OUR_TOOL = new RegExp(`^(?:mcp_)?${MCP_SERVER}_(.+)$`);
+const ourTool = (name: string): string | null => OUR_TOOL.exec(name)?.[1] ?? null;
 
 /**
  * Shared JSON-RPC-over-stdio connection for both long-lived ACP turns (`AcpTurn`)
@@ -163,7 +165,7 @@ function rejectOptionId(params: any): string {
 
 export class AcpTurn {
     private client: AcpClient;
-    private tools = new Map<string, string>(); // toolCallId → tool name, for this turn
+    private calls = new Set<string>(); // the turn's toolCallIds: a call's update is only read for one it began
     private text = "";
     private messageId: string | null = null;
     private session: string | null = null;
@@ -213,7 +215,7 @@ export class AcpTurn {
     /** The process is gone: nothing more will be answered. */
     close() {
         if (this.cancelTimer) clearTimeout(this.cancelTimer);
-        this.tools.clear();
+        this.calls.clear();
         this.client.close();
     }
 
@@ -244,8 +246,8 @@ export class AcpTurn {
         if (u.sessionUpdate === "tool_call" && typeof u.toolCallId === "string") {
             this.flush();
             const name = String(u.name ?? u.title ?? "");
-            this.tools.set(u.toolCallId, name);
-            this.o.emit(isSendMessage(name) ? { type: "typing" } : { type: "working" });
+            this.calls.add(u.toolCallId);
+            this.o.emit({ type: "tool", name: ourTool(name) });
             return;
         }
         // how much of the model's context the session fills, and its window
@@ -254,8 +256,8 @@ export class AcpTurn {
             return;
         }
         if (u.sessionUpdate === "session_info_update" && u._meta && RETRY_META in u._meta) return this.retrying(u._meta[RETRY_META]);
-        // a text that's gone out: the model's next step is work until it says otherwise
-        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && isSendMessage(this.tools.get(u.toolCallId) ?? "")) {
+        // a call that's done was written long before: the model's next step is work until it says otherwise
+        if (u.sessionUpdate === "tool_call_update" && (u.status === "completed" || u.status === "failed") && this.calls.has(u.toolCallId)) {
             this.o.emit({ type: "working" });
             return;
         }
