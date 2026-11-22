@@ -40,7 +40,7 @@ if [ ! -e "${root}/nopasswd" ]; then
   done
   if [ $ok = 0 ]; then echo "sudo: 3 incorrect password attempts" >&2; exit 1; fi
 fi
-if [ -e "${root}/refuse" ]; then echo "sudo: you are not allowed to run this command" >&2; exit 1; fi
+if [ -e "${root}/refuse" ]; then echo "Sorry, user me is not allowed to execute '/bin/sh -c ...' as root on this-computer." >&2; exit 1; fi
 exec "$@"
 `;
 
@@ -206,12 +206,18 @@ describe("the agent's shells on the user's computer", () => {
         expect(s.notices.at(-1)).toEndWith("exited with 0.\n\nran");
         expect(JSON.stringify(s.notices)).not.toContain(PASSWORD);
 
-        // sudo refusing isn't the command failing: it never ran
+        // a command that fails says so with its own exit code
+        await s.call("request_sudo", { command: "echo failing >&2; exit 3", folder: s.project, reason: "Check sudo." });
+        await s.access.sudo.answer(s.sudoCard().id, PASSWORD);
+        expect(await s.sudoSettled()).toMatchObject({ status: "done", exitCode: 3 });
+        expect(s.notices.at(-1)).toEndWith("exited with 3.\n\nfailing");
+
+        // sudo refusing, in its own words, isn't the command failing: it never started
         fs.writeFileSync(path.join(s.root, "refuse"), "");
         await s.call("request_sudo", { command: "echo ran", folder: s.project, reason: "Check sudo." });
         await s.access.sudo.answer(s.sudoCard().id, PASSWORD);
-        expect(await s.sudoSettled()).toMatchObject({ status: "failed", error: "sudo refused: you are not allowed to run this command" });
-        expect(s.notices.at(-1)).toContain("It didn't run.");
+        expect(await s.sudoSettled()).toMatchObject({ status: "failed", error: "sudo refused: Sorry, user me is not allowed to execute '/bin/sh -c ...' as root on this-computer." });
+        expect(s.notices.at(-1)).toContain("so it didn't run");
     }, 30_000);
 
     test("the command on a sudo card reads as it runs, and a task's shell keeps sudo within reach past the turn", async () => {

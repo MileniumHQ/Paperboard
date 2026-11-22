@@ -24,8 +24,10 @@ import { cutText } from "./userShells";
 
 const L = LIMITS.access;
 const SYSTEM_SUDO = "/usr/bin/sudo";
-/** sudo writes nothing to stdout before it's let the command run: a command's first output means no password was asked for */
+/** how long sudo has to ask for the password before the command is taken to run without one */
 const NO_PROMPT_MS = 10_000;
+/** what runs under sudo: it says on stderr that sudo let it start ($0, a nonce), then runs the command ($1) */
+const ANNOUNCE = 'printf "%s\\n" "$0" >&2; exec /bin/sh -c "$1"';
 const PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 export interface SudoDeps {
@@ -135,8 +137,9 @@ export class Sudo {
         this.update(r, { status: "running", error: undefined });
 
         const prompt = `[paperboard-sudo-${crypto.randomBytes(6).toString("hex")}]`;
+        const started = `[paperboard-started-${crypto.randomBytes(6).toString("hex")}]`;
         const env = { PATH, LANG: process.env.LANG ?? "C.UTF-8", HOME: os.homedir(), USER: os.userInfo().username, LOGNAME: os.userInfo().username };
-        const child = spawn(binary, ["-S", "-k", "-p", prompt, "--", "/bin/sh", "-c", r.entry.command], { cwd: r.entry.folder, env, stdio: ["pipe", "pipe", "pipe"] });
+        const child = spawn(binary, ["-S", "-k", "-p", prompt, "--", "/bin/sh", "-c", ANNOUNCE, started, r.entry.command], { cwd: r.entry.folder, env, stdio: ["pipe", "pipe", "pipe"] });
         r.child = child;
         const out = new Output();
         let before = "";
@@ -144,8 +147,10 @@ export class Sudo {
         let refused = false;
         let stdinOpen = true;
         let overtime = false;
-        /** stdout is the command's: once it writes, sudo has let it run */
+        /** sudo let the command start: anything that failed before then is sudo refusing */
         let ran = false;
+        /** stderr's last few characters, so the start's nonce is found across chunks */
+        let tail = "";
         const closeInput = () => {
             if (!stdinOpen) return;
             stdinOpen = false;
@@ -165,6 +170,13 @@ export class Sudo {
         child.stderr.setEncoding("utf8");
         child.stdout.setEncoding("utf8");
         child.stderr.on("data", (d: string) => {
+            tail = (tail + d).slice(-(started.length + d.length));
+            if (!ran && tail.includes(started)) {
+                ran = true;
+                // it started without being asked for a password: it gets no input
+                clearTimeout(noPrompt);
+                closeInput();
+            }
             if (asked) {
                 out.add(d);
                 // sudo asking again: the password was wrong. Its input is closed, so it gives up by itself
@@ -181,12 +193,7 @@ export class Sudo {
             out.add(before.slice(at + prompt.length));
             if (out.text().includes(prompt)) refused = true;
         });
-        child.stdout.on("data", (d: string) => {
-            // sudo let it run, without asking if it hadn't yet
-            ran = true;
-            closeInput();
-            out.add(d);
-        });
+        child.stdout.on("data", (d: string) => out.add(d));
 
         await new Promise<void>((resolve) => {
             child.once("spawn", () => resolve());
@@ -216,17 +223,17 @@ export class Sudo {
                 this.deps.tell(`sudo refused the user's password ${L.sudoAttempts} times, so \`${r.entry.command}\` didn't run. Ask again only if they want to.`);
                 return;
             }
-            const output = out.text().split(prompt).join("").trim();
+            const output = out.text().split(prompt).join("").split(`${started}\n`).join("").split(started).join("").trim();
             if (overtime) {
                 this.end(r, { status: "failed", error: `it was stopped after ${L.sudoRunMinutes} minutes` });
                 this.deps.tell(`\`${r.entry.command}\` ran as administrator for ${L.sudoRunMinutes} minutes, the most it can, and was stopped.${output ? `\n\n${output}` : ""}`);
                 return;
             }
-            // sudo refusing (not in sudoers, a policy, PAM giving up) says so first, before the command could write anything
-            if (!ran && code !== 0 && output.startsWith("sudo: ")) {
-                const said = output.split("\n")[0]!.slice("sudo: ".length);
+            // sudo refusing (not in sudoers, a policy, PAM giving up): it ended before the command said it started
+            if (!ran) {
+                const said = output.split("\n").find((l) => l.trim())?.trim() ?? `it exited with ${code ?? signal}`;
                 this.end(r, { status: "failed", error: `sudo refused: ${said}` });
-                this.deps.tell(`sudo refused to run \`${r.entry.command}\`: ${said}. It didn't run.`);
+                this.deps.tell(`sudo refused to run \`${r.entry.command}\`, so it didn't run.${output ? `\n\n${output}` : ""}`);
                 return;
             }
             const how = code === null ? `was stopped (${signal})` : `exited with ${code}`;
