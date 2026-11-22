@@ -3,6 +3,7 @@ import { Failure } from "./Failure";
 import { createEffect, createSignal, createUniqueId, For, Match, on, onCleanup, Switch } from "solid-js";
 import { PaperLoader } from "../../../components/PaperLoader";
 import { errorMessage } from "../../../utils/errorMessage";
+import { getVarCss } from "../../../utils/theme";
 
 const SIZES = [1, 3, 5, 8, 11] as const;
 
@@ -75,7 +76,7 @@ export function FontView(props: { src: string; name: string; onError: (message: 
                     </div>
                     <For each={SIZES}>
                         {(size) => (
-                            <p class={styles.fontSample} style={{ "font-size": `var(--paper-text-size-${size})` }}>
+                            <p class={styles.fontSample} style={{ "font-size": getVarCss(`text-size-${size}`) }}>
                                 The quick brown fox jumps over the lazy dog.
                             </p>
                         )}
