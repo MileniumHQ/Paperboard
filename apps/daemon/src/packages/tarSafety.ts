@@ -1,5 +1,6 @@
-// Tar archive safety: pre-scan every member against its destination and
-// extraction budget before handing extraction to node-tar.
+// Tar archive safety: pre-scan every member against its destination, the
+// archive's own links and the extraction budget before handing extraction
+// to node-tar.
 import * as fs from "fs";
 import * as path from "path";
 import * as tar from "tar";
@@ -83,6 +84,70 @@ interface TarSymlink {
     linkpath: string;
 }
 
+/** A member by its path from the tree's root, as segments. */
+interface TreeMember {
+    name: string;
+    parts: string[];
+    type: string;
+    /** a symlink's target from its directory, or a hardlink's from the root */
+    linkpath?: string;
+}
+
+function segments(name: string): string[] {
+    return name.split(/[\\/]/).filter((part) => part && part !== ".");
+}
+
+// The escape check above is lexical, and a link can make it lie: with
+// `s -> .`, the target `s/..` stays inside on paper but leaves the tree on
+// disk. So no member is written through a link, and a link's target may
+// end at a link but never pass through one. Every link's own target is
+// checked the same way, so a chain of links stays inside too.
+function checkLinkPaths(members: TreeMember[]): void {
+    const links = new Set(members.filter((m) => m.type === "SymbolicLink").map((m) => m.parts.join("/")));
+    for (const member of members) {
+        for (let i = 1; i < member.parts.length; i++) {
+            if (links.has(member.parts.slice(0, i).join("/"))) throw new Error(`Archive member is written through a link: ${member.name}`);
+        }
+        if (member.linkpath === undefined) continue;
+        const current = member.type === "SymbolicLink" ? member.parts.slice(0, -1) : [];
+        const target = member.linkpath.split(/[\\/]/);
+        for (let i = 0; i < target.length; i++) {
+            const part = target[i]!;
+            if (!part || part === ".") continue;
+            if (part === "..") {
+                if (!current.length) throw new Error(`Archive link escapes destination: ${member.name}`);
+                current.pop();
+                continue;
+            }
+            current.push(part);
+            if (i < target.length - 1 && links.has(current.join("/"))) {
+                throw new Error(`Archive link passes through another link: ${member.name}`);
+            }
+        }
+    }
+}
+
+/** After a recipe has moved members, every link must still hold where it now is. */
+export function validateExtractedLinks(root: string): void {
+    const members: TreeMember[] = [];
+    const visit = (parts: string[]) => {
+        for (const name of fs.readdirSync(path.join(root, ...parts))) {
+            const child = [...parts, name];
+            const full = path.join(root, ...child);
+            const stat = fs.lstatSync(full);
+            if (stat.isSymbolicLink()) {
+                const linkpath = fs.readlinkSync(full);
+                if (path.isAbsolute(linkpath) || path.win32.isAbsolute(linkpath)) throw new Error(`Package link escapes its folder: ${child.join("/")}`);
+                members.push({ name: child.join("/"), parts: child, type: "SymbolicLink", linkpath });
+            } else if (stat.isDirectory()) {
+                visit(child);
+            }
+        }
+    };
+    visit([]);
+    checkLinkPaths(members);
+}
+
 // Pre-extract scan of a tar archive: every member is checked against its
 // destination, supported type list, and extraction budget as the archive
 // streams past. Rejection is raised outside the tar stream as a real
@@ -94,6 +159,7 @@ export async function scanTarMembers(
     refuse?: (member: { path: string; type: string }) => string | null,
 ): Promise<TarSymlink[]> {
     const symlinks: TarSymlink[] = [];
+    const members: TreeMember[] = [];
     const source = fs.createReadStream(archivePath);
     await new Promise<void>((resolve, reject) => {
         let total = 0;
@@ -134,9 +200,14 @@ export async function scanTarMembers(
                 const verdict = classifyTarMember(destDir, entry.path, strip, entry);
                 if (verdict === "escape") {
                     settle(new Error(`Archive entry escapes destination: ${entry.path}`));
-                } else if (verdict === "ok" && type === "SymbolicLink" && entry.linkpath) {
-                    const effective = path.normalize(entry.path).split(/[\\/]/).slice(strip).join(path.sep);
-                    symlinks.push({ path: effective, linkpath: entry.linkpath });
+                } else if (verdict === "ok") {
+                    const parts = segments(path.normalize(entry.path).split(/[\\/]/).slice(strip).join("/"));
+                    const linkpath =
+                        type === "SymbolicLink" ? entry.linkpath
+                        : type === "Link" && entry.linkpath ? entry.linkpath.split(/[\\/]/).slice(strip).join("/")
+                        : undefined;
+                    members.push({ name: String(entry.path), parts, type, linkpath });
+                    if (type === "SymbolicLink" && entry.linkpath) symlinks.push({ path: parts.join(path.sep), linkpath: entry.linkpath });
                 }
             },
         });
@@ -150,6 +221,7 @@ export async function scanTarMembers(
         source.on("error", (err) => settle(err));
         source.pipe(parser);
     });
+    checkLinkPaths(members);
     return symlinks;
 }
 

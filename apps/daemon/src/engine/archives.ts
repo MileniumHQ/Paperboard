@@ -6,7 +6,7 @@ import AdmZip from "adm-zip";
 import { spawn } from "child_process";
 import { extractMsi } from "../packages/msiArchive";
 import { moveFileSafe } from "../core/storage";
-import { extractTarSafely, TAR_BUDGET } from "../packages/tarSafety";
+import { extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "../packages/tarSafety";
 import type { PackageRecipe } from "@mileniumhq/release";
 
 // Extracts .tar.gz, .tgz, .zip or single files
@@ -260,5 +260,6 @@ export async function applyPackageRecipe(archivePath: string, pkgDir: string, re
         }
         await fs.promises.rm(scratch, { recursive: true, force: true });
     }
+    validateExtractedLinks(pkgDir);
     if (!fs.existsSync(path.join(pkgDir, "bin"))) throw new Error("Package recipe left no bin/ directory");
 }
