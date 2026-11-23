@@ -1,5 +1,6 @@
-import { gameFor } from "./games";
-// A server's id is also its Blocks project id.
+import { defaultGame, gameFor } from "./games";
+// A server's id is also its Blocks project id. Files stay where they were
+// created: the migrated server owns the original panel folder.
 export const PANEL_ID = "dev.paperboard.gameserver";
 export const SERVERS_VERSION = 2;
 export const MAX_SERVERS = 50;
@@ -13,8 +14,11 @@ export interface StoredServer {
 }
 export interface ServersConfig {
     version: number;
+    /** Reserved once, so legacy backups never exclude a pre-existing user directory. */
     serversDirectory: string;
     servers: StoredServer[];
+    /** The server from before several servers (see Server.legacy), and what a widget with no server chosen shows. */
+    legacyServer?: string;
 }
 export function isServerId(id: unknown): id is string {
     return typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id);
@@ -43,7 +47,22 @@ export function readServersConfig(saved: unknown): ServersConfig {
                 serversDirectory: newServersDirectory(),
                 servers: [],
             };
-        throw new Error("The saved servers are damaged");
+        const id = createServerId();
+        return {
+            version: SERVERS_VERSION,
+            serversDirectory: newServersDirectory(),
+            legacyServer: id,
+            servers: [
+                {
+                    id,
+                    name: "Minecraft server",
+                    game: defaultGame.id,
+                    directory: "",
+                    createdAt: Date.now(),
+                    settings: { ...raw },
+                },
+            ],
+        };
     }
     if (raw.version !== SERVERS_VERSION)
         throw new Error(
@@ -65,7 +84,7 @@ export function readServersConfig(saved: unknown): ServersConfig {
             ids.has(s.id) ||
             typeof s.game !== "string" ||
             !s.game ||
-            s.directory !== `${raw.serversDirectory}/${s.id}` ||
+            (s.directory !== "" && s.directory !== `${raw.serversDirectory}/${s.id}`) ||
             directories.has(s.directory) ||
             !s.settings ||
             typeof s.settings !== "object" ||
@@ -85,10 +104,16 @@ export function readServersConfig(saved: unknown): ServersConfig {
             settings: s.settings,
         };
     });
+    if (
+        raw.legacyServer !== undefined &&
+        (!isServerId(raw.legacyServer) || !ids.has(raw.legacyServer))
+    )
+        throw new Error("The legacy server reference is damaged");
     return {
         version: SERVERS_VERSION,
         serversDirectory: raw.serversDirectory,
         servers,
+        ...(raw.legacyServer ? { legacyServer: raw.legacyServer } : {}),
     };
 }
 

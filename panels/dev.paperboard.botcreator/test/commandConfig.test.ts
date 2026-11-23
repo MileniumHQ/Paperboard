@@ -31,5 +31,6 @@ describe("saved commands are never trusted, and never quietly dropped", () => {
     test("a bot whose saved commands are damaged refuses the saved bots, naming the bot", () => {
         const bot = { id: "b-one", name: "One", commands: [stored("ok"), stored("Bad Name")] };
         expect(() => readBotsConfig({ version: 2, bots: [bot] })).toThrow("bot 1 in the saved list: saved command 2 (/Bad Name) is damaged");
+        expect(() => readBotsConfig({ configured: true, commands: [stored("Bad Name")] })).toThrow("the saved bot: saved command 1 (/Bad Name) is damaged");
     });
 });

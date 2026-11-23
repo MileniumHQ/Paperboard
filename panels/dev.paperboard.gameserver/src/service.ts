@@ -114,6 +114,9 @@ function publish(changed?: Server): void {
     const patch: Partial<ServersState> = {};
     if (JSON.stringify(rootContext.state.servers) !== JSON.stringify(servers))
         patch.servers = servers;
+    const legacyServer = saved.legacyServer ?? null;
+    if (rootContext.state.legacyServer !== legacyServer)
+        patch.legacyServer = legacyServer;
     if (Object.keys(patch).length > 0) rootContext.setState(patch);
     for (const server of changed ? [changed] : entries.values())
         rootContext.keyed.server.set(server.id, server.state);
@@ -192,9 +195,21 @@ function createServer(stored: StoredServer): Server {
             publish();
             return next;
         },
-    });
+    }, saved.legacyServer === stored.id);
     entries.set(stored.id, server);
     return server;
+}
+// Player heads were kept on disk beside the servers until they were looked
+// up fresh each time; the stale copies go. Never a server's own folder.
+async function removeOldHeadStore(): Promise<void> {
+    const dir = `${saved.serversDirectory}/player-heads`;
+    if (saved.servers.some((server) => server.directory === dir)) return;
+    try {
+        await nodeFs.rm(await fileApi.getPath(dir, PANEL_ID), { recursive: true, force: true });
+    } catch (err) {
+        // quiet: a stale cache left on disk harms nothing, and it is tried again at the next start
+        console.error("[gameserver] the old player head cache could not be removed:", err);
+    }
 }
 
 async function initialize(server: Server): Promise<Server> {
@@ -205,7 +220,8 @@ async function initialize(server: Server): Promise<Server> {
             directory: server.stored.directory,
             config: ["servers", { id: server.id }, "settings"],
             processes: game.processIds.map((id) => server.processId(id)),
-            ...(game.backupExclude ? { exclude: [...game.backupExclude] } : {}),
+            ...(server.legacy ? { legacy: true } : {}),
+            ...(server.legacy || game.backupExclude ? { exclude: [...(server.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
             ...(game.backupSkip ? { skip: [...game.backupSkip] } : {}),
         });
         server.backupSource = true;
@@ -362,10 +378,14 @@ function removeServer(id: unknown): Promise<void> {
             // a setup that failed may have made neither
             if (server.backupSource) await server.backups.setSchedule(null);
             await server.blocks?.remove();
-            await updateSaved((current) => ({
-                ...current,
-                servers: current.servers.filter((s) => s.id !== server.id),
-            }));
+            await updateSaved((current) => {
+                const next = {
+                    ...current,
+                    servers: current.servers.filter((s) => s.id !== server.id),
+                };
+                if (next.legacyServer === server.id) delete next.legacyServer;
+                return next;
+            });
             await dispose(server);
             // the history is the server's console, not its files: it goes with the entry
             await server.history!.stop();
@@ -517,7 +537,10 @@ export const gameServerService = definePanelService({
             await handle.register({ categories: BLOCK_CATEGORIES, types: [...sharedTypes(onlinePlayers, () => serversHost.ids()), ...gameTypes.flat(), serverType(serversHost)], ...serversBlocks(serversHost) });
             const original = await config.get(PANEL_ID);
             saved = readServersConfig(original);
+            // No file operations or data moves: installed records and all config
+            // keys become settings of the migrated server in one atomic write.
             await config.set(saved, PANEL_ID);
+            await removeOldHeadStore();
             for (const server of saved.servers.map(createServer)) {
                 try {
                     await initialize(server);

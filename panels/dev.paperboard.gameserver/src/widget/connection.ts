@@ -46,9 +46,11 @@ export type Connection =
 
 const NOT_CHOSEN = "No server is chosen, or it was removed. Choose a Server in the widget options.";
 
+/** The option is explicit; only widgets from before several servers use the legacy server. */
 function chosenServer(state: ServersState, option: string | undefined): ServerSummary {
     if (state.serversError) throw new Error(state.serversError);
-    const server = option ? state.servers.find((s) => s.id === option) : undefined;
+    const id = option || state.legacyServer;
+    const server = state.servers.find((s) => s.id === id);
     if (!server) throw new Error(NOT_CHOSEN);
     return server;
 }

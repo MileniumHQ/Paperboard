@@ -875,8 +875,10 @@ export const gameServerContract = defineContract(PANEL_ID, {
             servers: shape.list(serverSummary),
             /** why the saved servers could not be read; every call refuses while set */
             serversError: shape.nullable(shape.text()),
+            /** the server a widget from before several servers shows */
+            legacyServer: shape.nullable(shape.text()),
         }),
-        initial: { servers: [], serversError: null },
+        initial: { servers: [], serversError: null, legacyServer: null },
     },
     keyed: { server: serverStateShape },
 });
