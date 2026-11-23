@@ -38,8 +38,12 @@ const identityPart = shape.object({ id: shape.text(), name: shape.text(), versio
 export const computerInfo = shape.object({
     id: shape.text(),
     name: shape.text(),
+    /** the address it is dialed at first: its .local name when it answers to one */
     host: shape.text(),
+    /** the IP it last answered at, dialed alongside a .local host */
+    address: shape.optional(shape.text()),
     port: shape.number(),
+    machineId: shape.optional(shape.text()),
     /** the address other machines reach this computer at (local computer only) */
     networkAddress: shape.optional(shape.text()),
     os: shape.optional(shape.text()),
@@ -68,15 +72,24 @@ const probeResult = shape.object({
 });
 export type ComputerProbeResult = Infer<typeof probeResult>;
 
+/** whether a paired computer answers, at any address it is known by, under its pinned certificate */
+const reachResult = shape.object({ reachable: shape.boolean(), error: shape.optional(shape.text()) });
+export type ComputerReachResult = Infer<typeof reachResult>;
+
 /** A Paperboard server found nearby over mDNS. */
 const discoveredComputer = shape.object({
     /** stable service identity: the dedupe key */
     id: shape.text(),
     name: shape.text(),
+    /** the address it answered from */
     host: shape.text(),
+    /** the .local name it answers to (an older daemon advertises none) */
+    mdnsName: shape.optional(shape.text()),
     port: shape.number(),
     version: shape.optional(shape.text()),
     os: shape.optional(shape.text()),
+    /** its TLS certificate's SHA-256 fingerprint: who it is, whatever its address */
+    fingerprint: shape.optional(shape.text()),
 });
 export type DiscoveredComputer = Infer<typeof discoveredComputer>;
 
@@ -211,6 +224,7 @@ export const SHELL_CALLS = {
     },
     "computers-list": { args: none, answer: computerList, browser: true },
     "computer-probe": { args: shape.object({ host: filled(), port }), answer: probeResult, browser: true },
+    "computer-reach": { args: shape.object({ id: filled() }), answer: reachResult, browser: true },
     "computer-pair": {
         args: shape.object({ host: filled(), port, code: filled(), name: shape.optional(shape.text()) }),
         // the id of the computer it paired, which the shell goes to, and

@@ -19,7 +19,11 @@ export function startCommunicator(ipcMain: IpcMain) {
         }
     });
 
-    const onDiscovery = (services: DiscoveredComputer[]) => pushToShells("discovery-changed", services);
+    // a paired computer seen at a new address is followed there
+    const onDiscovery = (services: DiscoveredComputer[]) => {
+        void connectionPool.followDiscovered(services);
+        pushToShells("discovery-changed", services);
+    };
     // a failure to browse is kept and said by discovery-list
     discovery.start();
     discovery.on("update", onDiscovery);
@@ -32,10 +36,13 @@ export function startCommunicator(ipcMain: IpcMain) {
         });
     };
     connectionPool.on("change", onPoolChange);
+    const onUnreachable = () => discovery.rediscover();
+    connectionPool.on("unreachable", onUnreachable);
 
     // stop forwarding so restart never double-subscribes
     return () => {
         connectionPool.off("change", onPoolChange);
+        connectionPool.off("unreachable", onUnreachable);
         discovery.off("update", onDiscovery);
         discovery.stop();
         removeWindowSink();

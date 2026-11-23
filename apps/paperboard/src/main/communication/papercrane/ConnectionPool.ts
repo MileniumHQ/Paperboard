@@ -15,13 +15,18 @@ import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarg
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { IdentityPart } from "@mileniumhq/paperapi";
-import type { ComputerInfo } from "../../../shared/shellContract";
+import type { ComputerInfo, ComputerReachResult, DiscoveredComputer } from "../../../shared/shellContract";
 
 export interface StoredComputer {
     id: string;
     name: string;
+    /** the address the computer is dialed at first: its .local name when it answers to one */
     host: string;
+    /** the IP it last answered at, dialed alongside a .local host (absent when host is the IP) */
+    address?: string;
     port: number;
+    /** the daemon's stable machine id, which the shared computer list keys on */
+    machineId?: string;
     token?: string;
     // remote daemon certificate, pinned at pairing (remote computers only)
     cert?: string;
@@ -85,6 +90,23 @@ function isPlaintextAnswer(err: any): boolean {
     return code === "EPROTO" || /SSL|TLS|WRONG_VERSION_NUMBER/.test(String(err?.message || ""));
 }
 
+/** a name the computer answers to over mDNS, as opposed to an IP or a DNS name */
+function isMdnsName(host: string): boolean {
+    return /\.local$/i.test(host);
+}
+
+/** every address a paired computer is dialed at, its .local name first */
+function hostsOf(comp: StoredComputer): string[] {
+    return comp.address && comp.address !== comp.host ? [comp.host, comp.address] : [comp.host];
+}
+
+/** where a paired computer might be now; each is believed only once its pinned certificate answers there */
+interface Sighting {
+    name?: string;
+    address?: string;
+    port?: number;
+}
+
 const LOCAL_COMPUTER_NAME = "This Computer";
 const COMPUTER_NAME_MAX = 64;
 
@@ -105,6 +127,9 @@ export class ConnectionPool extends EventEmitter {
     private clients: Map<string, PaperCraneClient> = new Map();
     private activeId: string = "local";
     private configPath: string;
+    // the newest sighting checked per computer: an older check's answer is dropped
+    private sightings = new Map<string, number>();
+    private sightingCounter = 0;
     /** resolves once this computer's record carries its OS details, or to why it can't */
     public readonly localRecorded: Promise<string | null>;
 
@@ -179,17 +204,123 @@ export class ConnectionPool extends EventEmitter {
     }
 
     // a remote re-sends what it is on every sign-in: an OS upgrade, or
-    // detection a newer daemon learned, shows without pairing again
-    private refreshFacts(id: string, facts: OsFacts) {
+    // detection a newer daemon learned, shows without pairing again. Its
+    // .local name is learned the same way, so a computer paired by IP moves
+    // to its name once the name answers here.
+    private refreshFacts(id: string, facts: OsFacts & { mdnsName?: string; machineId?: string }) {
         const comp = this.computers.get(id);
+        if (comp && facts.mdnsName) void this.follow(id, { name: facts.mdnsName });
+        if (comp && facts.machineId && comp.machineId !== facts.machineId) {
+            comp.machineId = facts.machineId;
+            this.saveLearned("machine id");
+        }
         // a daemon too old to answer with facts keeps what pairing recorded
         if (!comp || !facts.os) return;
         const next = osFactsOf(facts);
         if (JSON.stringify(osFactsOf(comp)) === JSON.stringify(next)) return;
         Object.assign(comp, next);
         this.emit("change");
+        this.saveLearned("refreshed OS details");
+    }
+
+    // what a computer said about itself, or where it was seen: memory holds
+    // it, and the next sign-in or sighting saves it again
+    private saveLearned(what: string) {
         try { this.saveConfig(); }
-        catch (err) { logger.warn("[ConnectionPool] a computer's refreshed OS details were not saved:", err); } // quiet: memory holds them, and the next sign-in saves them again
+        catch (err) { logger.warn(`[ConnectionPool] a computer's ${what} were not saved:`, err); } // quiet: memory holds them, and the next sign-in or sighting saves them again
+    }
+
+    /** whether the computer with this pinned certificate answers at host:port */
+    private async healthAt(host: string, port: number, cert: string): Promise<{ ok: true } | { ok: false; error: string }> {
+        try {
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${port}/health`, cert, { timeoutMs: 3000 });
+            return res.ok ? { ok: true } : { ok: false, error: `Something other than the Paperboard server daemon answered (HTTP ${res.status})` };
+        } catch (err) {
+            return { ok: false, error: classifyProbeError(err) };
+        }
+    }
+
+    /**
+     * A paired computer was seen somewhere: its daemon named itself, or
+     * mDNS found its certificate's fingerprint at an address. Each new name,
+     * address or port is kept only once the pinned certificate answers
+     * there, so whoever else answers to a name or copies a fingerprint
+     * never takes the record. The client then dials the new addresses.
+     */
+    private async follow(id: string, seen: Sighting): Promise<void> {
+        const comp = this.computers.get(id);
+        if (!comp?.cert || comp.isLocal) return;
+        const port = seen.port ?? comp.port;
+        const name = seen.name && (seen.name !== comp.host || port !== comp.port) ? seen.name : undefined;
+        const address = seen.address && (seen.address !== comp.address && seen.address !== comp.host || port !== comp.port) ? seen.address : undefined;
+        if (!name && !address) return;
+        const token = ++this.sightingCounter;
+        this.sightings.set(id, token);
+        const cert = comp.cert;
+        const [nameOk, addressOk] = await Promise.all([
+            name ? this.healthAt(name, port, cert).then((r) => r.ok) : false,
+            address ? this.healthAt(address, port, cert).then((r) => r.ok) : false,
+        ]);
+        // a newer sighting, a re-pairing or a removal came first
+        if (this.sightings.get(id) !== token || this.computers.get(id) !== comp || comp.cert !== cert) return;
+        this.sightings.delete(id);
+        if (!nameOk && !addressOk) return;
+        let host = comp.host;
+        let known = comp.address;
+        if (nameOk && name) {
+            // an IP or typed name it was dialed at stays as the address, until a sighting brings a newer one
+            if (!isMdnsName(host)) known = known ?? host;
+            host = name;
+        }
+        if (addressOk && address) {
+            if (isMdnsName(host)) known = address;
+            else host = address;
+        }
+        if (known === host) known = undefined;
+        if (host === comp.host && known === comp.address && port === comp.port) return;
+        comp.host = host;
+        comp.address = known;
+        comp.port = port;
+        logger.info(`[ConnectionPool] ${comp.name} is now reached at ${hostsOf(comp).join(" or ")}, port ${port}`);
+        this.saveLearned("new address");
+        this.clients.get(id)?.retarget(hostsOf(comp), port);
+        this.emit("change");
+    }
+
+    /**
+     * Nearby computers changed: a paired one seen under its certificate's
+     * fingerprint at a new address, name or port is followed there.
+     * Settles once every sighting was checked.
+     */
+    public async followDiscovered(found: DiscoveredComputer[]): Promise<void> {
+        const byFingerprint = new Map(found.filter((d) => d.fingerprint).map((d) => [d.fingerprint!, d]));
+        if (byFingerprint.size === 0) return;
+        const checks: Promise<void>[] = [];
+        for (const comp of this.computers.values()) {
+            if (comp.isLocal || !comp.cert) continue;
+            const seen = byFingerprint.get(certFingerprint(comp.cert));
+            if (seen) checks.push(this.follow(comp.id, { name: seen.mdnsName, address: seen.host, port: seen.port }));
+        }
+        await Promise.all(checks);
+    }
+
+    /**
+     * Whether a paired computer answers, at any address it is known by and
+     * under its pinned certificate: a different machine at its old address
+     * is not it.
+     */
+    public async reach(id: string): Promise<ComputerReachResult> {
+        const comp = this.computers.get(id);
+        if (!comp) throw new Error("Paperboard doesn't know this computer anymore.");
+        if (comp.isLocal) {
+            const status = this.getClient(id).getStatus();
+            return status.connected ? { reachable: true } : { reachable: false, error: status.error ?? "This computer's Paperboard Server isn't answering" };
+        }
+        if (!comp.cert) return { reachable: false, error: `${comp.host} has no pinned certificate. Remove this computer and pair it again` };
+        const answers = await Promise.all(hostsOf(comp).map((h) => this.healthAt(h, comp.port, comp.cert!)));
+        // the first address's reason: the name it is known by, when it has one
+        const failed = answers.find((a) => !a.ok);
+        return !failed || answers.some((a) => a.ok) ? { reachable: true } : { reachable: false, error: failed.error };
     }
 
     // never a default id: operations must not land on the wrong machine.
@@ -200,14 +331,18 @@ export class ConnectionPool extends EventEmitter {
         let client = this.clients.get(id);
         if (!client) {
             client = new PaperCraneClient();
-            client.on("status", () => this.emit("change"));
-            if (id !== "local") client.on("facts", (facts: OsFacts & { os?: string }) => this.refreshFacts(id, facts));
+            client.on("status", (status: { connected: boolean }) => {
+                this.emit("change");
+                // a paired computer that dropped may have moved: look for it again
+                if (id !== "local" && !status.connected) this.emit("unreachable", id);
+            });
+            if (id !== "local") client.on("facts", (facts: OsFacts & { mdnsName?: string; machineId?: string }) => this.refreshFacts(id, facts));
             this.clients.set(id, client);
             if (id === "local") {
                 // credentials resolved internally via handshake/embedded
                 client.connect("127.0.0.1").catch((err) => logger.debug("[ConnectionPool] local connect failed:", err));
             } else {
-                client.connect(comp.host, comp.port, comp.token, comp.cert).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
+                client.connect(hostsOf(comp), comp.port, comp.token, comp.cert).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
             }
         }
         return client;
@@ -333,11 +468,16 @@ export class ConnectionPool extends EventEmitter {
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct
             const id = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            // its .local name, when that name leads to this same certificate
+            // from here; else the address it was paired at
+            const named = pairRes.mdnsName && pairRes.mdnsName !== host && (await this.healthAt(pairRes.mdnsName, checked.port, cert)).ok;
             const comp: StoredComputer = {
                 id,
                 name: name || pairRes.hostname || host,
-                host,
+                host: named ? pairRes.mdnsName! : host,
+                ...(named ? { address: host } : {}),
                 port: checked.port,
+                ...(pairRes.machineId ? { machineId: pairRes.machineId } : {}),
                 token: pairRes.token,
                 cert,
                 ...osFactsOf(pairRes),

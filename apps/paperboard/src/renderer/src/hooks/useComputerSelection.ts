@@ -71,7 +71,7 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         // dialog shows this probe's answer and probes again only when asked
         let unreachable: { error?: string } | null = null;
         try {
-            const probe = await computersApi.probe(comp.host, comp.port);
+            const probe = await computersApi.reach(comp.id);
             if (!probe?.reachable) unreachable = { error: probe?.error };
         } catch (err) {
             logToMain("error", "Failed to probe computer:", err);

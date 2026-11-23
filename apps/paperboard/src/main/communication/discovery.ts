@@ -13,7 +13,7 @@ interface DiscoveredEntry extends DiscoveredComputer {
 
 // what browsing needs of bonjour-service; a test hands in its own network
 export interface MdnsBrowser {
-    on(event: string, listener: (arg: any) => void): unknown;
+    on(event: string, listener: (...args: any[]) => void): unknown;
     update(): void;
     stop(): void;
 }
@@ -54,6 +54,18 @@ export class DiscoveryService extends EventEmitter {
                     logger.warn("[Discovery] failed to process mDNS 'down':", err);
                 }
             });
+            // a computer announcing again under the same name, at a new port
+            // or address, or with new details, comes as an update, never 'up'
+            for (const event of ["srv-update", "txt-update"]) {
+                this.browser.on(event, (service: any, previous: any) => {
+                    try {
+                        this.handleDown(previous);
+                        this.handleUp(service);
+                    } catch (err) {
+                        logger.warn(`[Discovery] failed to process mDNS '${event}':`, err);
+                    }
+                });
+            }
             // the browser's socket failed (a network change)
             this.browser.on("error", (err: unknown) => this.fail(err));
             logger.info(`[Discovery] browsing for _${PAPERCRANE_MDNS_TYPE}._tcp services`);
@@ -120,9 +132,19 @@ export class DiscoveryService extends EventEmitter {
                 String(service?.name || key).replace(/\._[^.]+\._tcp\.?$/, ""),
             host,
             port,
+            // the name it advertises its addresses under; a daemon that
+            // advertises a bare hostname has no .local name to dial
+            mdnsName:
+                typeof service?.host === "string" && /\.local\.?$/i.test(service.host)
+                    ? service.host.replace(/\.$/, "")
+                    : undefined,
             version:
                 typeof service?.txt?.ver === "string"
                     ? service.txt.ver
+                    : undefined,
+            fingerprint:
+                typeof service?.txt?.fp === "string" && service.txt.fp
+                    ? service.txt.fp
                     : undefined,
             os:
                 typeof service?.txt?.os === "string"
@@ -186,15 +208,35 @@ export class DiscoveryService extends EventEmitter {
     // online machines, sorted by name
     public list(): DiscoveredComputer[] {
         return Array.from(this.services.values())
-            .map(({ id, name, host, port, version, os }) => ({
+            .map(({ id, name, host, mdnsName, port, version, os, fingerprint }) => ({
                 id,
                 name,
                 host,
+                mdnsName,
                 port,
                 version,
                 os,
+                fingerprint,
             }))
             .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    private lastRediscover = 0;
+
+    /**
+     * A paired computer stopped answering: browse again from scratch. The
+     * browser keeps each computer it has seen at its first addresses, so a
+     * computer that moved to a new IP under the same name is only seen
+     * there by a fresh look. At most once every 30 seconds.
+     */
+    public rediscover(): void {
+        if (!this.started || Date.now() - this.lastRediscover < 30_000) return;
+        this.lastRediscover = Date.now();
+        logger.debug("[Discovery] a paired computer is unreachable; browsing again");
+        this.stop();
+        // a computer that is gone isn't listed again; one still there is, by the fresh look
+        this.emitChange();
+        this.start();
     }
 
     public stop(): void {

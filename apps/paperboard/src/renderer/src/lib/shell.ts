@@ -124,7 +124,10 @@ export async function readPanelListingFile(computerId: string, panelId: string, 
 
 export const computersApi = {
     list: () => shellIpc().invoke("computers-list"),
+    /** whether an address answers, for a computer not paired yet */
     probe: (host: string, port?: number | string) => shellIpc().invoke("computer-probe", { host, port }),
+    /** whether a paired computer answers, at any address it is known by */
+    reach: (id: string) => shellIpc().invoke("computer-reach", { id }),
     pair: (host: string, port: number | undefined, code: string, name?: string) =>
         shellIpc().invoke("computer-pair", { host, port, code, name }),
     rename: (id: string, name: string) => shellIpc().invoke("computer-update", { id, name }),
