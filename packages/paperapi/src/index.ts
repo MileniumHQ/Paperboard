@@ -11,6 +11,7 @@ export * from "./ipc";
 export * from "./errors";
 export * from "./records";
 export * from "./serialQueue";
+export * from "./pieces";
 export * from "./config";
 export * from "./registryFetch";
 export { isPanelId, requirePanelId } from "./panelIdentity";
