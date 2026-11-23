@@ -1,4 +1,4 @@
-import { type JSX, createMemo, For } from "solid-js";
+import { type JSX, createMemo, For, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PaperFlex, PaperPresence, PaperSlidePage } from "@mileniumhq/paperui";
 import { panelsApi } from "@mileniumhq/paperapi";
@@ -39,9 +39,12 @@ export default function ComputerArea(props: {
     computerDialogs: ReturnType<typeof createComputerDialogs>;
     theme: AppSettingsData["darkMode"];
     panelName: (computerId: string, panelId: string) => string;
-    /** the phone layout's page has finished sliding away (PaperSlidePage's onClosed) */
+    /** the phone layout's page has finished sliding away (PaperSlidePage's
+     * onClosed), or the area went away with it */
     onPageClosed: () => void;
 }) {
+    // a page that goes with the area has closed, though it never slid away
+    onCleanup(() => props.onPageClosed());
     const activeComputerId = () => props.computers.activeComputerId();
     const activeComputer = () => props.computers.activeComputer();
     const panelsByComputer = () => props.panels.panelsByComputer();

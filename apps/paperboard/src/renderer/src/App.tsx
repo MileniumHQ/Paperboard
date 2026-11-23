@@ -105,7 +105,7 @@ const App: Component<AppProps> = (props) => {
     // The status strip steps aside while the phone layout's computer page
     // covers the screen (that page draws its own bar, and sits in the computer
     // area's own stacking layer, under the strip): from its opening until the
-    // page reports it has slid away.
+    // page reports it has slid away or the computer area goes.
     const [pageSliding, setPageSliding] = createSignal(false);
     createEffect(on(nav.mobilePageOpen, (open) => { if (open) setPageSliding(true); }));
     // the wide layout's page never slides, so it never reports a close
