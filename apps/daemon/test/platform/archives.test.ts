@@ -33,6 +33,11 @@ const hostile: Record<string, TarMember[]> = {
 		{ name: "t", type: "symlink", target: "s/.." },
 		{ name: "t/planted", content: "x" },
 	],
+	"a link reached by another case": [
+		{ name: "S", type: "symlink", target: "." },
+		{ name: "s/x", type: "symlink", target: ".." },
+		{ name: "s/X/planted", content: "x" },
+	],
 	"a link through a link": [
 		{ name: "a", type: "symlink", target: "b" },
 		{ name: "b", type: "symlink", target: "a" },

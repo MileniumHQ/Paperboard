@@ -101,12 +101,18 @@ function segments(name: string): string[] {
 // `s -> .`, the target `s/..` stays inside on paper but leaves the tree on
 // disk. So no member is written through a link, and a link's target may
 // end at a link but never pass through one. Every link's own target is
-// checked the same way, so a chain of links stays inside too.
+// checked the same way, so a chain of links stays inside too. Paths are
+// folded the way node-tar reserves them: on macOS and Windows `S` and `s`
+// are the same link.
+function linkKey(parts: string[]): string {
+    return parts.join("/").normalize("NFD").toLowerCase();
+}
+
 function checkLinkPaths(members: TreeMember[]): void {
-    const links = new Set(members.filter((m) => m.type === "SymbolicLink").map((m) => m.parts.join("/")));
+    const links = new Set(members.filter((m) => m.type === "SymbolicLink").map((m) => linkKey(m.parts)));
     for (const member of members) {
         for (let i = 1; i < member.parts.length; i++) {
-            if (links.has(member.parts.slice(0, i).join("/"))) throw new Error(`Archive member is written through a link: ${member.name}`);
+            if (links.has(linkKey(member.parts.slice(0, i)))) throw new Error(`Archive member is written through a link: ${member.name}`);
         }
         if (member.linkpath === undefined) continue;
         const current = member.type === "SymbolicLink" ? member.parts.slice(0, -1) : [];
@@ -120,7 +126,7 @@ function checkLinkPaths(members: TreeMember[]): void {
                 continue;
             }
             current.push(part);
-            if (i < target.length - 1 && links.has(current.join("/"))) {
+            if (i < target.length - 1 && links.has(linkKey(current))) {
                 throw new Error(`Archive link passes through another link: ${member.name}`);
             }
         }
