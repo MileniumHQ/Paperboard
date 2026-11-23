@@ -10,11 +10,10 @@ import {
     PaperSettingList,
     PaperText,
 } from "@mileniumhq/paperui";
-import type { ComputerInfo } from "../../lib/shell";
+import { computerAddress, type ComputerInfo } from "../../lib/shell";
 import { computerIcon } from "./computerIcon";
 import BackupLocations from "../backups/BackupLocations";
 import ComputerPorts from "./ComputerPorts";
-import { DAEMON_PORT } from "../../lib/daemonPort";
 import { computerFacts } from "./osBrand";
 
 export interface ComputerSettingsProps {
@@ -28,10 +27,7 @@ export interface ComputerSettingsProps {
 
 const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     const isLocal = () => Boolean(props.computer?.isLocal);
-    const address = () => {
-        const host = props.computer?.networkAddress || props.computer?.host || "127.0.0.1";
-        return isLocal() ? host : `${host}:${props.computer?.port || DAEMON_PORT}`;
-    };
+    const address = () => (props.computer ? computerAddress(props.computer) : undefined);
 
     return (
         <PaperPage>

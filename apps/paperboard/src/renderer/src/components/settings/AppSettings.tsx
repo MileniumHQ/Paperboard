@@ -62,6 +62,47 @@ function StartOnItems(props: { computers: StartComputer[]; startOn: string }) {
     );
 }
 
+/** A group a host adds to the top of App Settings, such as the account
+ * it is signed in to. Each item is a line with one action. */
+export interface HostSettingsGroup {
+    title: string;
+    items: HostSettingsItem[];
+    /** true: one of the items signs the person out of the host, so browser
+     * mode's own Sign out isn't shown beside it. Default false. */
+    signsOut?: boolean;
+}
+
+export interface HostSettingsItem {
+    title: string;
+    description?: string;
+    action: { label: string; icon?: string; onClick: () => void | Promise<void> };
+}
+
+// a line of the host's group; its action's failure is a toast that says why
+function HostItem(props: { item: HostSettingsItem }) {
+    const [busy, setBusy] = createSignal(false);
+    const run = async () => {
+        setBusy(true);
+        try {
+            await props.item.action.onClick();
+        } catch (err) {
+            showError(`Couldn't ${props.item.action.label.toLowerCase()}`, err);
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <PaperSettingItem title={props.item.title} description={props.item.description}>
+            <PaperButton disabled={busy()} onClick={() => void run()}>
+                <Show when={props.item.action.icon}>
+                    <PaperIcon>{props.item.action.icon}</PaperIcon>
+                </Show>
+                {props.item.action.label}
+            </PaperButton>
+        </PaperSettingItem>
+    );
+}
+
 type LicenseKind = "paperboard" | "mit";
 
 const LICENSE_TITLES: Record<LicenseKind, string> = {
@@ -111,6 +152,10 @@ export default function AppSettings(props: {
     compact?: boolean;
     /** why the stored settings couldn't be read: none of them shows, only the failure, with Try again */
     loadError?: string | null;
+    /** a host's own group, above the rest, such as the account it is signed in to */
+    host?: HostSettingsGroup;
+    /** "system": the host follows the system's appearance and motion, so neither is set here */
+    appearance?: "settings" | "system";
     /** false where there's no GPU: animations and blur are off until the user chooses */
     gpu: boolean;
     onRetryLoad?: () => void;
@@ -181,8 +226,21 @@ export default function AppSettings(props: {
                     />
                 )}
             </Show>
+            <Show when={props.host}>
+                {(host) => (
+                    <>
+                        <PaperSectionHeader title={host().title} />
+                        <PaperSettingList autoHeight>
+                            <For each={host().items}>{(item) => <HostItem item={item} />}</For>
+                        </PaperSettingList>
+                        <PaperSectionHeader title="General" />
+                    </>
+                )}
+            </Show>
             <PaperSettingList autoHeight value={settingsValue()} onValueChange={handleChange}>
                 <Show when={!props.loadError}>
+                    {/* a host that follows the system's light and dark and its motion (the phone app) */}
+                    <Show when={props.appearance !== "system"}>
                     <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
                         <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
                             <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
@@ -197,6 +255,7 @@ export default function AppSettings(props: {
                     >
                         <PaperToggle name="disableAnimations" checked={look().disableAnimations} />
                     </PaperSettingItem>
+                    </Show>
 
                     <PaperSettingItem
                         title="Disable blur"
@@ -211,7 +270,8 @@ export default function AppSettings(props: {
                         </PaperSelectMenu>
                     </PaperSettingItem>
 
-                    <Show when={!props.compact}>
+                    {/* a browser tab doesn't start when you log in */}
+                    <Show when={!props.compact && !isBrowserShell()}>
                         <PaperSettingItem title="Run on startup" description="Launch Paperboard automatically when you log in.">
                             <PaperToggle name="runOnStartup" checked={props.settings.runOnStartup} />
                         </PaperSettingItem>
@@ -237,7 +297,8 @@ export default function AppSettings(props: {
                     </PaperSettingItem>
                 </Show>
 
-                <Show when={isBrowserShell()}>
+                {/* a host whose own group signs out has the only Sign out */}
+                <Show when={isBrowserShell() && !props.host?.signsOut}>
                     <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
                         <PaperButton onClick={signOut}>
                             <PaperIcon>logout</PaperIcon>

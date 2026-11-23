@@ -39,6 +39,9 @@ export interface ComputerInfo {
     port: number;
     /** the address other machines reach this computer at (local computer only) */
     networkAddress?: string;
+    /** what the host reaches this computer through (such as a relay),
+     * when it isn't a host:port people would recognize */
+    via?: string;
     os?: string;
     osVersion?: string;
     distroId?: string;

@@ -1,6 +1,6 @@
 import { type Component, createEffect, on, Show } from "solid-js";
 import { PaperError, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
-import type { ComputerInfo } from "../../lib/shell";
+import { computerAddress, type ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
 export interface OfflineComputerModalProps {
@@ -55,9 +55,18 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </>
             }
         >
-            {/* why the last look found nothing, at the address it looked; Try Again looks again */}
-            <Show when={reach.error()}>
-                {(why) => <PaperError title={`Couldn't reach ${props.computer?.host}:${props.computer?.port}`} error={why()} />}
+            {/* why the last look found nothing, and where it looked; Try Again looks again */}
+            <Show when={props.computer}>
+                {(computer) => (
+                    <Show when={reach.error()}>
+                        {(why) => (
+                            <PaperError
+                                title={`Couldn't reach ${computer().name} ${computerAddress(computer(), { inSentence: true })}`}
+                                error={why()}
+                            />
+                        )}
+                    </Show>
+                )}
             </Show>
         </PaperModal>
     );

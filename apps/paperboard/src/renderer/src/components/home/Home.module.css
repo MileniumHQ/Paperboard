@@ -1,4 +1,8 @@
 .home {
+    box-sizing: border-box;
+    /* the surface runs on under the home indicator; Home's controls and
+       pages stay above it */
+    padding-bottom: var(--paper-safe-area-bottom);
     display: flex;
     flex: 1;
     min-width: 0;

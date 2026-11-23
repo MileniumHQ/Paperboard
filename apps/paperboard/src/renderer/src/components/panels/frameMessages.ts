@@ -6,7 +6,7 @@
 // the protocols: ready and failed, the swipe back, unsaved work and the
 // question whether to leave it, haptics, the pages it names, the backup location window, a
 // sign-in redirect to catch, and save and open dialogs.
-import { HAPTIC_MESSAGE, LEAVE_ANSWER_MESSAGE, LEAVE_REQUEST_MESSAGE, PAGE_CRUMBS_MESSAGE, SWIPE_BACK_MESSAGE, UNSAVED_CHANGES_MESSAGE } from "@mileniumhq/paperapi";
+import { FRAME_BACKGROUND_MESSAGE, HAPTIC_MESSAGE, isFrameBackgroundColor, LEAVE_ANSWER_MESSAGE, LEAVE_REQUEST_MESSAGE, PAGE_CRUMBS_MESSAGE, SWIPE_BACK_MESSAGE, UNSAVED_CHANGES_MESSAGE } from "@mileniumhq/paperapi";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
 import { createFrameLoopbackRedirects, LOOPBACK_REDIRECT_CANCEL, LOOPBACK_REDIRECT_REQUEST, LOOPBACK_REDIRECT_RESULT, parseLoopbackRedirectMessage } from "../../lib/panelLoopbackRedirect";
 import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
@@ -32,6 +32,8 @@ export interface FrameDocumentOptions {
     onHaptic: (kind: unknown) => void;
     /** the panel's own open pages, outermost first, as it names them */
     onCrumbs: (titles: string[]) => void;
+    /** the color the panel reports along its bottom edge, for the strip under the frame */
+    onFootColor?: (color: string) => void;
     /** whether a backup location window is already open for this frame */
     choosing: () => boolean;
     onChooseLocation: (request: ChooserRequest) => void;
@@ -84,6 +86,9 @@ export function createFrameDocument(options: FrameDocumentOptions) {
                 return;
             case PAGE_CRUMBS_MESSAGE:
                 if (Array.isArray(data.titles)) options.onCrumbs(data.titles.filter((title: unknown): title is string => typeof title === "string"));
+                return;
+            case FRAME_BACKGROUND_MESSAGE:
+                if (isFrameBackgroundColor(data.color)) options.onFootColor?.(data.color);
                 return;
             case BACKUP_LOCATION_REQUEST: {
                 const request = parseBackupLocationRequest(data, panelId, options.choosing());

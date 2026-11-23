@@ -1,5 +1,12 @@
 .computerArea {
     position: relative;
+    isolation: isolate;
+}
+
+/* the wide layout's panels stop above the home indicator; the rail, the
+   panel list and Home run on under it */
+.computerArea.wide {
+    margin-bottom: var(--paper-safe-area-bottom);
 }
 
 /* visibility, not display: a hidden iframe keeps its compositor state, so
