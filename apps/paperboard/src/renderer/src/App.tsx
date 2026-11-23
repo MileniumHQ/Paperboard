@@ -1,4 +1,12 @@
+// PaperUI's base styles, then the shell's own, before any module with a CSS
+// module of its own: the shell's CSS modules override PaperUI's base rules at
+// equal specificity, so they must come later in the cascade. Here, every
+// entry that imports App gets that order.
+import "@mileniumhq/paperui/style.css";
+import "./shell.css";
+
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showError } from "@mileniumhq/paperui";
 import { isBrowserShell, quitApi } from "./lib/shell";
 import { setMobileMode } from "./lib/mobileMode";
@@ -48,8 +56,10 @@ export interface AppProps {
     /** a group the host adds to the top of App Settings, such as the
      * account it's signed in to */
     hostSettings?: HostSettingsGroup;
-    /** Use the system motion preference when the host manages accessibility. */
-    motion?: "settings" | "system";
+    /** "system": the shell follows the system's light and dark and its
+     * motion preference, and App Settings offers neither (the phone app).
+     * Default "settings": the person's choices in App Settings. */
+    appearance?: "settings" | "system";
     /** false: the wide layout draws no title bar (the phone app has no window
      * to name); the bar still comes to say an update is waiting. Default true. */
     windowBar?: boolean;
@@ -77,7 +87,7 @@ const App: Component<AppProps> = (props) => {
     const setupShown = createShownWhileClosing(isSetupOpen);
     const panelName = (compId: string, panelId: string) =>
         panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
-    const settings = useAppSettings(() => props.motion === "system");
+    const settings = useAppSettings(() => props.appearance === "system");
     const { appSettings, graphics, handleAppSettingsChange, loadError, retryLoadAppSettings } = settings;
     const selection = useComputerSelection({
         computers: computerState,
@@ -87,26 +97,20 @@ const App: Component<AppProps> = (props) => {
     });
     const nav = useShellNavigation({ computers: computerState, panels: panelState, selection, panelName, layout: () => props.layout ?? "desktop", hidesThisComputer: () => props.hidesThisComputer ?? false });
     const { mobile, listedComputers } = nav;
-    // a phone, and the phone app in any layout, follows the system's light
-    // and dark; neither has a theme setting
-    const theme = () => (mobile() || props.motion === "system" ? "system" : appSettings().darkMode);
+    const theme = () => (props.appearance === "system" ? "system" : appSettings().darkMode);
     const noComputers = () => showsNoComputers(Boolean(props.noComputers), computersLoaded(), listedComputers().length);
     // the last computer forgotten: Home is what's left
     createEffect(on(noComputers, (none) => { if (none && nav.railMode() === "computer") nav.selectRail("__home"); }, { defer: true }));
 
-    // The status strip steps aside while the computer page covers the screen
-    // (that page draws its own bar, and sits in the computer area's own
-    // stacking layer, under the strip): until the page has slid away.
-    const [pageCovers, setPageCovers] = createSignal(false);
-    createEffect(on(nav.mobilePageOpen, (open) => {
-        if (open) {
-            setPageCovers(true);
-            return;
-        }
-        const slide = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--paper-mid-transition")) * 1000 || 0;
-        const timer = setTimeout(() => setPageCovers(false), slide);
-        onCleanup(() => clearTimeout(timer));
-    }));
+    // The status strip steps aside while the phone layout's computer page
+    // covers the screen (that page draws its own bar, and sits in the computer
+    // area's own stacking layer, under the strip): from its opening until the
+    // page reports it has slid away.
+    const [pageSliding, setPageSliding] = createSignal(false);
+    createEffect(on(nav.mobilePageOpen, (open) => { if (open) setPageSliding(true); }));
+    // the wide layout's page never slides, so it never reports a close
+    createEffect(on(mobile, (phone) => { if (!phone) setPageSliding(false); }));
+    const pageCovers = () => mobile() && (nav.mobilePageOpen() || pageSliding());
     useStartUp({ computers: computerState, panels: panelState, settings, navigation: nav });
 
     // a quit asks this window's pages with unsaved work first (main's quitGate.ts)
@@ -204,17 +208,13 @@ const App: Component<AppProps> = (props) => {
                         when={!noComputers()}
                         fallback={
                             // nothing until the computers are known, so a host with some never flashes the empty state
-                            <Show when={(computersLoaded() || computersLoadFailed()) && props.noComputers}>
-                                {(Empty) => {
-                                    const View = Empty();
-                                    return (
-                                        <View
-                                            onAdd={() => setIsSetupOpen(true)}
-                                            loadFailed={computersLoadFailed()}
-                                            onRetryLoad={() => void refreshComputers()}
-                                        />
-                                    );
-                                }}
+                            <Show when={computersLoaded() || computersLoadFailed()}>
+                                <Dynamic
+                                    component={props.noComputers}
+                                    onAdd={() => setIsSetupOpen(true)}
+                                    loadFailed={computersLoadFailed()}
+                                    onRetryLoad={() => void refreshComputers()}
+                                />
                             </Show>
                         }
                     >
@@ -248,7 +248,7 @@ const App: Component<AppProps> = (props) => {
                                     panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
                                     host={props.hostSettings}
-                                    motion={props.motion}
+                                    appearance={props.appearance}
                                     computers={listedComputers()}
                                     loadError={loadError()}
                                     gpu={graphics().gpu}
@@ -267,6 +267,7 @@ const App: Component<AppProps> = (props) => {
                         computerDialogs={computerDialogs}
                         theme={theme()}
                         panelName={panelName}
+                        onPageClosed={() => setPageSliding(false)}
                     />
                     </Show>
 
@@ -305,7 +306,7 @@ const App: Component<AppProps> = (props) => {
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
                             host={props.hostSettings}
-                            motion={props.motion}
+                            appearance={props.appearance}
                             computers={listedComputers()}
                             loadError={loadError()}
                             gpu={graphics().gpu}
@@ -361,10 +362,7 @@ const App: Component<AppProps> = (props) => {
                     </PaperModal>
                 }
             >
-                {(Add) => {
-                    const View = Add();
-                    return <View open={isSetupOpen()} onClose={() => setIsSetupOpen(false)} />;
-                }}
+                <Dynamic component={props.addComputer} open={isSetupOpen()} onClose={() => setIsSetupOpen(false)} />
             </Show>
 
             <panelDialogs.Dialogs />

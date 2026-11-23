@@ -39,6 +39,8 @@ export default function ComputerArea(props: {
     computerDialogs: ReturnType<typeof createComputerDialogs>;
     theme: AppSettingsData["darkMode"];
     panelName: (computerId: string, panelId: string) => string;
+    /** the phone layout's page has finished sliding away (PaperSlidePage's onClosed) */
+    onPageClosed: () => void;
 }) {
     const activeComputerId = () => props.computers.activeComputerId();
     const activeComputer = () => props.computers.activeComputer();
@@ -183,6 +185,7 @@ export default function ComputerArea(props: {
                 icon={mobilePageHeading().icon}
                 background="surface-app"
                 onBack={mobilePageBack}
+                onClosed={props.onPageClosed}
             >
                 <PaperFlex direction="column" fullHeight flex={1} overflow="hidden" class={styles.computerArea}>
                     <For each={props.navigation.listedComputers()}>

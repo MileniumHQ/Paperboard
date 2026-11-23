@@ -1,21 +1,10 @@
-// startShell comes before App so PaperUI's base styles load before the shell's CSS modules.
-import { startShell } from "./startShell";
-
 import { createSignal, onMount, Show } from "solid-js";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { showError } from "@mileniumhq/paperui";
 import App from "./App";
+import { startShell } from "./startShell";
 import MobileWelcome from "./components/computer/MobileWelcome";
-import { isBrowserShell, logToMain, shellApi } from "./lib/shell";
-
-// This entry outside Electron is browser mode (`bun run dev:browser`). Hosts
-// that place the shell themselves have entries of their own.
-if (isBrowserShell()) {
-    console.warn(
-        "Paperboard browser mode has no sign-in. THIS IS A DEV TOOL AND SHOULD NOT BE USED " +
-            "outside development on a trusted machine, and never exposed on a network.",
-    );
-}
+import { logToMain, shellApi } from "./lib/shell";
 
 // The desktop app's window, or with `--mobile` its development mock of a
 // phone (mobileMock.ts): the phone layout with touch, listing only paired

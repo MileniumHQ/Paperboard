@@ -1,8 +1,3 @@
-// An entry imports this module before App: these base styles have to come
-// first in the cascade, or PaperUI's rules override the shell's CSS modules.
-import "@mileniumhq/paperui/style.css";
-import "./shell.css";
-
 import type { JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { configureHostConnection, initPaperApi, errorMessage } from "@mileniumhq/paperapi";

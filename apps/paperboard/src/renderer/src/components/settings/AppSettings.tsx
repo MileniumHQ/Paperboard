@@ -67,6 +67,9 @@ function StartOnItems(props: { computers: StartComputer[]; startOn: string }) {
 export interface HostSettingsGroup {
     title: string;
     items: HostSettingsItem[];
+    /** true: one of the items signs the person out of the host, so browser
+     * mode's own Sign out isn't shown beside it. Default false. */
+    signsOut?: boolean;
 }
 
 export interface HostSettingsItem {
@@ -152,7 +155,7 @@ export default function AppSettings(props: {
     /** a host's own group, above the rest, such as the account it is signed in to */
     host?: HostSettingsGroup;
     /** "system": the host follows the system's appearance and motion, so neither is set here */
-    motion?: "settings" | "system";
+    appearance?: "settings" | "system";
     /** false where there's no GPU: animations and blur are off until the user chooses */
     gpu: boolean;
     onRetryLoad?: () => void;
@@ -236,8 +239,8 @@ export default function AppSettings(props: {
             </Show>
             <PaperSettingList autoHeight value={settingsValue()} onValueChange={handleChange}>
                 <Show when={!props.loadError}>
-                    {/* the phone app follows the system's light and dark, and its motion */}
-                    <Show when={props.motion !== "system"}>
+                    {/* a host that follows the system's light and dark and its motion (the phone app) */}
+                    <Show when={props.appearance !== "system"}>
                     <PaperSettingItem title="Appearance" description="Match the operating system appearance or force light or dark.">
                         <PaperSelectMenu name="darkMode" value={props.settings.darkMode} fullWidth={!props.compact}>
                             <PaperSelectMenuItem value="system" icon="contrast">System</PaperSelectMenuItem>
@@ -294,8 +297,8 @@ export default function AppSettings(props: {
                     </PaperSettingItem>
                 </Show>
 
-                {/* a host's own group (the account) is where it signs out */}
-                <Show when={isBrowserShell() && !props.host}>
+                {/* a host whose own group signs out has the only Sign out */}
+                <Show when={isBrowserShell() && !props.host?.signsOut}>
                     <PaperSettingItem title="Sign out" description={SIGN_OUT_NOTE}>
                         <PaperButton onClick={signOut}>
                             <PaperIcon>logout</PaperIcon>
