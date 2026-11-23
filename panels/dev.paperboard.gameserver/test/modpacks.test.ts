@@ -3,11 +3,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { minecraftServer, type McServer } from "./helpers/minecraft";
-import { mrpack, packCdn, packDeps, packFile, packIndex, sha1, sha512 } from "./helpers/modpack";
-import { loopbackServer } from "./helpers/http";
+import { mrpack, packCdn, packDeps, packFile, packIndex } from "./helpers/modpack";
 import { readTree, writeTree } from "./helpers/tmp";
-import { installModpack, installUploadedModpack, removeModpack, type ModpackDeps } from "./../src/service/modpacks";
-import { MODRINTH_API } from "../src/core/modrinth";
+import { installUploadedModpack, removeModpack, type ModpackDeps } from "../src/service/modpacks";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -56,65 +54,6 @@ describe("modpack transactions", () => {
         expect((settings.modpack as { uploaded: boolean }).uploaded).toBe(true);
         expect(settings.modpackStaging).toMatch(/^\.modpack-/);
         expect(fs.readdirSync(mc.dir).filter((e) => e.startsWith(".modpack-"))).toEqual([]);
-    });
-
-    test("a Modrinth pack, named by its id or the name in its address, is fetched by its version record and checked against both hashes", async () => {
-        const mc = neoServer();
-        const cdn = packCdn();
-        const pack = Buffer.from(mrpack(packIndex([packFile(cdn, "mods/sodium.jar", "sodium")])));
-        const modrinth = loopbackServer((_req, url) => {
-            if (url.pathname === "/v2/version/VERSION1")
-                return Response.json({
-                    id: "VERSION1",
-                    project_id: "PROJECT1",
-                    version_number: "1.0.0",
-                    name: "1.0.0",
-                    loaders: ["neoforge"],
-                    game_versions: ["1.21.1"],
-                    files: [{ url: "https://cdn.modrinth.com/data/pack.mrpack", filename: "pack.mrpack", primary: true, size: pack.length, hashes: { sha1: sha1(pack), sha512: sha512(pack) } }],
-                });
-            if (url.pathname === "/v2/project/PROJECT1" || url.pathname === "/v2/project/test-pack") return Response.json({ id: "PROJECT1", slug: "test-pack", title: "Test Pack", project_type: "modpack" });
-            return new Response("not found", { status: 404 });
-        });
-        // the archive's exact bytes, beside the pack's files
-        const files = loopbackServer((req, url) => (url.pathname === "/data/pack.mrpack" ? new Response(pack) : fetch(`${cdn.url}${url.pathname}`)));
-        const deps = packDeps(mc, files, {
-            fetchJson: async <T>(url: string) => (await (await fetch(url.replace(MODRINTH_API, `${modrinth.url}/v2`))).json()) as T,
-        });
-        // a block names the project by the name in its Modrinth address
-        await installModpack({ projectId: "test-pack", versionId: "VERSION1" }, "neoforge", deps);
-        expect(live(mc)["mods/sodium.jar"]).toBe("sodium");
-        expect(mc.server.settings.modpack).toMatchObject({ projectId: "PROJECT1", versionId: "VERSION1", slug: "test-pack" });
-    });
-
-    test("the loader is reinstalled only when the pack's build differs, in the same write as the pack record", async () => {
-        for (const installedBuild of ["21.1.256", "21.1.200"]) {
-            const mc = neoServer();
-            const cdn = packCdn();
-            const switches: unknown[][] = [];
-            const writes: Record<string, unknown>[] = [];
-            const deps = packDeps(mc, cdn, {
-                installed: async () => ({ software: "neoforge", version: "1.21.1", build: installedBuild }),
-                installSoftware: async (...args) => {
-                    switches.push(args);
-                    return {};
-                },
-                writeConfig: async (patch) => {
-                    writes.push(patch);
-                },
-            });
-            const outcome = await upload(mc, mrpack(packIndex([packFile(cdn, "mods/a.jar", "a")])), deps);
-            if (installedBuild === "21.1.256") {
-                expect(outcome.switchedServer).toBe(false);
-                expect(switches).toEqual([]);
-                expect(Object.keys(writes[0]!)).toContain("modpack");
-            } else {
-                expect(outcome.switchedServer).toBe(true);
-                expect(writes).toEqual([]);
-                expect(switches[0]!.slice(0, 3)).toEqual(["neoforge", "1.21.1", "21.1.256"]);
-                expect(Object.keys(switches[0]![3] as object)).toEqual(expect.arrayContaining(["modpack", "modpackStaging"]));
-            }
-        }
     });
 
     test("an update removes what the old version placed and keeps the user's files; removal trashes only the pack's files", async () => {

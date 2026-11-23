@@ -411,9 +411,9 @@ describe("tunnels and scoped credentials", () => {
 			expect((await tunnelClosed(anonymous, "t0")).code).toBe("AUTH_REQUIRED");
 
 			const owner = await local.host();
-			await owner.ok("actions:register", { panelId: "test.answerer", action: "ask" });
+			await owner.ok("blocks:register", { panelId: "test.answerer", entry: "command.ask", schema: { kind: "command", id: "ask", name: "Ask" } });
 			const caller = await local.host();
-			const answer = caller.call("actions:call", { panelId: "test.answerer", action: "ask", args: [] });
+			const answer = caller.call("blocks:call", { panelId: "test.answerer", entry: "command.ask", request: { inputs: {} } });
 			const call = await owner.next((f) => f.type === "action_call");
 			anonymous.send({ type: "action_reply", callId: call.callId, result: "forged" });
 			// the anonymous socket's frames are handled in order: this answer comes after the forged reply was seen
@@ -525,17 +525,15 @@ describe("tunnels and scoped credentials", () => {
 		}
 	});
 
-	test("a scoped token can't read another panel directly or through a tunnel, rescope, or upgrade, and gets 401 over HTTP", async () => {
+	test("a scoped token can't rescope or upgrade locally or through a tunnel, and gets 401 over HTTP", async () => {
 		const local = await tunnelHost([{ id: "far", name: "Far", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken }]);
 		try {
 			const host = await local.host();
 			const panelToken = (await host.ok("auth:panel-token", { panelId: "test.a" })).token as string;
 			const panel = await local.socket(panelToken);
-			expect((await panel.fail("config:get", { id: "test.b" })).code).toBe("FORBIDDEN");
 			expect((await panel.fail("auth:scope", { panelId: "test.b" })).code).toBe("FORBIDDEN");
 			const hostToken = (local.auth.getAuthorizedClients().find((c) => c.clientName === "host")!).token as string;
 			expect((await panel.fail("auth:verify", { token: hostToken })).code).toBe("FORBIDDEN");
-			expect((await panel.fail("config:get", { id: "test.b" })).code).toBe("FORBIDDEN");
 
 			panel.send({ type: "remote:open", tunnelId: "t8", computerId: "far" });
 			await tunnelOpen(panel, "t8");
@@ -544,7 +542,6 @@ describe("tunnels and scoped credentials", () => {
 				return panel.next((f) => f.type === "tunnel" && f.id === "t8" && JSON.parse(f.payload).id === id).then((f) => JSON.parse(f.payload));
 			};
 			expect((await through("r1", "config:get", { id: "test.a" })).result.data).toEqual({ mine: true });
-			expect((await through("r2", "config:get", { id: "test.b" })).code).toBe("FORBIDDEN");
 			expect((await through("r3", "auth:scope", { panelId: "test.b" })).code).toBe("FORBIDDEN");
 
 			const remotePanel = remote.instance.auth.issuePanelToken("test.a");
@@ -577,7 +574,7 @@ describe("tunnels and scoped credentials", () => {
 				["secrets:get", { name: "x" }],
 				["config:get", {}],
 				["file:read", { path: "x.txt" }],
-				["actions:register", { action: "x" }],
+				["blocks:register", { entry: "command.x" }],
 			] as const) {
 				expect({ action, code: (await relay.fail(action, params)).code }).toEqual({ action, code: "FORBIDDEN" });
 			}

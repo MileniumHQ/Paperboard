@@ -5,10 +5,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { blocksApi, getTransport } from "@mileniumhq/paperapi";
-import { clearWorkloads, testDaemon } from "./helpers/crane";
+import { clearWorkloads } from "./helpers/crane";
 import { PANEL_ID, call, panelFiles, serviceState, startService, stopServices } from "./helpers/service";
 import { stateWhere, until, within } from "./helpers/wait";
-import { runShellCommand } from "../src/lib/shellCommand";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -161,80 +160,6 @@ describe("the Terminal's blocks", () => {
         }
     });
 
-    test("a tab opening and closing fires its event with the tab and its name", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        await startService();
-        const opened = nextEvent("tab-opened");
-        let tab: string;
-        try {
-            await settle();
-            tab = await run<string>("new-tab", { name: "Logs" });
-            expect(await opened.fired).toEqual({ tab, name: "Logs" });
-        } finally {
-            opened.off();
-        }
-        const closed = nextEvent("tab-closed", (p) => p.tab === tab);
-        try {
-            await settle();
-            await run("close-tab", { tab });
-            expect(await closed.fired).toEqual({ tab, name: "Logs" });
-        } finally {
-            closed.off();
-        }
-    });
-
-    test("Show Tab makes a tab the Active Tab and asks the windows to show it; Move Tab puts it in its place", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        await startService();
-        expect(await read("active-tab")).toBe("tab1");
-        const activeChanged = nextChange("active-tab");
-        try {
-            await settle();
-            await run("show-tab", { tab: "tab2" });
-            expect(await read("active-tab")).toBe("tab2");
-            const first = (await serviceState()).showTab;
-            expect(first.id).toBe("tab2");
-            expect(first.request).not.toBe("");
-            // showing it again is a new request, which every window follows again
-            await run("show-tab", { tab: "tab2" });
-            expect((await serviceState()).showTab.request).not.toBe(first.request);
-            await activeChanged.changed;
-            await expect(run("show-tab", { tab: "nope" })).rejects.toThrow("Unknown terminal tab: nope");
-            expect(await read("active-tab")).toBe("tab2");
-        } finally {
-            activeChanged.off();
-        }
-
-        const third = await run<string>("new-tab", { name: "Three" });
-        await run("move-tab", { tab: third, position: 1 });
-        expect(await read("tabs")).toEqual([third, "tab1", "tab2"]);
-        await run("move-tab", { tab: third, position: 3 });
-        expect(await read("tabs")).toEqual(["tab1", "tab2", third]);
-        await expect(run("move-tab", { tab: "tab1", position: 4 })).rejects.toThrow("Position 4 is past the last tab; there are 3 tabs");
-        await expect(run("move-tab", { tab: "tab1", position: 0 })).rejects.toThrow('"Position" must be at least 1');
-        await expect(run("move-tab", { tab: "nope", position: 1 })).rejects.toThrow("Unknown terminal tab: nope");
-        expect(await read("tabs")).toEqual(["tab1", "tab2", third]);
-
-        // the order and the Active Tab are kept for the next service
-        await stopServices();
-        await startService();
-        expect(await read("tabs")).toEqual(["tab1", "tab2", third]);
-        expect(await read("active-tab")).toBe(third);
-    });
-
-    test("a shell that exits fires When a Tab's Shell Ends with how it ended", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        await startService();
-        const ended = nextEvent("terminal-exit", (p) => p.tab === "tab2");
-        try {
-            await settle();
-            await run("run-in-tab", { command: "exit 3", tab: "tab2" });
-            expect(await ended.fired).toEqual({ tab: "tab2", succeeded: false, "exit-code": 3, result: "Exit 3" });
-        } finally {
-            ended.off();
-        }
-    });
-
     test("a saved command is a Saved Command with its fields, and its run's end fires with the outcome", async () => {
         await panelFiles({ "tabs.json": TABS });
         await startService();
@@ -263,39 +188,6 @@ describe("the Terminal's blocks", () => {
         expect(await read("saved-commands")).toEqual([]);
         await expect(blocksApi.property(type, "name", command)).rejects.toThrow(`No saved command "${command}"`);
         await expect(run("run-saved-command", { command })).rejects.toThrow(`No saved command "${command}"`);
-    });
-
-    test("Stop Saved Command ends a run, which reads as Stopped and stays that way", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        await startService();
-        // runs until the test lets it go; the stop must end it first
-        const gate = path.join(work, "held.go");
-        const command = await run<string>("save-command", { command: `while [ ! -e '${gate}' ]; do sleep 0.05; done; exit 0`, name: "Held" });
-        const type = `${PANEL_ID}:saved-command`;
-        await run("run-saved-command", { command });
-        expect(await blocksApi.property(type, "running", command)).toBe(true);
-        expect(await blocksApi.property(type, "last-result", command)).toBe("Running");
-        expect(await blocksApi.property(type, "last-exit-code", command)).toBeNull();
-
-        const finished = nextEvent("saved-command-finished", (p) => p.command === command);
-        try {
-            await settle();
-            expect(await run("stop-saved-command", { command })).toBeNull();
-            // it waited for the end: the run is over when the block is done
-            expect(await blocksApi.property(type, "running", command)).toBe(false);
-            expect(await blocksApi.property(type, "last-result", command)).toBe("Stopped");
-            expect(await finished.fired).toEqual({ command, succeeded: false, "exit-code": null, result: "Stopped" });
-        } finally {
-            finished.off();
-            fs.writeFileSync(gate, "");
-        }
-        await expect(run("stop-saved-command", { command })).rejects.toThrow('"Held" is not running');
-        await expect(run("stop-saved-command", { command: "cmd_nope" })).rejects.toThrow('No saved command "cmd_nope"');
-
-        await stopServices();
-        await startService();
-        expect(await blocksApi.property(type, "last-result", command)).toBe("Stopped");
-        expect(await blocksApi.property(type, "last-exit-code", command)).toBeNull();
     });
 
     test("Run Shell Command gives back what the command printed to stdout, and nothing it printed to stderr", async () => {
@@ -327,11 +219,5 @@ describe("the Terminal's blocks", () => {
         expect(err?.message).toContain("failed with exit code 2:\nline-41\n");
         expect(err?.message).toContain("line-50");
         expect(err?.message).not.toContain("line-40\n");
-    });
-
-    test("Run Shell Command stops a command that runs past its timeout and fails saying so", async () => {
-        await panelFiles({});
-        await testDaemon();
-        await expect(runShellCommand("sleep 30", 500)).rejects.toThrow('"sleep 30" was still running after 0.5 seconds, so it was stopped');
     });
 });

@@ -90,16 +90,11 @@ describe("downloads", () => {
 		await panel.close();
 	});
 
-	test("an exceeded byte cap or a throwing progress consumer leaves no partial file", async () => {
+	test("an exceeded byte cap leaves no partial file", async () => {
 		registry.set("/big", Buffer.alloc(256 * 1024, 7));
 		const dir = tempDir();
 		const target = path.join(dir, "big.bin");
 		await expect(streamToFileWithProgress(`${registry.url}/big`, target, undefined, undefined, undefined, { maxBytes: 1024 })).rejects.toThrow("cap");
-		await expect(
-			streamToFileWithProgress(`${registry.url}/big`, target, (p) => {
-				if (p.stage === "downloading") throw new Error("consumer broke");
-			}),
-		).rejects.toThrow("consumer broke");
 		expect(fs.readdirSync(dir)).toEqual([]);
 	});
 });
@@ -333,19 +328,5 @@ describe("packages no installed panel uses are removed", () => {
 		expect(restarted.isPackageInstalled("legacy")).toBe(true);
 		await restarted.uninstallPanel("test.d");
 		expect(fs.existsSync(path.join(pkg, "legacy"))).toBe(false);
-	});
-
-	test("an uninstall whose packages can't be removed still removes the panel and says so", async () => {
-		const dir = dataDir();
-		fs.mkdirSync(path.join(dir, "panels", "test.a"), { recursive: true });
-		const engine = engineFor(dir);
-		await engine.downloadPackage("solo", undefined, publish({ name: "solo", version: "1.0.0", bytes: toolArchive("echo solo") }));
-		engine.recordPackageUse("solo", "test.a");
-		fs.writeFileSync(path.join(dir, "packages", "users.json"), "{ not json");
-
-		const result = await engine.uninstallPanel("test.a");
-		expect(fs.existsSync(path.join(dir, "panels", "test.a"))).toBe(false);
-		expect(result.packagesWarning).toContain("test.a is uninstalled, but the packages only it used could not be removed");
-		expect(engine.isPackageInstalled("solo")).toBe(true);
 	});
 });

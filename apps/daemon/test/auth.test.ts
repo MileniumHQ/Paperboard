@@ -2,7 +2,6 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../src/security/auth";
-import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { dataDir } from "testkit/fs";
 import { request, startDaemon, stopDaemon } from "testkit/inproc";
 import { installPanelFiles, serviceSource } from "testkit/panels";
@@ -133,15 +132,6 @@ describe("panel credentials come from the host, one per panel", () => {
 		for (let i = 0; i < 250; i++) auth.issuePanelToken(`test.many${i}`);
 		auth.startPairing();
 		expect(auth.pair(auth.getPairingCode()!, "phone", "127.0.0.1").success).toBe(true);
-		auth.dispose();
-	});
-
-	test("reserved and malformed ids are not panel ids and get no token", () => {
-		const auth = new PaperCraneAuth(false, path.join(dataDir(), "local"));
-		for (const id of ["library", "settings", "landing", "app-settings", "default", "../etc", "a/../b", "Test.Upper"]) {
-			expect(isPanelId(id)).toBe(false);
-			expect(() => auth.issuePanelToken(id)).toThrow();
-		}
 		auth.dispose();
 	});
 

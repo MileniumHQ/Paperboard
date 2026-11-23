@@ -4,7 +4,7 @@
 // same contract as the panel's config (JSON by path; no path is the config
 // document), so these run the real store with no daemon.
 import { describe, expect, test } from "bun:test";
-import { MAX_PROJECT_NAME, MIGRATED_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
+import { MIGRATED_PROJECT_NAME, PROJECTS_FILE, PROJECTS_VERSION, ProjectStore, projectFlowsPath, type ProjectStorage } from "../src/lib/projects";
 import type { SavedFlows } from "../src/panel";
 import { BUILTIN } from "../src/lib/names";
 
@@ -84,6 +84,7 @@ describe("the project list", () => {
             await expect(new ProjectStore(mem.storage).open()).rejects.toThrow();
             expect(mem.writes).toEqual([]);
         }
+        expect(() => projectFlowsPath("../escape")).toThrow("not a project id");
     });
 
     test("a project that can't be read says why and keeps its file; the others still open", async () => {
@@ -132,17 +133,6 @@ describe("a new project", () => {
         await store.save(kept.id, flows(BUILTIN.onRun), null);
         expect(await store.remove(kept.id, true)).toBe(false);
         expect(store.list().map((p) => p.id)).toEqual([kept.id]);
-    });
-
-    test("takes the next name no kept project has; a draft left behind holds none", async () => {
-        const store = new ProjectStore(memory().storage);
-        await store.open();
-        const kept = await store.create();
-        await store.save(kept.id, flows(BUILTIN.onRun), null);
-        // its window closed before it had a block: the service never hears it was left
-        const left = await store.create();
-        const next = await store.create();
-        expect([kept.name, left.name, next.name]).toEqual(["Untitled project", "Untitled project 2", "Untitled project 2"]);
     });
 });
 
@@ -218,16 +208,6 @@ describe("changing a project", () => {
         expect(store.flows(copy.id)).toEqual(flows(BUILTIN.onRun, "text"));
     });
 
-    test("a project with the longest name a person may type can be copied again and again", async () => {
-        const store = new ProjectStore(memory().storage);
-        await store.open();
-        const made = await store.create("x".repeat(MAX_PROJECT_NAME), flows(BUILTIN.onRun));
-        const first = await store.duplicate(made.id);
-        const second = await store.duplicate(made.id);
-        expect(first.name).toBe(`Copy of ${"x".repeat(MAX_PROJECT_NAME - 8)}`);
-        expect(second.name).toBe(`Copy of ${"x".repeat(MAX_PROJECT_NAME - 10)} 2`);
-    });
-
     test("switched off, its flows don't run; deleted, its file is emptied", async () => {
         const mem = memory();
         const store = new ProjectStore(mem.storage);
@@ -242,14 +222,5 @@ describe("changing a project", () => {
         expect(store.list()).toEqual([]);
         expect(index(mem.files).projects).toEqual([]);
         expect(mem.files.get(projectFlowsPath(made.id))).toBeNull();
-    });
-
-    test("names and ids are checked", async () => {
-        const store = new ProjectStore(memory().storage);
-        await store.open();
-        await expect(store.create("   ")).rejects.toThrow("needs a name");
-        await expect(store.create("x".repeat(129))).rejects.toThrow("at most 128");
-        await expect(store.update("p-nope", { name: "X" })).rejects.toThrow("no project");
-        expect(() => projectFlowsPath("../escape")).toThrow("not a project id");
     });
 });

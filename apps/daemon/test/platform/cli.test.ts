@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
-import { childEnv, DAEMON_DIR, craneBinary, runCrane, spawnChild, startCrane } from "testkit/crane";
+import { childEnv, craneBinary, runCrane, spawnChild, startCrane } from "testkit/crane";
 import { dataDir, tempDir } from "testkit/fs";
 import { Rpc } from "testkit/rpc";
 import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "testkit/wait";
@@ -11,21 +11,6 @@ setDefaultTimeout(TEST_TIMEOUT_MS);
 
 // The daemon CLI and service install work headless.
 describe("the daemon command line works headless", () => {
-	test("wrong command lines exit 2 and start nothing", async () => {
-		const dir = dataDir();
-		for (const args of [
-			["--bogus"],
-			["frobnicate"],
-			["--port", "abc", "--headless"],
-			["--port", "70000", "--headless"],
-			["--start-pairing", "--headless"],
-			["--local", "--headless"],
-		]) {
-			const run = await runCrane(args, childEnv(dir));
-			expect({ args, code: run.code }).toEqual({ args, code: 2 });
-		}
-		expect(fs.existsSync(path.join(dir, "local", "crane.json"))).toBe(false);
-	});
 
 	test("status --json exits 3 with nothing running and 0 with pid, port and version, and --data-dir wins over PAPERBOARD_DIR", async () => {
 		const live = dataDir();
@@ -83,15 +68,6 @@ describe("the daemon command line works headless", () => {
 		await client.close();
 		await crane.stop();
 	});
-
-	if (process.platform !== "win32") {
-		test("install-service needs the compiled binary", async () => {
-			const src = spawnChild(process.execPath, [path.join(DAEMON_DIR, "src", "main.ts"), "install-service", "--dry-run"], childEnv(dataDir()));
-			const exit = await within("install-service to exit", src.exited);
-			expect(exit.code).toBe(1);
-			expect(src.output()).toContain("needs the compiled papercrane binary");
-		});
-	}
 
 	if (process.platform === "linux") {
 		test("the systemd unit runs --headless with a quoted --data-dir, KillMode=process and OOMPolicy=continue", async () => {

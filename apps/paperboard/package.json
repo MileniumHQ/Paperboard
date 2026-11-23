@@ -17,7 +17,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
     "typecheck": "bun run typecheck:node && bun run typecheck:web",
-    "test": "bun ../../packages/testkit/src/withChrome.ts bun test --parallel",
+    "test": "bun test --parallel",
     "gates": "bun run typecheck && bun run typecheck:tests && bun test && bunx biome lint",
     "start": "bun scripts/launch.ts preview",
     "dev": "bun scripts/launch.ts dev",

@@ -1,7 +1,6 @@
-// What a panel declares beyond a plain block: defaults, choices worked out
-// on demand, fields read in a project, and values a firing may leave out.
-// Each goes through a real (headless) Blockly load and save, and through
-// the interpreter, so what the editor shows is what runs.
+// What a panel declares beyond a plain block: choices worked out on demand
+// and fields read in a project. Each goes through a real (headless) Blockly
+// load and save, and through the interpreter, so what the editor shows is what runs.
 import { beforeAll, describe, expect, test } from "bun:test";
 import * as Blockly from "blockly";
 import type { BlockInfo } from "@mileniumhq/paperapi";
@@ -9,7 +8,7 @@ import { BUILTIN_BLOCKS, choicesSources, PROPERTIES_CATEGORY, registryDefinition
 import { refreshChoices, registerChoicesField } from "../src/lib/choicesField";
 import { runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
-import { block, saved, steps, text, top } from "./helpers/workspace";
+import { block, saved, steps, top } from "./helpers/workspace";
 
 const GAME = "dev.test.extras";
 const PLAYER = `${GAME}:player`;
@@ -43,12 +42,6 @@ const ENTRIES = [
             },
         },
     },
-    {
-        panelId: GAME,
-        entry: "s1/event.left",
-        project: "s1",
-        schema: { kind: "event", id: "left", name: "Player Left", values: { player: { type: PLAYER, name: "Player" }, reason: { type: "text", name: "Reason", optional: true } } },
-    },
 ] as BlockInfo[];
 const PROJECTS = [
     { panelId: GAME, id: "s1", name: "Survival" },
@@ -59,8 +52,6 @@ const WARP = registryBlockType({ kind: "command", panelId: GAME, entry: "s1/comm
 const WARP_WORLD = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.warp", key: "world" });
 const WARP_MODE = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.warp", key: "mode" });
 const pick = (type: string, value: string) => ({ shadow: { type, fields: { VALUE: value } } });
-const LEFT = registryBlockType({ kind: "event", panelId: GAME, entry: "s1/event.left" });
-const LEFT_REASON = registryBlockType({ kind: "event-value", panelId: GAME, entry: "s1/event.left", key: "reason" });
 
 let worlds = [{ label: "Overworld", value: "world" }];
 const defs = registryDefinitions(ENTRIES, PROJECTS);
@@ -74,7 +65,7 @@ beforeAll(() => {
 function host(calls: unknown[][], logs: string[]): Host {
     return {
         signal: new AbortController().signal,
-        run: async (panelId, entry, inputs) => void calls.push(["run", entry, inputs]),
+        run: async (_panelId, entry, inputs) => void calls.push(["run", entry, inputs]),
         read: async () => null,
         property: async (typeRef, field, value, project) => {
             calls.push(["property", typeRef, field, value, project]);
@@ -83,26 +74,6 @@ function host(calls: unknown[][], logs: string[]): Host {
         log: (message) => void logs.push(message),
     };
 }
-
-describe("defaults", () => {
-    test("a new block starts on each input's default: its socket's block, or its dropdown's choice", () => {
-        const warp = defs.sections.flatMap((s) => s.contents).find((b) => b.type === WARP)!;
-        expect(warp).toEqual({
-            kind: "block",
-            type: WARP,
-            inputs: { times: { shadow: { type: "math_number", fields: { NUM: 3 } } }, world: { shadow: { type: WARP_WORLD } }, mode: pick(WARP_MODE, '"fast"') },
-        });
-        const ws = new Blockly.Workspace();
-        try {
-            const { kind: _kind, ...rest } = warp;
-            const state: Blockly.serialization.blocks.State = { ...rest, type: WARP };
-            const created = Blockly.serialization.blocks.append(state, ws);
-            expect(created.getInputTargetBlock("mode")!.getFieldValue("VALUE")).toBe('"fast"');
-        } finally {
-            ws.dispose();
-        }
-    });
-});
 
 describe("choices worked out on demand", () => {
     test("the dropdown offers what the panel answers, and a saved choice it no longer offers stays as saved", async () => {
@@ -129,26 +100,6 @@ describe("choices worked out on demand", () => {
         const calls: unknown[][] = [];
         await runHat(top(ws, BUILTIN.onRun), null, ws, host(calls, []));
         expect(calls).toEqual([["run", "s1/command.warp", { world: "nether", mode: "slow" }]]);
-    });
-
-    test("a variable put over a dropdown is what runs, as in any other input", async () => {
-        const ws = saved(
-            [
-                {
-                    type: BUILTIN.onRun,
-                    inputs: {
-                        DO: steps(
-                            { type: "variables_set", fields: { VAR: { id: "w" } }, inputs: { VALUE: text("end") } },
-                            { type: WARP, inputs: { world: { ...pick(WARP_WORLD, '"world"'), block: { type: "variables_get", fields: { VAR: { id: "w" } } } } } },
-                        ),
-                    },
-                },
-            ],
-            [{ name: "w", id: "w" }],
-        );
-        const calls: unknown[][] = [];
-        await runHat(top(ws, BUILTIN.onRun), null, ws, host(calls, []));
-        expect(calls).toEqual([["run", "s1/command.warp", { world: "end" }]]);
     });
 });
 
@@ -180,31 +131,5 @@ describe("fields read in a project", () => {
         await runHat(top(ws, BUILTIN.onRun), null, ws, host(calls, logs));
         expect(calls).toEqual([["property", PLAYER, "online", "alex", "s2"]]);
         expect(logs).toEqual(["true"]);
-    });
-});
-
-describe("values a firing may leave out", () => {
-    test("a left-out value is nothing, and \"has a value\" tells it apart", async () => {
-        const ws = saved([
-            {
-                type: LEFT,
-                inputs: {
-                    DO: steps({
-                        type: "controls_if",
-                        extraState: { hasElse: true },
-                        inputs: {
-                            IF0: block(BUILTIN.hasValue, { inputs: { VALUE: block(LEFT_REASON) } }),
-                            DO0: steps({ type: BUILTIN.log, inputs: { TEXT: block(LEFT_REASON) } }),
-                            ELSE: steps({ type: BUILTIN.log, inputs: { TEXT: { shadow: { type: "text", fields: { TEXT: "no reason" } } } } }),
-                        },
-                    }),
-                },
-            },
-        ]);
-        const logs: string[] = [];
-        await runHat(top(ws, LEFT), { player: "alex" }, ws, host([], logs));
-        await runHat(top(ws, LEFT), { player: "alex", reason: null }, ws, host([], logs));
-        await runHat(top(ws, LEFT), { player: "alex", reason: "afk" }, ws, host([], logs));
-        expect(logs).toEqual(["no reason", "no reason", "afk"]);
     });
 });

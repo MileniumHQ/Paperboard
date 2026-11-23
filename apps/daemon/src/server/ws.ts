@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { PaperCraneEngine } from "../engine/index";
 import { PaperCraneAuth } from "../security/auth";
 import { logger } from "../core/logger";
-import { actionsRegistry, blocksRegistry } from "./actions";
+import { blocksRegistry } from "./actions";
 import type { RpcContext } from "../rpc/context";
 import { rpcDispatcher } from "../rpc/dispatch";
 import { terminalRpc } from "../rpc/terminal";
@@ -10,7 +10,6 @@ import { processRpc } from "../rpc/process";
 import { filesRpc } from "../rpc/files";
 import { packagesRpc } from "../rpc/packages";
 import { panelsRpc } from "../rpc/panels";
-import { actionsRpc } from "../rpc/actions";
 import { blocksRpc } from "../rpc/blocks";
 import { systemRpc } from "../rpc/system";
 import { secretsRpc } from "../rpc/secrets";
@@ -81,7 +80,7 @@ const MAX_CONNECTIONS = 4096;
 
 // every action PaperAPI's protocol/rpc.ts declares, past the auth gate
 const dispatch = rpcDispatcher([
-    terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, actionsRpc, blocksRpc,
+    terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, blocksRpc,
     systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc, pagesRpc,
 ]);
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
@@ -169,10 +168,6 @@ export function setupWebSocketServer(
             events.forget(ws);
             monitor.unsubscribe(ws);
             engine.detachStreams(ws);
-            const registryChanged = actionsRegistry.handleSocketClose(ws);
-            if (registryChanged) {
-                broadcastEvent("actions:registry-updated", { type: "socket:closed" });
-            }
             if (blocksRegistry.handleSocketClose(ws)) {
                 broadcastEvent("blocks:registry-updated", { type: "socket:closed" });
             }
@@ -201,19 +196,15 @@ export function setupWebSocketServer(
             try {
                 const maybe = JSON.parse(raw.toString("utf8"));
 
-                // action replies from background services — only from
-                // authenticated sockets, so an unauthenticated LAN peer
-                // cannot inject results into another socket's pending calls
+                // replies from background services — only from authenticated
+                // sockets, so an unauthenticated LAN peer cannot inject
+                // results into another socket's pending calls
                 if (maybe && typeof maybe === "object" && maybe.type === "action_reply") {
                     if (!identity.authenticated) {
                         logger.debug("[ws] dropping pre-auth action_reply frame");
                         return;
                     }
-                    // call ids are unique across both registries: the one
-                    // that sent the call settles it
-                    if (!actionsRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws)) {
-                        blocksRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws);
-                    }
+                    blocksRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws);
                     return;
                 }
 

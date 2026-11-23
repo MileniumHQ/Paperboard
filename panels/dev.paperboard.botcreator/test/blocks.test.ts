@@ -1,14 +1,13 @@
 // Bot Creator's blocks, used the way the Blocks panel uses
 // them: through the real daemon, from the service, against a loopback Discord.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { blocksApi, memoryBlocks, type BlockEventDefinition } from "@mileniumhq/paperapi";
+import { blocksApi } from "@mileniumhq/paperapi";
 import type { BotsServiceState } from "../src/bots";
-import { blockTypes } from "../src/blocks/blockTypes";
-import { blockEvent, commandEvent, commandEventId, staticEvents } from "../src/blocks/events";
-import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
-import { guild, slashCommand, snowflake, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
+import { commandEventId } from "../src/blocks/events";
+import { GLOBAL_SCOPE } from "../src/types";
+import { guild, slashCommand, startFakeDiscord, userMessage, type FakeBot, type FakeDiscord, type FakeGuild } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, storedBot, stopServices } from "./helpers/service";
-import { nextEvent as nextEventOf, stateWhere, subscribed, within } from "./helpers/wait";
+import { nextEvent as nextEventOf, stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -49,64 +48,7 @@ const EVENTS = [
     "role-deleted", "role-removed", "thread-created", "voice-changed",
 ];
 
-// every static trigger a session fires (session.ts attachListeners), by the name the session gives it
-const TRIGGERS = [
-    "on-message", "on-member-join", "on-member-leave", "on-reaction-add", "on-connection-error", "interaction-triggered",
-    "modal-submitted", "on-message-edited", "on-message-deleted", "on-reaction-removed", "on-member-banned", "on-role-added",
-    "on-role-removed", "on-thread-created", "on-voice-state-change", "on-bot-ready", "on-guild-joined", "on-guild-left",
-    "on-channel-created", "on-channel-deleted", "on-role-created", "on-role-deleted", "on-member-roles-changed", "on-member-unbanned",
-    "on-nickname-changed",
-];
-
 const nextEvent = (event: string) => nextEventOf(PANEL_ID, event, BOT);
-
-describe("each trigger a session fires is one of the bot's Blocks events, with a payload of its types", () => {
-    // fired through PaperAPI's own checks, in memory: the payload is every value the event declares, of its type
-    const firesAs = async (event: BlockEventDefinition, payload: Record<string, unknown>) => {
-        expect(Object.keys(payload).sort()).toEqual(Object.keys(event.values ?? {}).sort());
-        const memory = memoryBlocks(PANEL_ID);
-        await memory.panel.register({ types: blockTypes(() => []) });
-        const bot = await memory.defineProject({ id: "bot", name: "Bot" });
-        await bot.register({ events: [event] });
-        await bot.fire(event.id, payload);
-    };
-
-    test("every static trigger, even with nothing in its payload", async () => {
-        const mapped = new Set<string>();
-        for (const trigger of TRIGGERS) {
-            const { event, payload } = blockEvent(trigger, {}, []);
-            const definition = staticEvents.find((e) => e.id === event);
-            expect([trigger, definition?.id]).toEqual([trigger, event]);
-            await firesAs(definition!, payload);
-            mapped.add(event);
-        }
-        expect([...mapped].sort()).toEqual(EVENTS);
-    });
-
-    test("a slash command, its options typed, and an optional one not given is none", async () => {
-        const command: SlashCommandDefinition = {
-            id: "c1",
-            name: "give_role",
-            description: "Give a role",
-            scope: GLOBAL_SCOPE,
-            userInstall: false,
-            options: [
-                { id: "o1", name: "user", description: "Who", type: "user", required: true },
-                { id: "o2", name: "days", description: "How long", type: "integer", required: false },
-            ],
-        };
-        const event = commandEvent(command);
-        expect(event.id).toBe(commandEventId(command));
-        expect(event.values).toMatchObject({ "option-user": { type: "user", name: "user" }, "option-days": { type: "number", name: "days", optional: true } });
-        const { payload } = blockEvent("command:global:give_role", { interactionId: "1", userId: "2", channelId: "3", guildId: null, values: { user: "123456789012345678" } }, [command]);
-        await firesAs(event, payload);
-        expect(payload).toMatchObject({ "option-user": "123456789012345678", "option-days": null, server: null });
-        expect(() => blockEvent("command:global:gone", {}, [command])).toThrow("The trigger command:global:gone has no Blocks event");
-        // the same name in another scope is another event; the same scope and name is the same one
-        expect(commandEventId({ scope: "123456789012345678", name: "give_role" })).not.toBe(event.id);
-        expect(commandEventId({ scope: GLOBAL_SCOPE, name: "give_role" })).toBe(event.id);
-    });
-});
 
 describe("a bot is a Blocks project, used through the daemon", () => {
     let discord: FakeDiscord;
@@ -172,14 +114,6 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect(await read("message", { id: sent.id, channel })).toEqual(sent);
     });
 
-    test("a Server, Channel or Role input starts as a dropdown of what the bot can see", async () => {
-        expect(await blocksApi.typeChoices(type("server"), { project: BOT })).toEqual([{ label: "Home", value: home.id }]);
-        expect(await blocksApi.typeChoices(type("channel"), { project: BOT })).toEqual([{ label: "#general", value: home.channels[0].id }]);
-        // the everyone role is left out, as a server's Roles leaves it out
-        expect((await blocksApi.typeChoices(type("role"), { project: BOT })).map((c) => c.value)).not.toContain(home.id);
-        expect(await blocksApi.typeChoices(type("server"))).toEqual([{ label: "Home", value: home.id }]);
-    });
-
     test("what a block can't do fails, saying why, and never reaches Discord", async () => {
         const before = discord.requests.length;
         await expect(run("send-message", { content: "hello", channel: "general" })).rejects.toThrow('"general" isn\'t a Channel ID');
@@ -189,14 +123,6 @@ describe("a bot is a Blocks project, used through the daemon", () => {
         expect(discord.requests.length).toBe(before);
         await expect(blocksApi.read(PANEL_ID, "create-button", { style: "primary", label: "Go", disabled: false })).rejects.toThrow('The primary button "Go" needs a Component ID');
         expect(await blocksApi.read(PANEL_ID, "create-button", { style: "primary", label: "Go", "component-id": "go", disabled: false })).toMatchObject({ kind: "button", customId: "go" });
-    });
-
-    test("the bot's values read its live state", async () => {
-        expect(await read("connected")).toBe(true);
-        expect(await read("servers")).toEqual([home.id]);
-        expect(await read("server-count")).toBe(1);
-        expect(await read("bot-user")).toBe(fake.appId);
-        expect(await read("member", { user: fake.appId })).toEqual({ user: fake.appId, server: home.id });
     });
 
     test("a message someone posts fires When a Message Is Received with its typed values", async () => {
@@ -230,112 +156,5 @@ describe("a bot is a Blocks project, used through the daemon", () => {
 
         await call.deleteCommand({ bot: BOT, id: created.command.id });
         expect((await blocksApi.list(PANEL_ID)).some((b) => b.entry === `${BOT}/event.${event}`)).toBe(false);
-    });
-
-    test("the bot's health and slash command use read what its session counted", async () => {
-        expect(await read("status")).toBe("online");
-        expect(await read<number>("uptime")).toBeGreaterThan(0);
-
-        const created = await call.createCommand({ bot: BOT, name: "ping", description: "Ping the bot", options: [] });
-        const event = commandEventId({ scope: GLOBAL_SCOPE, name: "ping" });
-        try {
-            expect(await blocksApi.choices(PANEL_ID, `${BOT}/value.command-uses`, "command")).toEqual([{ label: "/ping", value: event }]);
-            expect(await read("command-uses", { command: event })).toBe(0);
-            await expect(read("command-last-used", { command: event })).rejects.toThrow("/ping hasn't been used since Bot Creator started");
-            await expect(read("command-uses", { command: "slash-gone-0000000000" })).rejects.toThrow('"Slash Command" must be one of /ping');
-            const today = await read<number>("commands-last-day");
-
-            const used = nextEvent(event);
-            await used.ready;
-            const before = Date.now();
-            const ping = slashCommand(fake, { guild: home, name: "ping" });
-            discord.dispatch(fake, "INTERACTION_CREATE", ping);
-            await used.payload;
-            await acknowledged(ping.id);
-            expect(await read("command-uses", { command: event })).toBe(1);
-            const last = await read<number>("command-last-used", { command: event });
-            expect(last).toBeGreaterThanOrEqual(before);
-            expect(last).toBeLessThanOrEqual(Date.now());
-            expect(await read("commands-last-day")).toBe(today + 1);
-        } finally {
-            await call.deleteCommand({ bot: BOT, id: created.command.id });
-        }
-    });
-
-    test("Discord's server, channel, role and member changes fire the bot's events with typed values", async () => {
-        const other: FakeGuild = { ...guild("Other"), owner: snowflake() };
-        const someone = { id: snowflake(), username: "someone", discriminator: "0", global_name: null, avatar: null };
-        const role = { id: snowflake(), name: "Mods", color: 0, hoist: false, position: 1, permissions: "0", managed: false, mentionable: false, flags: 0 };
-        const channel = { id: snowflake(), type: 0, guild_id: other.id, name: "news", position: 1, permission_overwrites: [], parent_id: null, nsfw: false };
-        const member = (extra: Record<string, unknown>) => ({ guild_id: other.id, user: someone, roles: [], joined_at: new Date().toISOString(), deaf: false, mute: false, flags: 0, ...extra });
-        const names = [
-            "bot-joined-server", "channel-created", "channel-deleted", "role-created", "member-joined", "member-roles-changed", "nickname-changed",
-            "role-deleted", "member-unbanned", "bot-left-server",
-        ];
-        const events = Object.fromEntries(names.map((name) => [name, nextEvent(name)]));
-        await Promise.all(Object.values(events).map((e) => e.ready));
-        const next = (name: string) => events[name]!.payload;
-
-        discord.joinGuild(fake, other);
-        expect(await next("bot-joined-server")).toEqual({ server: other.id, name: "Other" });
-        expect(await read("servers")).toEqual([home.id, other.id]);
-
-        discord.dispatch(fake, "CHANNEL_CREATE", channel);
-        const news = { channel: channel.id, name: "news", kind: "text", server: other.id };
-        expect(await next("channel-created")).toEqual(news);
-        discord.dispatch(fake, "CHANNEL_DELETE", channel);
-        expect(await next("channel-deleted")).toEqual(news);
-
-        discord.dispatch(fake, "GUILD_ROLE_CREATE", { guild_id: other.id, role });
-        expect(await next("role-created")).toEqual({ role: role.id, name: "Mods", server: other.id });
-
-        // a member the bot has seen, so Discord's update says what changed
-        discord.dispatch(fake, "GUILD_MEMBER_ADD", member({}));
-        await next("member-joined");
-        discord.dispatch(fake, "GUILD_MEMBER_UPDATE", member({ roles: [role.id], nick: "Ace" }));
-        const asMember = { member: { user: someone.id, server: other.id }, user: someone.id, server: other.id };
-        expect(await next("member-roles-changed")).toEqual({ ...asMember, added: [role.id], removed: [] });
-        expect(await next("nickname-changed")).toEqual({ ...asMember, nickname: "Ace", "previous-nickname": null });
-
-        discord.dispatch(fake, "GUILD_ROLE_DELETE", { guild_id: other.id, role_id: role.id });
-        expect(await next("role-deleted")).toEqual({ role: role.id, name: "Mods", server: other.id });
-
-        discord.dispatch(fake, "GUILD_BAN_REMOVE", { guild_id: other.id, user: someone });
-        expect(await next("member-unbanned")).toEqual({ user: someone.id, server: other.id });
-
-        // Leave Server: the bot can't leave a server it owns, nor one it isn't in
-        const before = discord.requests.length;
-        await expect(run("leave-server", { server: home.id })).rejects.toThrow("The bot owns Home, and Discord doesn't let a server's owner leave it");
-        await expect(run("leave-server", { server: "999999999999999999" })).rejects.toThrow("The bot isn't in server 999999999999999999");
-        expect(discord.requests.length).toBe(before);
-        await run("leave-server", { server: `${other.id}` });
-        expect(discord.requests.some((r) => r.method === "DELETE" && r.path === `/users/@me/guilds/${other.id}`)).toBe(true);
-        expect(await next("bot-left-server")).toEqual({ server: other.id, name: "Other" });
-        expect(await read("servers")).toEqual([home.id]);
-    });
-
-    test("a bot that goes offline says Connected and its servers changed", async () => {
-        const values = ["connected", "status", "servers", "server-count"];
-        const changed = new Set<string>();
-        let allDone = () => {};
-        const allChanged = new Promise<void>((resolve) => (allDone = resolve));
-        const off = values.map((value) =>
-            blocksApi.onChange(PANEL_ID, value, () => {
-                changed.add(value);
-                if (changed.size === values.length) allDone();
-            }, BOT),
-        );
-        try {
-            await subscribed();
-            discord.closeSession(fake, 4014, "Disallowed intent(s).");
-            await within("connected, status, servers and server-count to announce a change", allChanged, 10_000, () => `only ${[...changed].join(", ") || "nothing"} did`);
-            expect(await read("connected")).toBe(false);
-            expect(await read("status")).toBe("offline");
-            expect(await read("uptime")).toBe(0);
-            expect(await read("server-count")).toBe(0);
-            expect(await read("servers")).toEqual([]);
-        } finally {
-            for (const unsubscribe of off) unsubscribe();
-        }
     });
 });

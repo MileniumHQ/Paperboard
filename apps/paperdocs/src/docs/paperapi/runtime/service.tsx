@@ -259,11 +259,6 @@ const calls = {
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" as="h3" id="deprecated">Deprecated</PaperText>
-            <PaperText preset="body" as="p">
-                <PaperCode>definePanelService</PaperCode> without a contract, with untyped <PaperCode>calls</PaperCode> by name, <PaperCode>untypedCalls</PaperCode> beside a contract, and <PaperCode>serviceApi.call</PaperCode> and <PaperCode>serviceApi.on</PaperCode> on the page are removed once Game Server and Agents use the contract. Don't use them in new code.
-            </PaperText>
-
             <PaperText preset="subheader" as="h2" id="lifecycle">Lifecycle</PaperText>
             <PaperTable>
                 <thead>

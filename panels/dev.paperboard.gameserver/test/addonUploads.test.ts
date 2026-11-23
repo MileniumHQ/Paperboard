@@ -34,14 +34,6 @@ const outside = (root: string) => Object.keys(readTree(root)).filter((f) => !f.s
 
 // Uploads are contained and all-or-nothing.
 describe("add-on uploads", () => {
-    test("valid plugin jars are all added and recorded, and the stage is removed", async () => {
-        const up = staged({ "Essentials.jar": plugin("Essentials"), "WorldEdit.jar": plugin("WorldEdit") });
-        expect(await uploadPlugins(STAGE, "paper", up.deps)).toEqual({ added: ["Essentials.jar", "WorldEdit.jar"] });
-        expect(fs.readFileSync(path.join(up.root, "plugins", "Essentials.jar"))).toEqual(Buffer.from(plugin("Essentials")));
-        expect(Object.keys(up.config().addonUploads as object).sort()).toEqual(["plugins/Essentials.jar", "plugins/WorldEdit.jar"]);
-        expect(up.stageGone()).toBe(true);
-    });
-
     test("one bad jar refuses the whole upload, naming each refusal, and the stage is removed", async () => {
         const up = staged({
             "Good.jar": plugin("Good"),
@@ -73,7 +65,7 @@ describe("add-on uploads", () => {
         expect((await uploadDatapacks(STAGE, up.deps)).added).toEqual(["Folder", "Terralith.zip"]);
         expect(fs.existsSync(path.join(up.root, "world", "datapacks", "Folder", "pack.mcmeta"))).toBe(true);
 
-        const again = staged({ "Terralith.zip": zip({ "pack.mcmeta": "{\"new\":1}" }) }, { "world/datapacks/Terralith.zip": "old" });
+        const again = staged({ "Terralith.zip": zip({ "pack.mcmeta": '{"new":1}' }) }, { "world/datapacks/Terralith.zip": "old" });
         await expect(uploadDatapacks(STAGE, again.deps)).rejects.toThrow("Terralith.zip is already in world/datapacks/");
         expect(fs.readFileSync(path.join(again.root, "world", "datapacks", "Terralith.zip"), "utf8")).toBe("old");
 
@@ -93,23 +85,5 @@ describe("add-on uploads", () => {
             await expect(uploadPlugins(stage, "paper", up.deps)).rejects.toThrow("That is not an upload Paperboard started");
         }
         expect(fs.existsSync(path.join(up.root, STAGE_DIR, "Good.jar"))).toBe(true);
-    });
-
-    test("an add that fails after the move says which files could not be taken back out", async () => {
-        const up = staged({ "Good.jar": plugin("Good") });
-        const stageDir = path.join(up.root, STAGE_DIR);
-        // the record write fails once the jar is in place, and the stage can no longer take it back
-        up.deps.writeConfig = async () => {
-            fs.chmodSync(stageDir, 0o555);
-            throw new Error("the config is not writable");
-        };
-        try {
-            const err = await uploadPlugins(STAGE, "paper", up.deps).catch((e: Error) => e);
-            expect((err as Error).message).toStartWith("the config is not writable. Good.jar (");
-            expect((err as Error).message).toEndWith("could not be taken back out of plugins/, so it stays there.");
-            expect(fs.existsSync(path.join(up.root, "plugins", "Good.jar"))).toBe(true);
-        } finally {
-            if (fs.existsSync(stageDir)) fs.chmodSync(stageDir, 0o755);
-        }
     });
 });

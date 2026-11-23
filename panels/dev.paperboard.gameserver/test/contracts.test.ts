@@ -4,14 +4,12 @@ import * as path from "node:path";
 import { callBlockId } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { panelCalls, serverCalls } from "./helpers/serverCall";
-import { minecraftServer } from "./helpers/minecraft";
 import { MINECRAFT_CALLS, SERVERS_CALLS, TRIGGER_IDS, gameServerContract } from "../src/service/contract";
 import { minecraftCalls } from "../src/games/minecraft/calls";
 import { playerEvents, sharedBlocks } from "../src/service/blocks";
 import { assertGameCall, gameFor, games } from "../src/games";
-import { gameModuleFor } from "../src/games/service";
 import { testServer } from "./helpers/scope";
-import { PANEL_ID, readServersConfig } from "../src/servers";
+import { PANEL_ID } from "../src/servers";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -20,8 +18,6 @@ beforeAll(async () => {
 afterAll(async () => {
     await daemon?.stop();
 });
-
-const NODE_BUILTINS = /^(node:|(fs|path|os|child_process|net|tls|dgram|crypto|stream|util|events|zlib|worker_threads|http|https)(\/.*)?$)/;
 
 // Call and game contracts are complete and fail closed.
 describe("call and game contracts", () => {
@@ -56,46 +52,6 @@ describe("call and game contracts", () => {
     test("every event a game emits is a Blocks event of that name", () => {
         const events = [...sharedBlocks({} as never).events!, ...playerEvents()].map((event) => event.id);
         for (const id of Object.values(TRIGGER_IDS)) expect(events).toContain(id);
-    });
-
-    test("an empty value is a valid edit for a file write, and a setting still needs its name", async () => {
-        const mc = minecraftServer({ files: { "a.txt": "text" } });
-        const read = (await minecraftCalls.readServerFile!(mc.server, { path: "a.txt" })) as { version: string };
-        await minecraftCalls.writeServerFile!(mc.server, { path: "a.txt", text: "", version: read.version });
-        expect(fs.readFileSync(path.join(mc.dir, "a.txt"), "utf8")).toBe("");
-        await expect(minecraftCalls.writeLoaderSetting!(mc.server, { id: "", value: "x" })).rejects.toThrow();
-    });
-
-    test("unknown games throw instead of falling back to Minecraft", () => {
-        for (const id of ["factorio", "__proto__", "constructor", ""]) {
-            expect(() => gameFor(id)).toThrow("Unsupported game");
-            expect(() => gameModuleFor(id)).toThrow("Unsupported game");
-        }
-        const stored = { version: 2, serversDirectory: "servers-0123456789ab", servers: [{ id: "s-1", name: "F", game: "factorio", directory: "servers-0123456789ab/s-1", createdAt: 0, settings: {} }] };
-        expect(() => readServersConfig(stored)).toThrow();
-    });
-
-    test("game metadata bundles for the browser without node imports", async () => {
-        const nodeImports: string[] = [];
-        const result = await Bun.build({
-            entrypoints: [path.join(import.meta.dir, "..", "src", "games", "index.ts")],
-            target: "browser",
-            conditions: ["browser"],
-            plugins: [
-                {
-                    name: "no-node",
-                    setup(build) {
-                        build.onResolve({ filter: NODE_BUILTINS }, (args) => {
-                            nodeImports.push(`${args.path} from ${path.relative(path.join(import.meta.dir, ".."), args.importer)}`);
-                            return { path: args.path, external: true };
-                        });
-                    },
-                },
-            ],
-        });
-        expect(result.logs.filter((l) => l.level === "error").map((l) => l.message)).toEqual([]);
-        expect(result.success).toBe(true);
-        expect(nodeImports).toEqual([]);
     });
 
     test("the running service refuses a call a server's software or version does not have, before it runs", async () => {

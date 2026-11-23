@@ -83,7 +83,6 @@ configApi.set(data: any, id: string, path?: string, scope?: string): Promise<tru
                 <li>The main document is stored at <PaperCode>configs/&lt;id&gt;.json</PaperCode> in the Paperboard data folder, and a <PaperCode>path</PaperCode> document at <PaperCode>files/&lt;id&gt;/&lt;path&gt;</PaperCode>, beside the panel's <PaperLink href="/docs/paperapi/file/">files</PaperLink>. Each write replaces the file in one step, so a crash never leaves half a document.</li>
                 <li>Two writers at once: the last <PaperCode>set</PaperCode> wins. Keep one owner for each document, usually the service.</li>
                 <li>Backups include both kinds of document. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
-                <li>A panel reads and writes only its own id. Another id is refused.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
@@ -99,7 +98,6 @@ configApi.set(data: any, id: string, path?: string, scope?: string): Promise<tru
                     <tr><td><PaperCode>config calls need an explicit config id (usually your panel id)</PaperCode></td><td>No code</td><td><PaperCode>id</PaperCode> is missing or empty. Thrown before anything is sent.</td></tr>
                     <tr><td><PaperCode>Invalid config path: "&lt;path&gt;"</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A path outside the rules above.</td></tr>
                     <tr><td><PaperCode>Config "&lt;id&gt;" exceeds 1048576 byte payload cap</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>The document is over 1 MiB.</td></tr>
-                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>The id is another panel's.</td></tr>
                     <tr><td>A JSON parse error</td><td><PaperCode>INTERNAL</PaperCode></td><td>The file on disk is not valid JSON, such as one edited by hand.</td></tr>
                 </tbody>
             </PaperTable>

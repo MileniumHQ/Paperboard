@@ -1,6 +1,6 @@
 import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
-import { STATE_EVENT, STATE_VALUE, serviceApi } from "./serviceCalls";
+import { STATE_EVENT, STATE_VALUE } from "./serviceCalls";
 import { registerPanelHydrator } from "./panelHydration";
 import { errorMessage } from "./errors";
 import { problemsApi } from "./problems";
@@ -15,10 +15,6 @@ export interface PanelBridgeOptions<TState extends Record<string, any>> {
 
 export function createPanelBridge<
     TState extends Record<string, any> = Record<string, any>,
-    TCalls extends Record<string, (input?: any) => Promise<any>> = Record<
-        string,
-        (input?: any) => Promise<any>
-    >,
 >(options: PanelBridgeOptions<TState> = {}) {
     const panelId = options.panelId || getPanelId();
     let localState: TState = { ...(options.defaultState || {}) } as TState;
@@ -92,17 +88,6 @@ export function createPanelBridge<
         return () => listeners.delete(cb);
     };
 
-    // proxy so bridge.calls.name(input) works
-    const callsProxy = new Proxy({} as TCalls, {
-        get(_target, prop) {
-            // Promise-protocol inspection (`then`, symbol props like
-            // toPrimitive/asyncIterator) must not fire a bogus call —
-            // only real string call names proxy through
-            if (prop === "then" || typeof prop !== "string") return undefined;
-            return (input?: unknown) => serviceApi.call(panelId, prop, input);
-        },
-    });
-
     // teardown for the whole bridge: a bridge that outlives its component
     // must not keep its transport subscription or listeners alive
     const dispose = (): void => {
@@ -117,12 +102,6 @@ export function createPanelBridge<
         getState: () => localState,
         refreshState,
         onStateChange,
-        /** @deprecated untyped: reach the service with serviceClient(contract) */
-        calls: callsProxy,
-        /** @deprecated untyped: reach the service with serviceClient(contract) */
-        call: <R = unknown>(name: string, input?: unknown): Promise<R> => serviceApi.call<R>(panelId, name, input),
-        /** @deprecated untyped: hear the service with serviceClient(contract).on */
-        on: <T = unknown>(event: string, callback: (payload: T) => void): (() => void) => serviceApi.on<T>(panelId, event, callback),
         dispose,
     };
 }

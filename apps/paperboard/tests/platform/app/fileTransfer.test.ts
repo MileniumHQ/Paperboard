@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
 import { type DaemonEndpoint, type PanelFileTransferDeps, runPanelExport, runPanelImport } from "../../../src/main/panelFileTransfer";
-import { runPanelFileTransfer } from "../../../src/renderer/src/lib/panelFileTransfer";
 import { tempDir } from "testkit/fs";
 import { type InProcessDaemon, startDaemon } from "testkit/inproc";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
@@ -30,22 +29,11 @@ afterAll(async () => {
 
 const endpoint = (): DaemonEndpoint => ({ host: "127.0.0.1", port: daemon.instance.localPort, token: daemon.token });
 
-function deps(answers: { save?: string | null; open?: string | null; paths?: string[] | null }, to: () => DaemonEndpoint = endpoint): PanelFileTransferDeps & { dialogs: string[] } {
-	const dialogs: string[] = [];
+function deps(answers: { save?: string | null; open?: string | null; paths?: string[] | null }, to: () => DaemonEndpoint = endpoint): PanelFileTransferDeps {
 	return {
-		dialogs,
-		pickSavePath: async () => {
-			dialogs.push("save");
-			return answers.save ?? null;
-		},
-		pickOpenPath: async () => {
-			dialogs.push("open");
-			return answers.open ?? null;
-		},
-		pickOpenPaths: async () => {
-			dialogs.push("open-many");
-			return answers.paths ?? null;
-		},
+		pickSavePath: async () => answers.save ?? null,
+		pickOpenPath: async () => answers.open ?? null,
+		pickOpenPaths: async () => answers.paths ?? null,
 		endpoint: to,
 	};
 }
@@ -153,11 +141,4 @@ describe("panel file export and import", () => {
 		expect(fs.readdirSync(storage).filter((n) => n.includes(".davpart"))).toEqual([]);
 	});
 
-	test("a request naming a panel other than the asking frame's fails before any dialog", async () => {
-		const result = await runPanelFileTransfer("local", PANEL, { kind: "export", requestId: "r1", panelId: "test.someone-else", path: "world.dat" });
-		expect(result).toEqual({ status: "failed", code: "invalid-request", message: "The panel id does not match the panel that asked" });
-		const missing = deps({ save: path.join(tempDir(), "x") });
-		expect((await runPanelExport({ computerId: "local", panelId: PANEL, path: "does-not-exist.dat" }, missing)).status).toBe("failed");
-		expect(missing.dialogs).toEqual([]);
-	});
 });

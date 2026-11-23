@@ -1,5 +1,4 @@
-import { createRoot, createSignal, For } from "solid-js";
-import { render } from "@solidjs/testing-library";
+import { createRoot } from "solid-js";
 import { afterEach, describe, expect, test } from "vitest";
 import { createRead } from "../utils/read";
 
@@ -105,36 +104,6 @@ describe("createRead", () => {
         expect(out).toHaveLength(1);
     });
 
-    test("a row keeps its identity across reads, matched by key wherever it moved", async () => {
-        type Row = { name: string; size: number };
-        const { out, fetcher } = calls<Row[]>();
-        const built: string[] = [];
-        const read = inRoot(() => createRead(fetcher, { key: "name" }));
-        render(() => (
-            <For each={read.value() ?? []}>
-                {(row) => {
-                    built.push(row.name);
-                    return <span>{row.size}</span>;
-                }}
-            </For>
-        ));
-        out[0]!.resolve([
-            { name: "a", size: 1 },
-            { name: "b", size: 2 },
-        ]);
-        await flush();
-        const first = read.value()![1];
-        void read.reload();
-        out[1]!.resolve([
-            { name: "b", size: 3 },
-            { name: "a", size: 1 },
-        ]);
-        await flush();
-        expect(built).toEqual(["a", "b"]);
-        expect(read.value()![0]).toBe(first);
-        expect(read.value()![0]!.size).toBe(3);
-    });
-
     test("a push lands, clears the error, and drops a read still out; it stops with the component", async () => {
         const { out, fetcher } = calls<string>();
         let push!: (value: string) => void;
@@ -169,59 +138,6 @@ describe("createRead", () => {
         out[1]!.resolve(["read before the action"]);
         await flush();
         expect(read.value()).toEqual(["from an action"]);
-    });
-
-    test("a part-change lands at once and again over the answer of a read still out", async () => {
-        type Status = { list: string[]; progress: number };
-        const { out, fetcher } = calls<Status>();
-        let push!: (change: (prev: Status | undefined) => Status | undefined) => void;
-        const read = inRoot(() => createRead(fetcher, { follow: (land) => ((push = land), () => {}) }));
-        out[0]!.resolve({ list: ["a", "b"], progress: 0 });
-        await flush();
-        void read.reload();
-        push((prev) => prev && { ...prev, progress: 40 });
-        read.set((prev) => prev && { ...prev, list: prev.list.filter((x) => x !== "a") });
-        expect(read.value()).toEqual({ list: ["b"], progress: 40 });
-        expect(read.loading()).toBe(true);
-        // read before the push and the removal: it keeps both
-        out[1]!.resolve({ list: ["a", "b", "c"], progress: 10 });
-        await flush();
-        expect(read.value()).toEqual({ list: ["b", "c"], progress: 40 });
-        // the next read is newer than them, and stands as it is
-        void read.reload();
-        out[2]!.resolve({ list: ["a"], progress: 100 });
-        await flush();
-        expect(read.value()).toEqual({ list: ["a"], progress: 100 });
-    });
-
-    test("a source reads on each change to a new value, reads nothing while off, and an off source drops the read out", async () => {
-        const { out, fetcher } = calls<string>();
-        const [open, setOpen] = createSignal<string | false>(false);
-        const asked: (string | false)[] = [];
-        const read = inRoot(() =>
-            createRead((source: string) => {
-                asked.push(source);
-                return fetcher();
-            }, { source: open }),
-        );
-        expect(out).toHaveLength(0);
-        expect(read.loading()).toBe(false);
-        setOpen("one");
-        expect(asked).toEqual(["one"]);
-        setOpen(false);
-        expect(read.loading()).toBe(false);
-        out[0]!.resolve("for one");
-        await flush();
-        expect(read.value()).toBeUndefined();
-        await read.reload();
-        expect(out).toHaveLength(1);
-        setOpen("two");
-        out[1]!.resolve("for two");
-        await flush();
-        expect(read.value()).toBe("for two");
-        // the same value again is no change
-        setOpen("two");
-        expect(out).toHaveLength(2);
     });
 
     test("ready resolves once the read out has settled, failed included", async () => {

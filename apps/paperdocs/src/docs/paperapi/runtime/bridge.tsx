@@ -607,12 +607,6 @@ interface ServiceClient {
             <PaperText preset="body" as="p">
                 A mirror's first read that fails is shown as one of the panel's problems (see <PaperCode>problemsApi</PaperCode>), under the key <PaperCode>paperapi:state</PaperCode>, and kept in <PaperCode>state.error()</PaperCode>. The problem goes away once a later read gets the state.
             </PaperText>
-
-            <PaperText preset="subheader" as="h2" id="deprecated">Deprecated</PaperText>
-            <PaperText preset="body" as="p">
-                <PaperCode>serviceApi.call</PaperCode> and <PaperCode>serviceApi.on</PaperCode>, and <PaperCode>createPanelBridge</PaperCode>'s <PaperCode>call</PaperCode>, <PaperCode>calls</PaperCode> and <PaperCode>on</PaperCode>, reach a service by names as strings, with nothing checked.
-                They are removed once Game Server and Agents use the contract. Don't use them in new code.
-            </PaperText>
         </PaperFlex>
     );
 }

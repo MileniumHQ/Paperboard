@@ -9,7 +9,7 @@ import { tempDataDir, tempDir } from "../platform/app/support/temp";
 
 // an editor whose note is unsaved until Save, and asks before it goes
 const NOTES = {
-    source: path.join(import.meta.dir, "../shell/support/notes-panel"),
+    source: path.join(import.meta.dir, "support/notes-panel"),
     pages: ["panel.ts"],
     service: "service.ts",
     html: ["index.html"],

@@ -4,7 +4,7 @@
 import path from "path";
 import fs from "fs";
 import type { PanelManifest } from "@mileniumhq/paperapi/protocol";
-import { moveFileSafe, panelFilesDirName, LimitError } from "../core/storage";
+import { moveFileSafe, panelFilesDirName } from "../core/storage";
 import { validatePanelManifest } from "../panels/panelManifest";
 import { ProgressCallback, streamToFileWithProgress } from "../packages/download";
 import { logger } from "../core/logger";
@@ -86,11 +86,10 @@ export class PanelInstaller {
     }
 
     // a panel's operation lock: install, restart, uninstall, backup and
-    // restore exclude each other; installs also count against the limit
-    private async locked<T>(cleanId: string, fn: () => Promise<T>, limit = false): Promise<T> {
+    // restore exclude each other
+    private async locked<T>(cleanId: string, fn: () => Promise<T>): Promise<T> {
         const key = `panel:${cleanId}`;
         if (this.operations.has(key)) throw new RpcError(ErrorCode.CONFLICT, `An operation on ${cleanId} is already running`);
-        if (limit && this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
         this.operations.add(key);
         try {
             return await fn();
@@ -162,7 +161,7 @@ export class PanelInstaller {
         onProgress?: ProgressCallback,
     ): Promise<PanelManifest> {
         const cleanId = requirePanelId(panelId);
-        return this.locked(cleanId, () => this.installPanelRelease(cleanId, expected, onProgress), true);
+        return this.locked(cleanId, () => this.installPanelRelease(cleanId, expected, onProgress));
     }
 
     /**

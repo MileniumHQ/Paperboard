@@ -3,23 +3,18 @@
 // panel frame. Checked again by every side that acts on the address (the
 // renderer before routing it, main before listening), never trusted from
 // the side that sent it.
-import { shape, type Infer } from "@mileniumhq/paperapi";
-
 export const LOOPBACK_REDIRECT_TIMEOUT_MS = 15 * 60_000;
 export const LOOPBACK_REDIRECT_URI_MAX = 2048;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-const failureCode = shape.oneOf("invalid-request", "unavailable", "in-use", "busy", "canceled", "timeout", "failed");
-export type LoopbackRedirectFailureCode = Infer<typeof failureCode>;
+export type LoopbackRedirectFailureCode = "invalid-request" | "unavailable" | "in-use" | "busy" | "canceled" | "timeout" | "failed";
 
-export const panelLoopbackRedirectResult = shape.either(
+export type PanelLoopbackRedirectResult =
     // url is a secret the panel needs: the redirect carries its sign-in's
     // code, which only the panel frame that asked is handed
-    shape.object({ status: shape.oneOf("caught"), url: shape.text() }),
-    shape.object({ status: shape.oneOf("local") }),
-    shape.object({ status: shape.oneOf("failed"), code: failureCode, message: shape.text() }),
-);
-export type PanelLoopbackRedirectResult = Infer<typeof panelLoopbackRedirectResult>;
+    | { status: "caught"; url: string }
+    | { status: "local" }
+    | { status: "failed"; code: LoopbackRedirectFailureCode; message: string };
 
 /**
  * The redirect address as a URL, or why it is refused: http, a loopback

@@ -3,7 +3,7 @@
 import type { Server } from "../../service/server";
 import type { BlockCommandDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition } from "../../service/api";
 import { needsCall, playerEvents, runGameCall } from "../../service/blocks";
-import { listRoster } from "../../service/playerLists";
+import { listListed } from "../../service/playerLists";
 import { listPlayerStats } from "../../service/playerStats";
 import { listWorlds, resolveLevelName } from "../../service/worlds";
 import { installLatestPlugin, listInstalledPlugins, livePluginInstallDeps, pluginTarget, uninstallAllPlugins } from "../../service/plugins";
@@ -179,7 +179,7 @@ export function minecraftBlocks(ctx: Server): BlockSet {
     const world = { type: "text", name: "World" } as const;
     const roster = (id: string, name: string, icon: string, flag: "whitelisted" | "op" | "banned"): BlockValueDefinition => ({
         id, name, category: "Players", icon, type: "list<player>",
-        read: async () => (await listRoster(ctx)).filter((entry) => entry[flag]).map((entry) => entry.name),
+        read: async () => (await listListed(ctx)).filter((entry) => entry[flag]).map((entry) => entry.name),
     });
     const rules = gameruleBlocks(ctx);
     return {

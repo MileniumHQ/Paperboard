@@ -1,7 +1,6 @@
-// Actions API v2 for the Blocks panel. A panel registers its types,
+// Blocks API for the Blocks panel. A panel registers its types,
 // commands, values and events (see blocksSchema.ts); the Blocks panel lists
 // them, runs commands, reads values and properties, and listens for events.
-// It is its own registry: Actions (v1, actionsApi) keeps working untouched.
 import { getTransport, getPanelId } from "./ipc";
 import type { EventPayload } from "./protocol";
 import {

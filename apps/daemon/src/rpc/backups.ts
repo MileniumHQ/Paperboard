@@ -3,7 +3,7 @@ import type { RpcContext } from "./context";
 import { rpcModule } from "./dispatch";
 import { resourcePanelId } from "../security/principal";
 import { BackupService } from "../backups/service";
-import { actionsRegistry, blocksRegistry } from "../server/actions";
+import { blocksRegistry } from "../server/actions";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // one service per engine; it lives as long as the engine does
@@ -18,19 +18,16 @@ export function backupServiceFor(engine: PaperCraneEngine): BackupService {
     return service;
 }
 
-// a panel reaches only its own backups: the token claim names the panel
-function panelFor({ panelId, sourceId }: { panelId: string; sourceId?: string }, action: string, ctx: RpcContext): string {
-    const owner = resourcePanelId(ctx.callerPanelId(), panelId, action)!;
+function panelFor({ panelId, sourceId }: { panelId: string; sourceId?: string }, ctx: RpcContext): string {
+    const owner = resourcePanelId(ctx.callerPanelId(), panelId)!;
     return sourceId === undefined ? owner : backupServiceFor(ctx.engine).sources.resolve(owner, sourceId);
 }
 
 // A backup or restore stops its panel's service while it runs. When that
-// service asked for it from inside an action or a block (duringCall names the
-// call), it is gone before it can answer, so the call is answered with the
-// outcome. Call ids are unique across both registries; each checks that the
-// call went to this connection.
+// service asked for it from inside a block (duringCall names the call), it
+// is gone before it can answer, so the call is answered with the outcome.
 async function carrying<T>(callId: string | undefined, ctx: RpcContext, operation: () => Promise<T>): Promise<T> {
-    const finish = callId === undefined ? null : actionsRegistry.carryCall(callId, ctx.ws) ?? blocksRegistry.carryCall(callId, ctx.ws);
+    const finish = callId === undefined ? null : blocksRegistry.carryCall(callId, ctx.ws);
     try {
         const result = await operation();
         finish?.({ result });
@@ -42,12 +39,12 @@ async function carrying<T>(callId: string | undefined, ctx: RpcContext, operatio
 }
 
 // Locations are the user's choice, made in the shell: every location
-// action needs host authority (PaperAPI's protocol/rpc.ts). Backups themselves are panel-scoped.
+// action needs host authority (PaperAPI's protocol/rpc.ts).
 const backups = (ctx: RpcContext) => backupServiceFor(ctx.engine);
 
 export const backupsRpc = rpcModule({
-    "backup:source-define": ({ panelId, source }, ctx, action) => {
-        backups(ctx).sources.define(resourcePanelId(ctx.callerPanelId(), panelId, action)!, source);
+    "backup:source-define": ({ panelId, source }, ctx) => {
+        backups(ctx).sources.define(resourcePanelId(ctx.callerPanelId(), panelId)!, source);
         return { success: true };
     },
     "backup:destinations": (_, ctx) => ({ destinations: backups(ctx).listDestinations() }),
@@ -60,30 +57,30 @@ export const backupsRpc = rpcModule({
         await backups(ctx).removeDestination(destinationId);
         return { success: true };
     },
-    "backup:panel-destination-set": async (params, ctx, action) => {
-        const panelId = panelFor(params, action, ctx);
+    "backup:panel-destination-set": async (params, ctx) => {
+        const panelId = panelFor(params, ctx);
         await backups(ctx).setPanelDestination(panelId, params.destinationId);
         return backups(ctx).status(panelId);
     },
-    "backup:status": (params, ctx, action) => backups(ctx).status(panelFor(params, action, ctx)),
+    "backup:status": (params, ctx) => backups(ctx).status(panelFor(params, ctx)),
     // every running backup of the panel's data, its sources included
-    "backup:progress": ({ panelId }, ctx, action) => ({ progress: backups(ctx).progressFor(resourcePanelId(ctx.callerPanelId(), panelId, action)!) }),
-    "backup:create": (params, ctx, action) => {
-        const panelId = panelFor(params, action, ctx);
+    "backup:progress": ({ panelId }, ctx) => ({ progress: backups(ctx).progressFor(resourcePanelId(ctx.callerPanelId(), panelId)!) }),
+    "backup:create": (params, ctx) => {
+        const panelId = panelFor(params, ctx);
         return carrying(params.duringCall, ctx, () => backups(ctx).create(panelId, params.label ?? null));
     },
-    "backup:list": async (params, ctx, action) => ({ backups: await backups(ctx).list(panelFor(params, action, ctx)) }),
-    "backup:restore": (params, ctx, action) => {
-        const panelId = panelFor(params, action, ctx);
+    "backup:list": async (params, ctx) => ({ backups: await backups(ctx).list(panelFor(params, ctx)) }),
+    "backup:restore": (params, ctx) => {
+        const panelId = panelFor(params, ctx);
         return carrying(params.duringCall, ctx, () => backups(ctx).restore(panelId, params.backupId));
     },
-    "backup:schedule-set": async (params, ctx, action) => {
-        const panelId = panelFor(params, action, ctx);
+    "backup:schedule-set": async (params, ctx) => {
+        const panelId = panelFor(params, ctx);
         await backups(ctx).setSchedule(panelId, params.schedule);
         return backups(ctx).status(panelId);
     },
-    "backup:delete": async (params, ctx, action) => {
-        await backups(ctx).remove(panelFor(params, action, ctx), params.backupId);
+    "backup:delete": async (params, ctx) => {
+        await backups(ctx).remove(panelFor(params, ctx), params.backupId);
         return { success: true };
     },
 }, "Backup operation failed");

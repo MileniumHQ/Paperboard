@@ -56,13 +56,18 @@ export async function installPanelFiles(dataDir: string, panel: PanelFixture): P
 	return dir;
 }
 
-// A minimal service: registers the given actions source (an object literal
-// of `name: async (ctx, input) => ...` entries) and reports ready.
-export function serviceSource(body: { actions?: string; calls?: string; extra?: string; options?: string } = {}): string {
-	return `import { definePanelService } from ${JSON.stringify(PAPERAPI)};
+// A minimal service: registers the given calls source (an object literal
+// of `name: async (ctx) => ...` entries) on a contract and reports ready.
+export function serviceSource(body: { calls?: string; extra?: string; options?: string } = {}): string {
+	return `import { defineContract, definePanelService, getPanelId, shape } from ${JSON.stringify(PAPERAPI)};
 ${body.extra ?? ""}
+const __calls: Record<string, (ctx: any) => any> = ${body.calls ?? "{}"};
+const __contract = defineContract(getPanelId(), {
+	calls: Object.fromEntries(Object.keys(__calls).map((k) => [k, { output: shape.json() }])),
+});
 definePanelService({
-	${body.calls !== undefined ? `calls: ${body.calls},` : `actions: ${body.actions ?? "{}"},`}
+	contract: __contract,
+	calls: Object.fromEntries(Object.entries(__calls).map(([k, fn]) => [k, (_input: unknown, ctx: any) => fn(ctx)])),
 	${body.options ?? ""}
 });
 `;

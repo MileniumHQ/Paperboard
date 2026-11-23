@@ -6,7 +6,6 @@ import { PANEL_ID } from "./panelId";
 definePanelService({
     id: PANEL_ID,
     state: { startedAt: Date.now(), noteAtStart: "" },
-    actions: {},
     onInit: async (ctx) => {
         ctx.setState({ noteAtStart: (await fileApi.read("note.txt", PANEL_ID)) ?? "" });
     },

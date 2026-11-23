@@ -2,8 +2,7 @@
 // first-party convention: manifest shape (0.x version, no icon until you add
 // branding/), PaperProvider and PaperPanel bootstrap, an explicit PANEL_ID in
 // the UI, service and widget, bridge-mirrored service state with loading and
-// failure states, hermetic tests, a UI standards guard and one tested
-// pure-logic unit.
+// failure states, hermetic tests and one tested pure-logic unit.
 //
 // Three choices shape the panel: a background service, a Home widget (which
 // mirrors the service, so it needs one) and a store listing starter. The

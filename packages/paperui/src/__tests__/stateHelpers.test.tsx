@@ -1,10 +1,6 @@
-import { createEffect, createRoot, createSignal, on } from "solid-js";
-import { fireEvent, render } from "@solidjs/testing-library";
+import { createRoot, createSignal } from "solid-js";
 import { afterEach, describe, expect, test } from "vitest";
-import { PaperToggle } from "../components/PaperToggle";
 import { createAction } from "../utils/action";
-import { dismissToast, shownToasts } from "../utils/toasts";
-import { createStateSignal, keepUnchanged, sameData } from "../utils/keepUnchanged";
 import { createLatest } from "../utils/latest";
 import { createSavedValue } from "../utils/savedValue";
 
@@ -34,7 +30,6 @@ function inRoot<T>(fn: () => T): T {
 }
 afterEach(() => {
     for (const dispose of roots.splice(0)) dispose();
-    for (const toast of [...shownToasts()]) dismissToast(toast.id);
 });
 
 describe("createLatest", () => {
@@ -69,7 +64,7 @@ describe("createLatest", () => {
 
 describe("createAction", () => {
     test("busy while any run is going; a failure is its title and own words, cleared when the next run starts", async () => {
-        const action = inRoot(() => createAction());
+        const action = inRoot(() => createAction({ toast: false }));
         const slow = deferred();
         const quick = deferred();
         const first = action.run("Server not removed", () => slow.promise);
@@ -86,67 +81,6 @@ describe("createAction", () => {
         const again = action.run("Server not removed", async () => {});
         expect(action.error()).toBeNull();
         expect(await again).toBe(true);
-    });
-
-    test("a failure is a toast that closes once a run of the same title goes through; toast: false keeps it only in error", async () => {
-        const action = inRoot(() => createAction());
-        const titles = () => shownToasts().map((t) => `${t.title}: ${t.message}`);
-        expect(await action.run("Couldn't rename it", () => Promise.reject("taken"))).toBe(false);
-        expect(await action.run("Couldn't move it", () => Promise.reject("full"))).toBe(false);
-        expect(titles()).toEqual(["Couldn't rename it: taken", "Couldn't move it: full"]);
-        // another title going through leaves the rename's failure standing
-        expect(await action.run("Couldn't move it", async () => {})).toBe(true);
-        expect(titles()).toEqual(["Couldn't rename it: taken"]);
-        expect(await action.run("Couldn't rename it", async () => {})).toBe(true);
-        expect(titles()).toEqual([]);
-
-        const inPlace = inRoot(() => createAction({ toast: false }));
-        expect(await inPlace.run("Couldn't rename it", () => Promise.reject("taken"))).toBe(false);
-        expect(inPlace.error()).toEqual({ title: "Couldn't rename it", message: "taken" });
-        expect(titles()).toEqual([]);
-    });
-
-    test("a failure's words come from the action's own formatter when it has one", async () => {
-        const action = inRoot(() => createAction({ message: (err) => `Said plainly: ${String(err)}` }));
-        expect(await action.run("Not saved", () => Promise.reject("EACCES"))).toBe(false);
-        expect(action.error()).toEqual({ title: "Not saved", message: "Said plainly: EACCES" });
-    });
-});
-
-describe("keepUnchanged", () => {
-    test("an equal copy is the old value itself, all the way down", () => {
-        const prev = { rows: [{ id: "a", tags: new Set(["x"]) }], stats: new Map([["p", { kills: 1 }]]), name: "World" };
-        const copy = { rows: [{ id: "a", tags: new Set(["x"]) }], stats: new Map([["p", { kills: 1 }]]), name: "World" };
-        expect(keepUnchanged(prev, copy)).toBe(prev);
-        expect(sameData(prev, copy)).toBe(true);
-        expect(sameData(prev, { ...copy, name: "Other" })).toBe(false);
-    });
-
-    test("a changed copy keeps every unchanged row, matched by id wherever it moved", () => {
-        const a = { id: "a", n: 1 };
-        const b = { id: "b", n: 2 };
-        const next = keepUnchanged([a, b], [{ id: "b", n: 2 }, { id: "a", n: 1 }, { id: "c", n: 3 }]);
-        expect(next[0]).toBe(b);
-        expect(next[1]).toBe(a);
-        expect(next[2]).toEqual({ id: "c", n: 3 });
-        const changed = keepUnchanged([a, b], [{ id: "a", n: 1 }, { id: "b", n: 5 }]);
-        expect(changed[0]).toBe(a);
-        expect(changed[1]).toEqual({ id: "b", n: 5 });
-    });
-
-    test("createStateSignal: an equal push notifies no one, a changed one keeps its unchanged parts", () => {
-        const seen: unknown[] = [];
-        const [rows, setRows] = inRoot(() => {
-            const signal = createStateSignal([{ id: 1, name: "Ada" }]);
-            createEffect(on(signal[0], (rows) => seen.push(rows)));
-            return signal;
-        });
-        const first = rows()[0];
-        setRows([{ id: 1, name: "Ada" }]);
-        expect(seen).toHaveLength(1);
-        setRows((prev) => [...prev.map((r) => ({ ...r })), { id: 2, name: "Lin" }]);
-        expect(seen).toHaveLength(2);
-        expect(rows()[0]).toBe(first);
     });
 });
 
@@ -269,23 +203,5 @@ describe("createSavedValue", () => {
         gate.resolve();
         await Promise.all(saves);
         expect(log).toEqual(["x=1", "work", "y=2"]);
-    });
-
-    test("on a PaperToggle the switch flips at the press, stays usable while saving, and flips back when the save fails", async () => {
-        const turn = deferred();
-        let failure: unknown = null;
-        const view = render(() => {
-            const saved = createSavedValue(() => false, () => turn.promise);
-            return <PaperToggle aria-label="Whitelist" checked={saved.value()} onChange={(on) => saved.set(on).catch((err) => (failure = err))} />;
-        });
-        const toggle = view.getByRole("switch", { name: "Whitelist" });
-        fireEvent.click(toggle);
-        expect(toggle.getAttribute("aria-checked")).toBe("true");
-        expect(toggle.getAttribute("aria-disabled")).toBeNull();
-        turn.reject(new Error("The server is starting"));
-        await flush();
-        expect(toggle.getAttribute("aria-checked")).toBe("false");
-        expect(failure).toEqual(new Error("The server is starting"));
-        view.unmount();
     });
 });

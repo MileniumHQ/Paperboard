@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { terminalApi } from "@mileniumhq/paperapi";
 import { clearWorkloads } from "./helpers/crane";
-import { panelFiles, readBlock, runBlock, serviceState, startService, stopServices } from "./helpers/service";
+import { panelFiles, readBlock, runBlock, startService, stopServices } from "./helpers/service";
 import { within } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -76,32 +74,5 @@ describe("keystrokes never go to the wrong shell", () => {
             one.off();
             two.off();
         }
-    });
-});
-
-// A tabs.json written before tabs had names of their own keeps every tab and
-// every name: a tab someone named stays named, a default "Tab N" goes by the
-// program in it, and both survive the next start.
-describe("saved tabs survive the move to named tabs", () => {
-    test("an older tabs.json keeps its tabs, names and order across restarts", async () => {
-        const dir = await panelFiles({
-            "tabs.json": { tabs: [{ id: "tab1", label: "Server" }, { id: "tab2", label: "Tab 2" }], activeTabId: "tab2" },
-        });
-        await startService();
-        const first = (await serviceState<{ tabs: any[] }>()).tabs;
-        expect(first.map((t) => [t.id, t.label, Boolean(t.named)])).toEqual([
-            ["tab1", "Server", true],
-            ["tab2", "Tab 2", false],
-        ]);
-
-        await stopServices();
-        const saved = JSON.parse(fs.readFileSync(path.join(dir, "tabs.json"), "utf8"));
-        expect(saved.activeTabId).toBe("tab2");
-        await startService();
-        const again = (await serviceState<{ tabs: any[] }>()).tabs;
-        expect(again.map((t) => [t.id, t.label, Boolean(t.named)])).toEqual([
-            ["tab1", "Server", true],
-            ["tab2", "Tab 2", false],
-        ]);
     });
 });

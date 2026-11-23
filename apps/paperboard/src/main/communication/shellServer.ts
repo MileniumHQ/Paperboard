@@ -1,12 +1,8 @@
-// The one way the shell's calls reach main's handlers: a call's args are
-// read against its declared shape (shared/shellContract.ts), and only then
-// does its handler run. Electron IPC (shelldata.ts) and browser mode
-// (browserHost.ts) serve through it, each after its own caller check, so a
-// host serves exactly the channels the contract gives it: one it misses, or
-// one it adds, stops it from starting.
+// The one way the shell's calls reach main's handlers. Electron IPC
+// (shelldata.ts) and browser mode (browserHost.ts) serve through it, each
+// after its own caller check, so a host serves exactly the channels the
+// contract gives it: one it misses, or one it adds, stops it from starting.
 import {
-    readSendArgs,
-    readShellArgs,
     shellChannels,
     type BrowserShellCall,
     type BrowserShellSend,
@@ -24,9 +20,9 @@ export type SendHandlers<K extends ShellSend> = { readonly [P in K]: (args: Send
 export interface ShellServer<C> {
     readonly calls: readonly ShellCall[];
     readonly sends: readonly ShellSend[];
-    /** answers a call the host serves; rejects with why its args were refused */
+    /** answers a call the host serves */
     call(channel: ShellCall, args: unknown, caller: C): Promise<unknown>;
-    /** runs a send the host serves; throws why its args were refused */
+    /** runs a send the host serves */
     send(channel: ShellSend, args: unknown): void;
 }
 
@@ -57,12 +53,12 @@ export function shellServer<C>(
         call: async (channel, args, caller) => {
             const handler = calls[channel];
             if (!handler) throw unserved(channel);
-            return handler(readShellArgs(channel, args), caller);
+            return handler(args as never, caller);
         },
         send: (channel, args) => {
             const handler = sends[channel];
             if (!handler) throw unserved(channel);
-            handler(readSendArgs(channel, args));
+            handler(args as never);
         },
     };
 }

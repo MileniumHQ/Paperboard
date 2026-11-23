@@ -23,11 +23,9 @@ afterAll(() => {
 
 const original = globalThis.WebSocket;
 
-// The one exception: what a browser test started itself on loopback, on a
-// port its helper registered here: the headless Chrome's DevTools
-// (browserFixture.ts), and a test daemon, which the relay in front of the
-// Blocks service reaches (helpers/crane.ts). A relay hands its headers in
-// the second argument, as Bun's WebSocket takes them.
+// The one exception: a test daemon started on loopback, on a port its helper
+// registered here (helpers/crane.ts). A relay hands its headers in the second
+// argument, as Bun's WebSocket takes them.
 const ALLOWED = Symbol.for("paperboard.blocks.test.ports");
 const allowedPorts: Set<number> = ((globalThis as any)[ALLOWED] ??= new Set<number>());
 

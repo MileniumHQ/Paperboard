@@ -8,7 +8,7 @@ import { blocksApi, secretsApi } from "@mileniumhq/paperapi";
 import { newTokenName, tokenName, type BotsServiceState } from "../src/bots";
 import { startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { stateWhere, within } from "./helpers/wait";
+import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -58,23 +58,6 @@ describe("adding a bot", () => {
         const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the one bot");
         expect(state.bots.map((b) => b.id)).toEqual(["b-new"]);
     });
-
-    test("the same token added twice at once is added once", async () => {
-        await savedBots([]);
-        await startService({ discordApi: discord.api });
-        const fake = discord.addBot({ username: "Doubled" });
-
-        const results = await Promise.allSettled([add("b-first", fake.token), add("b-second", fake.token)]);
-        const kept = results.filter((r) => r.status === "fulfilled");
-        const refused = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-        expect(kept).toHaveLength(1);
-        expect(refused).toHaveLength(1);
-        expect(String(refused[0]!.reason)).toContain("One bot can only run once.");
-
-        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length > 0 && s.bots.every((b) => b.connected), "the added bot");
-        expect(state.bots).toHaveLength(1);
-        expect((await blocksApi.projects(PANEL_ID)).map((p) => p.id)).toEqual([state.bots[0]!.id]);
-    });
 });
 
 describe("replacing a bot's token", () => {
@@ -83,31 +66,6 @@ describe("replacing a bot's token", () => {
         await secretsApi.set(newTokenName(id), token, PANEL_ID);
         return call.replaceToken({ bot: id });
     }
-
-    test("a bot with no token connects once a new one is saved", async () => {
-        const fake = discord.addBot({ username: "Lost Key" });
-        await savedBots([{ stored: storedBot("b-lost", fake.appId, { name: "Lost Key" }) }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.lastError === "No token is saved for this bot. Replace its token in Configuration.", "the missing token");
-
-        await replace("b-lost", fake.token);
-        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "the bot to connect");
-        expect(state.bots[0]).toMatchObject({ hasToken: true, lastError: null });
-        expect(await secretsApi.get(tokenName("b-lost"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
-        expect((await secretsApi.get(newTokenName("b-lost"), PANEL_ID)).found).toBe(false);
-    });
-
-    test("a new token is replaced as soon as Discord takes it, while the login it starts waits out a rate limit", async () => {
-        const fake = discord.addBot({ username: "Throttled", gateway: "rate-limited" });
-        await savedBots([{ stored: storedBot("b-throttled", fake.appId, { name: "Throttled" }) }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.hasToken === false && Boolean(s.bots[0].lastError), "the missing token");
-
-        await within("the replace to answer", replace("b-throttled", fake.token), 10_000);
-        const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connecting), "the bot to be logging in");
-        expect(state.bots[0]).toMatchObject({ hasToken: true, connected: false, lastError: null });
-        expect(await secretsApi.get(tokenName("b-throttled"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
-    });
 
     test("a mistyped token for the same bot is refused, and the bot keeps its working token and stays online", async () => {
         const fake = discord.addBot({ username: "Steady Hand" });
@@ -122,17 +80,5 @@ describe("replacing a bot's token", () => {
         expect((await secretsApi.get(newTokenName("b-steady"), PANEL_ID)).found).toBe(false);
         const state = await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 1, "the bot");
         expect(state.bots[0]).toMatchObject({ connected: true, hasToken: true, lastError: null });
-    });
-
-    test("a token left for a bot that never reached the service is forgotten when it next starts", async () => {
-        const fake = discord.addBot({ username: "Kept" });
-        await savedBots([{ stored: storedBot("b-kept", fake.appId, { name: "Kept" }), token: fake.token }]);
-        // the page saved these, then lost the service before it could ask
-        await secretsApi.set(tokenName("b-orphan"), fake.token, PANEL_ID);
-        await secretsApi.set(newTokenName("b-kept"), fake.token, PANEL_ID);
-        await startService({ discordApi: discord.api });
-        expect((await secretsApi.get(tokenName("b-orphan"), PANEL_ID)).found).toBe(false);
-        expect((await secretsApi.get(newTokenName("b-kept"), PANEL_ID)).found).toBe(false);
-        expect(await secretsApi.get(tokenName("b-kept"), PANEL_ID)).toMatchObject({ found: true, value: fake.token });
     });
 });

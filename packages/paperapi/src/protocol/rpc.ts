@@ -1,25 +1,12 @@
-// The daemon's RPC, declared once: each action's params and what it answers.
-// The daemon checks a call's params against its shape before the handler
-// runs, and every client (the shell, the CLI, PaperAPI's own transport)
-// checks each answer it reads, so neither side casts.
-//
-// Version skew: a client and a daemon of different releases talk to each
-// other, and the protocol version only changes when the wire does. So the
-// shapes here never refuse what the daemon used to serve: fields a shape
-// doesn't name pass untouched (token, v, and whatever a newer peer adds), an
-// optional field given null is left out, numbers given as text are those
-// numbers. A shape refuses only what the old daemon would have refused or
-// misread. An answer's shape requires only what its callers read, and what
-// every daemon since 0.1 (protocol 2) sends. A wire field is never renamed
-// here: a change of meaning is a new field, or a new protocol version.
-import { shape, type Infer, type ObjectOf, type ObjectShape, type Shape } from "../shape";
+// The daemon's RPC, declared once: each action's params shape (checked by the
+// daemon before its handler runs) and its typed result.
+import { shape, type ObjectOf, type ObjectShape, type Shape } from "../shape";
 import type { WidgetDeclaration } from "../widgetManifest";
 import type { BackupLocation, BackupLocationUsage, BackupProgress, BackupRecord, BackupSchedule, BackupSource, NewBackupLocation } from "../backups";
 import type { PortClaim, PortPolicy } from "../ports";
 import type { PanelProblem } from "../problemShape";
 import type { GpuInfo, UsageReport } from "../system";
 import type { InstalledPackageRecord, PendingPackageUpdate } from "../package";
-import type { ActionInfo, ProjectInfo } from "../actions";
 import type { BlockInfo, BlockProjectInfo } from "../blocks";
 import type { BlockSchema } from "../blocksSchema";
 import type { InvalidPanel } from "../panels";
@@ -90,17 +77,37 @@ export interface BackupStatusAnswer {
     schedule: BackupSchedule | null;
 }
 
-// an answer whose success its caller reads
-const success = object({ success: shape.boolean() });
-// an answer nobody reads past its arrival: every daemon says { success: true },
-// and an answer without it is still the call's acknowledgment
-const ack = object({ success: shape.optional(shape.boolean()) });
+export interface RpcIdentityPart {
+    id: string;
+    name: string;
+    version?: string;
+}
+
+export interface RpcOsFacts {
+    osVersion?: string;
+    distroId?: string;
+    distroName?: string;
+    flavor?: RpcIdentityPart;
+    machine?: RpcIdentityPart;
+    board?: string;
+    operator?: RpcIdentityPart;
+}
+
+export interface RpcSystemFacts extends RpcOsFacts {
+    hostname: string;
+    os: string;
+    arch: string;
+}
+
+export interface RpcPairingStatus {
+    active: boolean;
+    computers: Array<{ name?: string; pairedAt: string }>;
+}
+
 const nothing = object({});
 const supervisedId = () => text(128);
 const appId = opt(text(128));
 const panelFilter = opt(text(128));
-const panelManifests = list(typed<PanelManifest>());
-const backupStatus = typed<BackupStatusAnswer>();
 
 // what a registry entry is named: a kind, a dot and the definition's id,
 // optionally inside a project ("server1/command.kick-player")
@@ -138,8 +145,7 @@ const destinationId = (): Shape<string> => ({
     check: (value, at) => (isDestinationId(value) ? null : `Invalid ${at}: ${JSON.stringify(value)}`),
 });
 
-// The event names a socket wants: a list of at most MAX_EVENT_SUBS. An
-// entry that isn't text is passed over, as the daemon always has.
+// The event names a socket wants: a list of at most MAX_EVENT_SUBS.
 const eventNames = (): Shape<string[]> => {
     const reading: Shape<string[]> & { read: (value: unknown) => string[] } = {
         check: (value, at) => {
@@ -154,91 +160,45 @@ const eventNames = (): Shape<string[]> => {
 // a call that names its panel's backups: the panel, and which of its sources
 const backupOf = {
     panelId: panelId(),
-    // a source is named or left out; null names none of its sources
     sourceId: shape.optional(text(64)),
 };
-// a call made from inside an action or a block names it, so its answer survives a stopped service
+// a call made from inside a block names it, so its answer survives a stopped service
 const duringCall = opt(text(64));
-
-// a computer's identity past its OS: what is built on it, what it runs in,
-// its motherboard, and an agent operating it (each only when detected)
-const identityPart = object({ id: text(64), name: text(256), version: opt(text(256)) });
-const osFacts = {
-    osVersion: opt(text()),
-    distroId: opt(text()),
-    distroName: opt(text()),
-    flavor: opt(identityPart),
-    machine: opt(identityPart),
-    board: opt(text(512)),
-    operator: opt(identityPart),
-};
-const systemFacts = {
-    hostname: text(),
-    os: text(),
-    arch: text(),
-    ...osFacts,
-};
-const pairingStatus = object({
-    active: shape.boolean(),
-    computers: list(object({ name: opt(anyText()), pairedAt: anyText() })),
-});
-
-// registry actions answer under both the current and the 0.1 spelling
-const actionRegister = { params: object({ panelId: panelId(), action: opt(text(256)), actions: opt(list(text(256))), schema: shape.optional(shape.json()) }), result: ack };
-const actionUnregister = { params: object({ panelId: panelId(), action: opt(text(256)) }), result: ack };
-const actionCall = {
-    params: object({ panelId: panelId(), action: text(256), args: shape.optional(shape.json()), timeoutMs: shape.optional(callTimeout()) }),
-    result: object({ result: shape.json() }),
-};
-const actionList = { params: object({ panelId: panelFilter }), result: object({ actions: list(typed<ActionInfo>()) }) };
-const actionEmit = { params: object({ panelId: panelId(), event: text(256), payload: shape.optional(shape.json()) }), result: ack };
-const triggerEmit = { params: object({ panelId: panelId(), trigger: text(256), output: shape.optional(shape.json()) }), result: ack };
 
 export interface RpcDefinition {
     readonly params: ObjectShape;
-    readonly result: Shape<any>;
     /** host authority only: a panel's scoped credential is refused before its params are read */
     readonly host?: true;
 }
 
 export const RPC = {
     // auth: the daemon answers these, and checks authority, before any other action
-    "auth:pair": {
-        params: object({ code: shape.optional(shape.json()), clientName: shape.optional(shape.json()) }),
-        result: object({ success: shape.boolean(), token: text(), ...systemFacts }),
-    },
-    // the facts are re-sent on every sign-in so a paired computer's identity stays current
-    "auth:verify": {
-        params: object({ token: shape.optional(shape.json()) }),
-        result: object({ success: shape.boolean(), hostname: opt(text()), os: opt(text()), arch: opt(text()), ...osFacts }),
-    },
-    "auth:scope": { params: object({ panelId: panelId() }), result: ack },
+    "auth:pair": { params: object({ code: shape.optional(shape.json()), clientName: shape.optional(shape.json()) }) },
+    "auth:verify": { params: object({ token: shape.optional(shape.json()) }) },
+    "auth:scope": { params: object({ panelId: panelId() }) },
     // relayTo names the computer that serves the panel; "local" is this one
-    "auth:panel-token": { params: object({ panelId: panelId(), relayTo: shape.optional(text(128)) }), result: object({ token: text() }) },
-    "auth:revoke-self": { params: nothing, result: object({ revoked: shape.boolean() }) },
+    "auth:panel-token": { params: object({ panelId: panelId(), relayTo: shape.optional(text(128)) }) },
+    "auth:revoke-self": { params: nothing },
 
     // the broadcast events this socket hears, replacing what it declared before; [] hears none
-    "events:subscribe": { params: object({ events: eventNames() }), result: object({ success: shape.optional(shape.boolean()), count: shape.optional(numeric()) }) },
+    "events:subscribe": { params: object({ events: eventNames() }) },
 
     // terminals
     "term:create": {
         params: object({ id: supervisedId(), cols: opt(numeric()), rows: opt(numeric()), env: opt(envMap()), cwd: opt(text(1024)), shell: opt(text(1024)) }),
-        result: ack,
     },
-    "term:write": { params: object({ id: supervisedId(), data: text(65536, { empty: true }) }), result: ack },
-    "term:resize": { params: object({ id: supervisedId(), cols: numeric(), rows: numeric() }), result: ack },
-    "term:attach": { params: object({ id: supervisedId() }), result: success },
-    "term:shells": { params: nothing, result: object({ shells: list(typed<TerminalShell>()) }) },
-    "term:exists": { params: object({ id: supervisedId() }), result: object({ running: shape.boolean() }) },
-    "term:destroy": { params: object({ id: supervisedId() }), result: ack },
+    "term:write": { params: object({ id: supervisedId(), data: text(65536, { empty: true }) }) },
+    "term:resize": { params: object({ id: supervisedId(), cols: numeric(), rows: numeric() }) },
+    "term:attach": { params: object({ id: supervisedId() }) },
+    "term:shells": { params: nothing },
+    "term:exists": { params: object({ id: supervisedId() }) },
+    "term:destroy": { params: object({ id: supervisedId() }) },
 
     // processes
     "process:run": {
         params: object({
             id: supervisedId(),
             command: text(),
-            // refuse, don't coerce: a non-string arg is a caller bug, and
-            // silently dropping it would run a different command than asked
             args: opt(list(anyText())),
             cwd: opt(text(1024)),
             env: opt(envMap()),
@@ -247,21 +207,20 @@ export const RPC = {
             consoleInput: shape.optional(shape.boolean()),
             important: shape.optional(shape.boolean()),
         }),
-        result: ack,
     },
-    "process:write": { params: object({ id: supervisedId(), data: text(65536, { empty: true }) }), result: ack },
-    "process:close-input": { params: object({ id: supervisedId() }), result: ack },
-    "process:kill": { params: object({ id: supervisedId(), signal: opt(text(32)) }), result: ack },
-    "process:exists": { params: object({ id: supervisedId() }), result: object({ running: shape.boolean() }) },
-    "process:attach": { params: object({ id: supervisedId() }), result: success },
+    "process:write": { params: object({ id: supervisedId(), data: text(65536, { empty: true }) }) },
+    "process:close-input": { params: object({ id: supervisedId() }) },
+    "process:kill": { params: object({ id: supervisedId(), signal: opt(text(32)) }) },
+    "process:exists": { params: object({ id: supervisedId() }) },
+    "process:attach": { params: object({ id: supervisedId() }) },
 
     // a panel's files; an empty targetPath is the panel's root, where a path names nothing else
-    "file:getPath": { params: object({ targetPath: text(1024, { empty: true }), appId }), result: object({ path: text(Infinity) }) },
-    "file:exists": { params: object({ targetPath: text(1024, { empty: true }), appId }), result: object({ exists: shape.boolean() }) },
-    "file:write": { params: object({ targetPath: text(1024), content: text(FILE_WRITE_MAX, { empty: true }), appId }), result: object({ path: text(Infinity) }) },
-    "file:read": { params: object({ targetPath: text(1024), appId }), result: object({ content: typed<string | null>() }) },
-    "file:delete": { params: object({ targetPath: text(1024), appId }), result: success },
-    "file:clear": { params: object({ appId }), result: success },
+    "file:getPath": { params: object({ targetPath: text(1024, { empty: true }), appId }) },
+    "file:exists": { params: object({ targetPath: text(1024, { empty: true }), appId }) },
+    "file:write": { params: object({ targetPath: text(1024), content: text(FILE_WRITE_MAX, { empty: true }), appId }) },
+    "file:read": { params: object({ targetPath: text(1024), appId }) },
+    "file:delete": { params: object({ targetPath: text(1024), appId }) },
+    "file:clear": { params: object({ appId }) },
     "file:download": {
         params: object({
             downloadId: text(128),
@@ -270,36 +229,22 @@ export const RPC = {
             appId,
             options: opt(object({ sha1: opt(anyText()), sha256: opt(anyText()), checksum: opt(object({ algorithm: anyText(), value: anyText() })) })),
         }),
-        result: object({ path: text(Infinity) }),
     },
 
     // runtime packages
-    "package:isInstalled": { params: object({ packageName: text(128), version: opt(text(64)) }), result: object({ installed: shape.boolean() }) },
-    "package:getIndex": { params: nothing, result: object({ index: shape.record(typed<InstalledPackageRecord | string>()) }) },
-    "package:getPath": { params: object({ packageName: text(128) }), result: object({ path: typed<string>() }) },
+    "package:isInstalled": { params: object({ packageName: text(128), version: opt(text(64)) }) },
+    "package:getIndex": { params: nothing },
+    "package:getPath": { params: object({ packageName: text(128) }) },
     "package:download": {
-        // plan-carrying callers (the updater) give the checksum they expect;
-        // a call without one has the daemon look it up in the registry
         params: object({ packageName: text(128), downloadId: text(128), sha256: opt(text(128)), allowDowngrade: flag() }),
-        // waiting: verified and staged, installed once the workloads
-        // running from the current release stop. Accepted, not completed.
-        result: object({ path: text(Infinity), waiting: shape.optional(typed<PendingPackageUpdate>()) }),
     },
-    "package:pending": { params: nothing, result: object({ updates: list(typed<PendingPackageUpdate>()) }) },
+    "package:pending": { params: nothing },
 
     // panels
-    "panel:list": { params: nothing, result: object({ panels: panelManifests, invalid: shape.optional(list(typed<InvalidPanel>())) }) },
-    "service:count": {
-        params: nothing,
-        result: object({ running: { check: (v, at) => (Number.isSafeInteger(v) && Number(v) >= 0 ? null : `"${at}" must be a count, got ${JSON.stringify(v)}`) } as Shape<number> }),
-        host: true,
-    },
+    "panel:list": { params: nothing },
+    "service:count": { params: nothing, host: true },
     "panel:install": {
-        // version/sha256 are what the caller expects the registry's release
-        // to be, and a disagreement refuses; ifUnused (the updater) holds a
-        // panel whose processes people rely on instead of stopping them
         params: object({ panelId: panelId(), version: opt(text(64)), sha256: opt(text(128)), downloadId: opt(text(128)), allowDowngrade: flag(), ifUnused: flag() }),
-        result: object({ panel: shape.optional(typed<PanelManifest>()), held: shape.optional(object({ processes: list(anyText()) })) }),
         host: true,
     },
     "update:inUse": {
@@ -308,140 +253,201 @@ export const RPC = {
             packages: opt(list(id())),
             downloadId: opt(text(128)),
         }),
-        result: object({ panels: panelManifests, failures: shape.record(anyText()) }),
         host: true,
     },
-    // deleting data is opt-in: only an explicit true deletes it. A 0.1
-    // daemon answers { success } alone.
-    "panel:uninstall": { params: object({ panelId: panelId(), deleteData: flag() }), result: object({ success: shape.boolean(), packagesWarning: opt(anyText()) }) },
-    "panel:restartService": { params: object({ panelId: panelId() }), result: object({ restarted: shape.boolean() }) },
-    // config ids are panel-scoped; an explicit path is a JSON file in the panel's own files
-    "config:get": { params: object({ id: id(), path: opt(configPath()) }), result: object({ data: shape.json() }) },
-    "config:set": { params: object({ id: id(), path: opt(configPath()), data: shape.optional(shape.json()) }), result: success },
+    "panel:uninstall": { params: object({ panelId: panelId(), deleteData: flag() }) },
+    "panel:restartService": { params: object({ panelId: panelId() }) },
+    "config:get": { params: object({ id: id(), path: opt(configPath()) }) },
+    "config:set": { params: object({ id: id(), path: opt(configPath()), data: shape.optional(shape.json()) }) },
 
     // this computer
-    "system:ip": { params: nothing, result: object({ ip: anyText() }) },
-    "system:info": {
-        params: nothing,
-        result: object({ service: opt(text()), version: opt(text()), ip: opt(text()), username: opt(anyText()), ...systemFacts }),
-    },
-    "system:gpus": { params: nothing, result: object({ gpus: list(typed<GpuInfo>()), errors: list(anyText()) }) },
-    "system:usage": { params: nothing, result: typed<UsageReport>() },
-    "system:pairing-start": { params: nothing, result: object({ code: text() }) },
-    "system:pairing-status": { params: nothing, result: pairingStatus },
-    "system:pairing-cancel": { params: nothing, result: object({ cancelled: shape.boolean() }) },
-    // the handler refuses each missing fact with its reason, before anything
-    // is downloaded. A 0.1 daemon answers { success, message } and updates
-    // at once, so nothing else in the answer is required.
+    "system:ip": { params: nothing },
+    "system:info": { params: nothing },
+    "system:gpus": { params: nothing },
+    "system:usage": { params: nothing },
+    "system:pairing-start": { params: nothing },
+    "system:pairing-status": { params: nothing },
+    "system:pairing-cancel": { params: nothing },
     "system:update": {
         params: object({ downloadUrl: opt(anyText()), sha256: opt(anyText()), version: opt(anyText()), signature: opt(anyText()) }),
-        result: object({ accepted: shape.optional(shape.boolean()), status: opt(anyText()), restartRequired: shape.optional(shape.boolean()), message: opt(anyText()) }),
     },
 
-    // the vault: every call names its panel. get and delete answer "not
-    // found" for a name the vault could never hold, so theirs is not checked
-    // here; a secret not found may come without a value
-    "secrets:set": { params: object({ panelId: panelId(), name: anyText(), value: anyText() }), result: success },
-    "secrets:get": { params: object({ panelId: panelId(), name: shape.optional(shape.json()) }), result: object({ found: shape.boolean(), value: shape.optional(shape.nullable(anyText())) }) },
-    "secrets:delete": { params: object({ panelId: panelId(), name: shape.optional(shape.json()) }), result: object({ deleted: shape.boolean() }) },
-    "secrets:list": { params: object({ panelId: panelId() }), result: object({ keys: list(anyText()) }) },
-    "secrets:purge": { params: object({ panelId: panelId() }), result: object({ purged: numeric() }) },
+    // the vault
+    "secrets:set": { params: object({ panelId: panelId(), name: anyText(), value: anyText() }) },
+    "secrets:get": { params: object({ panelId: panelId(), name: shape.optional(shape.json()) }) },
+    "secrets:delete": { params: object({ panelId: panelId(), name: shape.optional(shape.json()) }) },
+    "secrets:list": { params: object({ panelId: panelId() }) },
+    "secrets:purge": { params: object({ panelId: panelId() }) },
 
-    // backups: locations are the user's, chosen in the shell; backups are panel-scoped
-    "backup:source-define": { params: object({ panelId: panelId(), source: typed<BackupSource>() }), result: ack },
-    "backup:destinations": { params: nothing, result: object({ destinations: list(typed<BackupLocation>()) }), host: true },
-    // no problem may be said by leaving it out
-    "backup:destinations-problem": { params: nothing, result: object({ problem: shape.optional(shape.nullable(anyText())) }), host: true },
-    "backup:destinations-recover": { params: nothing, result: object({ keptAs: anyText() }), host: true },
-    "backup:destination-usage": { params: object({ destinationId: destinationId() }), result: typed<BackupLocationUsage>(), host: true },
-    "backup:destination-add": { params: object({ destination: typed<NewBackupLocation>() }), result: typed<BackupLocation>(), host: true },
-    // a Google Drive location signed in again: its new credentials, which the service bounds
+    // backups
+    "backup:source-define": { params: object({ panelId: panelId(), source: typed<BackupSource>() }) },
+    "backup:destinations": { params: nothing, host: true },
+    "backup:destinations-problem": { params: nothing, host: true },
+    "backup:destinations-recover": { params: nothing, host: true },
+    "backup:destination-usage": { params: object({ destinationId: destinationId() }), host: true },
+    "backup:destination-add": { params: object({ destination: typed<NewBackupLocation>() }), host: true },
     "backup:destination-reconnect": {
         params: object({ destinationId: destinationId(), clientId: anyText(), clientSecret: anyText(), refreshToken: anyText() }),
-        result: typed<BackupLocation>(),
         host: true,
     },
-    "backup:destination-remove": { params: object({ destinationId: destinationId() }), result: ack, host: true },
-    // null puts the panel back on the computer's own folder
-    "backup:panel-destination-set": { params: object({ ...backupOf, destinationId: shape.nullable(destinationId()) }), result: backupStatus, host: true },
-    "backup:status": { params: object(backupOf), result: backupStatus },
-    "backup:progress": { params: object({ panelId: panelId() }), result: object({ progress: list(typed<BackupProgress>()) }) },
-    "backup:create": { params: object({ ...backupOf, label: opt(text(BACKUP_LABEL_MAX)), duringCall }), result: typed<BackupRecord>() },
-    "backup:list": { params: object(backupOf), result: object({ backups: list(typed<BackupRecord>()) }) },
-    "backup:restore": { params: object({ ...backupOf, backupId: text(64), duringCall }), result: typed<BackupRecord>() },
-    // only an explicit null removes the routine: a call that leaves it out is refused, never read as a delete
-    "backup:schedule-set": { params: object({ ...backupOf, schedule: typed<unknown>() }), result: backupStatus },
-    "backup:delete": { params: object({ ...backupOf, backupId: text(64) }), result: ack },
+    "backup:destination-remove": { params: object({ destinationId: destinationId() }), host: true },
+    "backup:panel-destination-set": { params: object({ ...backupOf, destinationId: shape.nullable(destinationId()) }), host: true },
+    "backup:status": { params: object(backupOf) },
+    "backup:progress": { params: object({ panelId: panelId() }) },
+    "backup:create": { params: object({ ...backupOf, label: opt(text(BACKUP_LABEL_MAX)), duringCall }) },
+    "backup:list": { params: object(backupOf) },
+    "backup:restore": { params: object({ ...backupOf, backupId: text(64), duringCall }) },
+    "backup:schedule-set": { params: object({ ...backupOf, schedule: typed<unknown>() }) },
+    "backup:delete": { params: object({ ...backupOf, backupId: text(64) }) },
 
-    // ports: claims are panel-scoped; the policy and every claim are the user's
+    // ports
     "ports:claim": {
         params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>() }),
-        result: typed<PortClaim>(),
     },
-    "ports:prepare": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }), result: typed<PortClaim>() },
-    "ports:release": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }), result: ack },
-    "ports:list": { params: object({ panelId: panelId() }), result: object({ claims: list(typed<PortClaim>()) }) },
-    "ports:all": { params: nothing, result: object({ claims: list(typed<PortClaim>()), policy: typed<PortPolicy>() }), host: true },
-    "ports:policy-set": { params: object({ policy: shape.optional(typed<unknown>()) }), result: object({ policy: typed<PortPolicy>() }), host: true },
+    "ports:prepare": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },
+    "ports:release": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },
+    "ports:list": { params: object({ panelId: panelId() }) },
+    "ports:all": { params: nothing, host: true },
+    "ports:policy-set": { params: object({ policy: shape.optional(typed<unknown>()) }), host: true },
 
-    // problems: a panel reports and clears its own; the shell reads every panel's
+    // problems
     "problems:report": {
         params: object({ panelId: panelId(), key: shape.optional(typed<unknown>()), title: shape.optional(typed<unknown>()), message: shape.optional(typed<unknown>()) }),
-        result: ack,
     },
-    "problems:clear": { params: object({ panelId: panelId(), key: shape.optional(typed<unknown>()) }), result: ack },
-    // every problem whose key starts with the prefix: an owner (a bot, a server) that is deleted takes its problems with it
-    "problems:clear-prefix": { params: object({ panelId: panelId(), prefix: shape.optional(typed<unknown>()) }), result: ack },
-    "problems:list": { params: object({ panelId: panelId() }), result: object({ problems: list(typed<PanelProblem>()) }) },
-    "problems:every": { params: nothing, result: object({ panels: shape.record(list(typed<PanelProblem>())) }), host: true },
+    "problems:clear": { params: object({ panelId: panelId(), key: shape.optional(typed<unknown>()) }) },
+    "problems:clear-prefix": { params: object({ panelId: panelId(), prefix: shape.optional(typed<unknown>()) }) },
+    "problems:list": { params: object({ panelId: panelId() }) },
+    "problems:every": { params: nothing, host: true },
 
     // a panel's page says, on its own connection, that it is open; it counts until that connection closes
-    "pages:open": { params: object({ panelId: panelId() }), result: ack },
+    "pages:open": { params: object({ panelId: panelId() }) },
 
-    // Blocks: panels register types, commands, values and events, each named "kind.id"
-    "blocks:register": {
-        params: object({ panelId: panelId(), entry: entry(), schema: blockSchema() }),
-        result: ack,
-    },
-    "blocks:unregister": { params: object({ panelId: panelId(), entry: entry() }), result: ack },
+    // Blocks
+    "blocks:register": { params: object({ panelId: panelId(), entry: entry(), schema: blockSchema() }) },
+    "blocks:unregister": { params: object({ panelId: panelId(), entry: entry() }) },
     "blocks:project-define": {
         params: object({ panelId: panelId(), project: text(64), name: text(128), icon: opt(text(128)), image: opt(text(MAX_PROJECT_IMAGE)) }),
-        result: ack,
     },
-    "blocks:project-remove": { params: object({ panelId: panelId(), project: text(64) }), result: ack },
-    "blocks:projects": { params: object({ panelId: panelFilter }), result: object({ projects: list(typed<BlockProjectInfo>()) }) },
-    "blocks:list": { params: object({ panelId: panelFilter }), result: object({ entries: list(typed<BlockInfo>()) }) },
+    "blocks:project-remove": { params: object({ panelId: panelId(), project: text(64) }) },
+    "blocks:projects": { params: object({ panelId: panelFilter }) },
+    "blocks:list": { params: object({ panelId: panelFilter }) },
     "blocks:call": {
         params: object({ panelId: panelId(), entry: entry(), request: shape.optional(shape.json()), timeoutMs: shape.optional(callTimeout()) }),
-        result: object({ result: shape.json() }),
     },
-    // an event firing, or a value saying it changed
-    "blocks:emit": { params: object({ panelId: panelId(), entry: entry(), payload: shape.optional(shape.json()) }), result: ack },
-
-    // the Actions registry (Blocks' predecessor)
-    "actions:register": actionRegister,
-    "action:register": actionRegister,
-    "actions:unregister": actionUnregister,
-    "action:unregister": actionUnregister,
-    "actions:project-define": { params: object({ panelId: panelId(), project: text(64), name: text(128), icon: opt(text(128)) }), result: ack },
-    "actions:project-remove": { params: object({ panelId: panelId(), project: text(64) }), result: ack },
-    "actions:projects": { params: object({ panelId: panelFilter }), result: object({ projects: list(typed<ProjectInfo>()) }) },
-    "actions:call": actionCall,
-    "action:call": actionCall,
-    "actions:list": actionList,
-    "action:list": actionList,
-    "actions:emit": actionEmit,
-    "action:emit": actionEmit,
-    "event:emit": actionEmit,
-    "triggers:emit": triggerEmit,
-    "trigger:emit": triggerEmit,
+    "blocks:emit": { params: object({ panelId: panelId(), entry: entry(), payload: shape.optional(shape.json()) }) },
 } as const satisfies Record<string, RpcDefinition>;
+
+type Ack = { success?: boolean };
+type Success = { success: boolean };
+
+export interface RpcResults {
+    "auth:pair": { success: boolean; token: string } & RpcSystemFacts;
+    "auth:verify": { success: boolean; hostname?: string; os?: string; arch?: string } & RpcOsFacts;
+    "auth:scope": Ack;
+    "auth:panel-token": { token: string };
+    "auth:revoke-self": { revoked: boolean };
+    "events:subscribe": { success?: boolean; count?: number };
+
+    "term:create": Ack;
+    "term:write": Ack;
+    "term:resize": Ack;
+    "term:attach": Success;
+    "term:shells": { shells: TerminalShell[] };
+    "term:exists": { running: boolean };
+    "term:destroy": Ack;
+
+    "process:run": Ack;
+    "process:write": Ack;
+    "process:close-input": Ack;
+    "process:kill": Ack;
+    "process:exists": { running: boolean };
+    "process:attach": Success;
+
+    "file:getPath": { path: string };
+    "file:exists": { exists: boolean };
+    "file:write": { path: string };
+    "file:read": { content: string | null };
+    "file:delete": Success;
+    "file:clear": Success;
+    "file:download": { path: string };
+
+    "package:isInstalled": { installed: boolean };
+    "package:getIndex": { index: Record<string, InstalledPackageRecord | string> };
+    "package:getPath": { path: string };
+    "package:download": { path: string; waiting?: PendingPackageUpdate };
+    "package:pending": { updates: PendingPackageUpdate[] };
+
+    "panel:list": { panels: PanelManifest[]; invalid?: InvalidPanel[] };
+    "service:count": { running: number };
+    "panel:install": { panel?: PanelManifest; held?: { processes: string[] } };
+    "update:inUse": { panels: PanelManifest[]; failures: Record<string, string> };
+    "panel:uninstall": { success: boolean; packagesWarning?: string };
+    "panel:restartService": { restarted: boolean };
+    "config:get": { data: unknown };
+    "config:set": Success;
+
+    "system:ip": { ip: string };
+    "system:info": { service?: string; version?: string; ip?: string; username?: string } & RpcSystemFacts;
+    "system:gpus": { gpus: GpuInfo[]; errors: string[] };
+    "system:usage": UsageReport;
+    "system:pairing-start": { code: string };
+    "system:pairing-status": RpcPairingStatus;
+    "system:pairing-cancel": { cancelled: boolean };
+    "system:update": { accepted?: boolean; status?: string; restartRequired?: boolean; message?: string };
+
+    "secrets:set": Success;
+    "secrets:get": { found: boolean; value?: string | null };
+    "secrets:delete": { deleted: boolean };
+    "secrets:list": { keys: string[] };
+    "secrets:purge": { purged: number };
+
+    "backup:source-define": Ack;
+    "backup:destinations": { destinations: BackupLocation[] };
+    "backup:destinations-problem": { problem?: string | null };
+    "backup:destinations-recover": { keptAs: string };
+    "backup:destination-usage": BackupLocationUsage;
+    "backup:destination-add": BackupLocation;
+    "backup:destination-reconnect": BackupLocation;
+    "backup:destination-remove": Ack;
+    "backup:panel-destination-set": BackupStatusAnswer;
+    "backup:status": BackupStatusAnswer;
+    "backup:progress": { progress: BackupProgress[] };
+    "backup:create": BackupRecord;
+    "backup:list": { backups: BackupRecord[] };
+    "backup:restore": BackupRecord;
+    "backup:schedule-set": BackupStatusAnswer;
+    "backup:delete": Ack;
+
+    "ports:claim": PortClaim;
+    "ports:prepare": PortClaim;
+    "ports:release": Ack;
+    "ports:list": { claims: PortClaim[] };
+    "ports:all": { claims: PortClaim[]; policy: PortPolicy };
+    "ports:policy-set": { policy: PortPolicy };
+
+    "problems:report": Ack;
+    "problems:clear": Ack;
+    "problems:clear-prefix": Ack;
+    "problems:list": { problems: PanelProblem[] };
+    "problems:every": { panels: Record<string, PanelProblem[]> };
+
+    "pages:open": Ack;
+
+    "blocks:register": Ack;
+    "blocks:unregister": Ack;
+    "blocks:project-define": Ack;
+    "blocks:project-remove": Ack;
+    "blocks:projects": { projects: BlockProjectInfo[] };
+    "blocks:list": { entries: BlockInfo[] };
+    "blocks:call": { result: unknown };
+    "blocks:emit": Ack;
+}
 
 export type RpcAction = keyof typeof RPC;
 /** An action's params, as its handler is given them and its caller sends them. */
 export type RpcParams<A extends RpcAction> = (typeof RPC)[A]["params"] extends ObjectShape<infer F> ? ObjectOf<F> : never;
 /** What an action answers. */
-export type RpcResult<A extends RpcAction> = Infer<(typeof RPC)[A]["result"]>;
+export type RpcResult<A extends RpcAction> = RpcResults[A];
 
 export function isRpcAction(action: unknown): action is RpcAction {
     return typeof action === "string" && Object.hasOwn(RPC, action);
@@ -450,8 +456,7 @@ export function isRpcAction(action: unknown): action is RpcAction {
 /**
  * A call's params as its handler is given them, or an InvalidParamsError
  * naming the action and the field. Params that aren't an object read as
- * none, as the daemon always has: an action that needs one is refused for
- * the field it misses.
+ * none: an action that needs one is refused for the field it misses.
  */
 export function readParams<A extends RpcAction>(action: A, params: unknown): RpcParams<A> {
     const given = typeof params === "object" && params !== null && !Array.isArray(params) ? params : {};
@@ -460,17 +465,6 @@ export function readParams<A extends RpcAction>(action: A, params: unknown): Rpc
         return readValue(definition.params, given, "") as RpcParams<A>;
     } catch (err) {
         if (err instanceof InvalidParamsError) throw new InvalidParamsError(`${err.message} (in ${action})`);
-        throw err;
-    }
-}
-
-/** What an action answered, checked; an answer that doesn't fit throws, naming the action. */
-export function readResult<A extends RpcAction>(action: A, result: unknown): RpcResult<A> {
-    try {
-        const definition: RpcDefinition = RPC[action];
-        return readValue(definition.result, result, "") as RpcResult<A>;
-    } catch (err) {
-        if (err instanceof InvalidParamsError) throw new Error(`Paperboard Server's answer to ${action} doesn't fit: ${err.message}`);
         throw err;
     }
 }

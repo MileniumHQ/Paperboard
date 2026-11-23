@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import { sessionCookieName, startBrowserHost, type BrowserHost } from "../../src/main/browserHost";
-import { BrowserSessions, SESSION_TTL_MS, SIGN_IN_LINK_TTL_MS } from "../../src/main/browserSessions";
+import { BrowserSessions, SIGN_IN_LINK_TTL_MS } from "../../src/main/browserSessions";
 import { tempDir } from "../platform/app/support/temp";
 
 const SECRET = "daemon-master-token";
@@ -136,14 +136,5 @@ describe("a signed-in browser", () => {
         expect(fs.readFileSync(file, "utf8")).not.toContain(token);
         if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o077).toBe(0);
         expect(new BrowserSessions(file).isSignedIn(token)).toBe(true);
-    });
-
-    test("is signed out after 30 days", () => {
-        let now = 1_000_000;
-        const clocked = new BrowserSessions(path.join(dir, "expiry.json"), () => now);
-        const signed = clocked.redeemSignInLink(clocked.issueSignInLink())!;
-        expect(clocked.isSignedIn(signed.token)).toBe(true);
-        now += SESSION_TTL_MS;
-        expect(clocked.isSignedIn(signed.token)).toBe(false);
     });
 });

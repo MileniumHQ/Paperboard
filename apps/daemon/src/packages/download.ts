@@ -51,8 +51,6 @@ export async function streamToFileWithProgress(
 
     onProgress?.({ stage: "starting", percent: 0, message: "Connecting..." });
 
-    if (activeDownloads >= 8) throw new LimitError("Too many concurrent downloads (max 8)");
-    activeDownloads++;
     const controller = new AbortController();
     const idleMs = limits.idleMs ?? 45_000;
     let idle = setTimeout(() => controller.abort(new Error("Download connection timed out")), idleMs);
@@ -94,7 +92,5 @@ export async function streamToFileWithProgress(
         throw err;
     } finally {
         clearTimeout(idle); clearTimeout(lifetime);
-        activeDownloads--;
     }
 }
-let activeDownloads = 0;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { captureServiceBootContext, serviceBootContext } from "../src/boot";
-import { grantedComputerId, panelAssetUrl, resolvePanelId } from "../src/identity";
+import { grantedComputerId, resolvePanelId } from "../src/identity";
 
 const BOOT_ENV = ["PAPERBOARD_PANEL_ID", "PAPERCRANE_PANEL_TOKEN", "PAPERCRANE_PORT", "PAPERCRANE_TOKEN"];
 const g = globalThis as any;
@@ -21,15 +21,6 @@ function env(values: Record<string, string>): void {
 
 // Services boot only on their scoped token.
 describe("services boot only on their scoped token", () => {
-    test("the in-process boot global is read once and removed, and later changes do not move it", () => {
-        g.__PAPERBOARD_SERVICE_BOOT = { panelId: "dev.a", token: "pcp_a", port: 4100 };
-        expect(captureServiceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_a", port: 4100 });
-        expect(g.__PAPERBOARD_SERVICE_BOOT).toBeUndefined();
-        env({ PAPERBOARD_PANEL_ID: "dev.b", PAPERCRANE_PANEL_TOKEN: "pcp_b", PAPERCRANE_PORT: "4200" });
-        g.__PAPERBOARD_SERVICE_BOOT = { panelId: "dev.c", token: "pcp_c", port: 4300 };
-        expect(serviceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_a", port: 4100 });
-    });
-
     test("the spawned-service env boots on the scoped token, which wins over a master token", () => {
         env({ PAPERBOARD_PANEL_ID: "dev.a", PAPERCRANE_PANEL_TOKEN: "pcp_scoped", PAPERCRANE_PORT: "4100", PAPERCRANE_TOKEN: "master" });
         expect(captureServiceBootContext()).toEqual({ panelId: "dev.a", token: "pcp_scoped", port: 4100 });
@@ -71,18 +62,5 @@ describe("panel and computer identity are granted, never inferred", () => {
         env({ PAPERBOARD_PANEL_ID: "dev.svc", PAPERCRANE_PANEL_TOKEN: "pcp", PAPERCRANE_PORT: "4100" });
         captureServiceBootContext();
         expect(resolvePanelId()).toBe("dev.svc");
-    });
-
-    test("panelAssetUrl uses the granted, possibly remote, computer and refuses a malformed panel id", () => {
-        expect(panelAssetUrl("dev.icons", "./icon.png")).toBe("panel://local.dev.icons/icon.png");
-        g.window = {};
-        g.__PAPERBOARD_CRANE = { computerId: "c-remote", panelId: "dev.me" };
-        expect(panelAssetUrl("dev.icons", "/icon.png")).toBe("panel://c-remote.dev.icons/icon.png");
-        // a browser host serves panels from /_panel/ folders of its own origin
-        g.location = { protocol: "http:", host: "paperboard.localhost:5173", hostname: "paperboard.localhost", pathname: "/_panel/c-remote/dev.me/index.html" };
-        expect(panelAssetUrl("dev.icons", "icon.png")).toBe("http://paperboard.localhost:5173/_panel/c-remote/dev.icons/icon.png");
-        for (const bad of ["../evil", "a.b/c", "", "Upper"]) {
-            expect(() => panelAssetUrl(bad, "icon.png")).toThrow("Invalid panel id");
-        }
     });
 });

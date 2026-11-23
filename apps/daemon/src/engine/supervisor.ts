@@ -7,15 +7,9 @@ import { SupervisedProcessClient, supervisorPresent } from "../workloads/supervi
 import { supervisorLaunch } from "../workloads/supervisorLaunch";
 import { supervisorBinary } from "../workloads/supervisorBinary";
 import { logger } from "../core/logger";
-import { LimitError, unrefTimer } from "../core/storage";
+import { unrefTimer } from "../core/storage";
 import { getLogsDir } from "../core/paths";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-
-// Live supervised workload budget: each client is a detached supervisor
-// process plus a socket and metadata files, so minting unique ids must not
-// grow that set without bound (bounded everything). Enforced here — the
-// single choke point every create path (RPC, TUI, desktop app) spawns through.
-export const MAX_LIVE_CLIENTS = 128;
 
 // how much of a supervisor's stderr a failed start reports
 const STARTUP_STDERR_TAIL_BYTES = 4096;
@@ -73,13 +67,6 @@ export async function spawnSupervisedClient(
 ): Promise<any> {
     const existing = clientsMap.get(id);
     if (existing && existing.isConnected()) throw new Error(`Process ${id} is already running`);
-
-    // budget counts LIVE clients: a dead entry under the same id is being
-    // replaced, not added
-    const replacement = existing ? 1 : 0;
-    if (clientsMap.size - replacement >= MAX_LIVE_CLIENTS) {
-        throw new LimitError(`Too many live supervised workloads (max ${MAX_LIVE_CLIENTS})`);
-    }
     if (existing) {
         existing.destroy();
         clientsMap.delete(id);

@@ -17,7 +17,7 @@ export interface ChatMessage extends CoreChatMessage {}
 export { getStatusBadge } from "../core/statusBadge";
 
 /** The server's state, a field each, and the players' as sets and maps by name. */
-export interface ServerPage extends Omit<Fields, "playerStats" | "playerPlaytime" | "playerPositions"> {
+export interface ServerPage extends Omit<Fields, "playerStats" | "playerPositions"> {
     readonly id: string;
     /** what the servers list says of it; App's view of it ends before it is removed */
     readonly summary: Accessor<ServerSummary>;
@@ -34,7 +34,6 @@ export interface ServerPage extends Omit<Fields, "playerStats" | "playerPlaytime
     readonly onlinePlayerNames: Accessor<ReadonlySet<string>>;
     readonly seenPlayerNames: Accessor<ReadonlySet<string>>;
     readonly playerStats: Accessor<ReadonlyMap<string, PlayerStatData>>;
-    readonly playerPlaytime: Accessor<ReadonlyMap<string, number>>;
     readonly playerPositions: Accessor<ReadonlyMap<string, PlayerPosition>>;
     /** the service reloads the server's config, once the server is set up; a failure is a toast */
     loadServerConfig(): Promise<void>;

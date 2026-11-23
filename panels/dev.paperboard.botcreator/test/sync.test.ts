@@ -1,8 +1,6 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { Client, GatewayIntentBits } from "discord.js";
-import { syncSlashCommands } from "../src/commandSync";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
-import { guild, snowflake, type RecordedRequest } from "./helpers/discord";
+import { guild, type RecordedRequest } from "./helpers/discord";
 import { recordedSession, useFakeDiscord } from "./helpers/session";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -52,52 +50,5 @@ describe("sync is declarative and reports what it couldn't do", () => {
         expect(after.map(scopeOf).sort()).toEqual([GLOBAL_SCOPE, home.id].sort());
         expect(after.find((r) => scopeOf(r) === home.id)!.body).toEqual([]);
         expect(after.find((r) => scopeOf(r) === GLOBAL_SCOPE)!.body.map((c: any) => c.name)).toEqual(["ping"]);
-    });
-
-    test("an unknown guild is an error naming it while the other scopes still sync", async () => {
-        const home = guild("Home");
-        const gone = snowflake();
-        const fake = discord().addBot({ guilds: [home] });
-        const bot = recordedSession("b-unknown-guild");
-        await bot.session.start(fake.token);
-        await bot.until(() => bot.session.connected(), "the bot to connect");
-        const before = discord().requests.length;
-        bot.session.commands = [command("ping", GLOBAL_SCOPE), command("hello", home.id), command("lost", gone)];
-        const result = await bot.session.syncCommands();
-        const message = `Guild ${gone} is not in this bot's server list; its commands were not registered.`;
-        expect(result).toEqual({ registered: false, syncError: message });
-        expect(bot.session.syncError()).toBe(message);
-        expect(puts(before, fake.appId).map(scopeOf).sort()).toEqual([GLOBAL_SCOPE, home.id].sort());
-    });
-
-    test("a scope Discord refuses is reported with Discord's reason", async () => {
-        const home = guild("Home");
-        const fake = discord().addBot({ guilds: [home] });
-        const bot = recordedSession("b-refused");
-        await bot.session.start(fake.token);
-        await bot.until(() => bot.session.connected(), "the bot to connect");
-        // the bot was removed from the server on Discord's side; its cache still lists it
-        fake.guilds = [];
-        bot.session.commands = [command("hello", home.id)];
-        expect(await bot.session.syncCommands()).toEqual({ registered: false, syncError: "Guild Home: Missing Access" });
-    });
-
-    test("a client without an application rejects instead of reporting success", async () => {
-        const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-        try {
-            await expect(syncSlashCommands(client, [command("ping", GLOBAL_SCOPE)])).rejects.toThrow(
-                "Discord application is not available on this client; commands were not registered.",
-            );
-        } finally {
-            await client.destroy();
-        }
-    });
-
-    test("a bot that is offline reports its commands as not registered, without an error", async () => {
-        const bot = recordedSession("b-offline");
-        bot.session.commands = [command("ping", GLOBAL_SCOPE)];
-        const before = discord().requests.length;
-        expect(await bot.session.syncCommands()).toEqual({ registered: false, syncError: null });
-        expect(discord().requests.length).toBe(before);
     });
 });

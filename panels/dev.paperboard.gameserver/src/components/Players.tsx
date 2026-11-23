@@ -7,13 +7,13 @@ import { createSaves } from "../lib/saves";
 import PlayerHead from "./PlayerHead";
 import PlayerRoster, { statusColor } from "./PlayerRoster";
 import { createPlayers, type PlayerInfo } from "./players/state";
-import { formatPlaytime, SORT_LABELS, type SortKey } from "./players/leaderboard";
+import { formatPlaytime, playtimeSeconds, SORT_LABELS, sortPlayers, type SortKey } from "./players/leaderboard";
 import PlayerInspector, { canEditLists } from "./players/PlayerInspector";
 import { DeleteDataDialog, ReasonActionDialog, WhitelistDialog } from "./players/PlayerDialogs";
 
 /** a Bedrock player: a Floodgate uuid, or a name with Floodgate's prefix */
 function isBedrockPlayer(player: PlayerInfo, naming: BedrockNaming | null): boolean {
-    return (player.uuid !== undefined && isFloodgateUuid(player.uuid)) || gamertagOf(player.name, naming) !== null;
+    return (player.uuid !== null && isFloodgateUuid(player.uuid)) || gamertagOf(player.name, naming) !== null;
 }
 
 export default function Players() {
@@ -43,7 +43,7 @@ export default function Players() {
         });
     });
 
-    const sortedPlayers = createMemo(() => roster.leaderboard.sort(visiblePlayers(), sortBy()));
+    const sortedPlayers = createMemo(() => sortPlayers(visiblePlayers(), sortBy()));
     const onlineSorted = createMemo(() => sortedPlayers().filter((p) => isPlayerOn(p.name)));
     const offlineSorted = createMemo(() => sortedPlayers().filter((p) => !isPlayerOn(p.name)));
     const sections = createMemo(() => [
@@ -52,8 +52,8 @@ export default function Players() {
     ]);
 
     const onlineCount = () => roster.all().filter((p) => isPlayerOn(p.name)).length;
-    const whitelistedCount = () => roster.listed().filter((p) => p.whitelisted).length;
-    const opCount = () => roster.listed().filter((p) => p.op).length;
+    const whitelistedCount = () => roster.all().filter((p) => p.whitelisted).length;
+    const opCount = () => roster.all().filter((p) => p.op).length;
 
     // op and whitelist switches flip at once and save in the order pressed
     // (lib/saves); a refusal is quoted and the switch shows what is stored
@@ -63,7 +63,7 @@ export default function Players() {
 
     // a player with no playtime in this world has not joined it, said as the other games say it
     const rowText = (player: PlayerInfo) => {
-        const seconds = roster.leaderboard.playtimeSeconds(player);
+        const seconds = playtimeSeconds(player);
         if (isPlayerOn(player.name)) return seconds === undefined ? "Playing" : `Playing · ${formatPlaytime(seconds)}`;
         return seconds === undefined ? "Not seen yet" : `Played ${formatPlaytime(seconds)}`;
     };
@@ -99,20 +99,14 @@ export default function Players() {
             </PaperPageHeader>
 
             {/* what couldn't be read stands above the players read before */}
-            <Show when={roster.rosterError()}>
-                {(err) => <PaperError title="Couldn't load the players" error={err()} action={{ label: "Try again", onClick: () => void roster.reloadRoster() }} />}
+            <Show when={roster.error()}>
+                {(err) => <PaperError title="Couldn't load the players" error={err()} action={{ label: "Try again", disabled: roster.loading(), onClick: () => void roster.reload() }} />}
+            </Show>
+            <Show when={roster.statsError()}>
+                {(err) => <PaperError title="Couldn't read the players' stats" error={err()} action={{ label: "Try again", disabled: roster.loading(), onClick: () => void roster.reload() }} />}
             </Show>
             <Show when={roster.onlineError()}>
                 {(err) => <PaperError title="Couldn't read who is online" error={err()} action={{ label: "Try again", onClick: () => void roster.askOnline() }} />}
-            </Show>
-            <Show when={roster.stats.error()}>
-                {(err) => (
-                    <PaperError
-                        title="Couldn't load the player stats"
-                        error={err()}
-                        action={{ label: "Try again", disabled: roster.stats.loading(), onClick: () => void roster.stats.reload() }}
-                    />
-                )}
             </Show>
 
             <PlayerRoster
@@ -125,7 +119,7 @@ export default function Players() {
                     { label: "OP", count: opCount(), selected: showOp(), onToggle: () => setShowOp((v) => !v) },
                 ]}
                 sections={sections()}
-                icon={(player) => <PlayerHead name={player.name} uuid={player.uuid} size="medium" />}
+                icon={(player) => <PlayerHead name={player.name} uuid={player.uuid ?? undefined} size="medium" />}
                 description={rowText}
                 badges={(player) => (
                     <>
@@ -135,21 +129,18 @@ export default function Players() {
                         <Show when={player.whitelisted}>
                             <PaperBadge>WL</PaperBadge>
                         </Show>
-                        <Show when={roster.isBanned(player.name)}>
+                        <Show when={player.banned}>
                             <PaperBadge variant="danger">Banned</PaperBadge>
                         </Show>
                     </>
                 )}
-                status={(player) => statusColor(isPlayerOn(player.name), roster.isBanned(player.name))}
+                status={(player) => statusColor(isPlayerOn(player.name), player.banned)}
                 open={roster.openPlayer()?.name}
                 onOpen={roster.setOpenName}
             >
                 <PlayerInspector
                     player={roster.openPlayer()}
-                    leaderboard={roster.leaderboard}
                     bedrock={roster.openPlayer() ? isBedrockPlayer(roster.openPlayer()!, roster.bedrock()) : false}
-                    banned={roster.isBanned(roster.openPlayer()?.name ?? "")}
-                    banReason={roster.banReason(roster.openPlayer()?.name ?? "")}
                     flag={(field) => {
                         // the player it was made for, even once another is open
                         const name = roster.openPlayer()!.name;

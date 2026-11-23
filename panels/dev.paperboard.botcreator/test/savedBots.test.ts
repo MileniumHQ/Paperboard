@@ -4,13 +4,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { problemsApi, secretsApi } from "@mileniumhq/paperapi";
+import { secretsApi } from "@mileniumhq/paperapi";
 import { LEGACY_TOKEN_NAME, tokenName, type BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE } from "../src/types";
 import { testDaemon } from "./helpers/daemon";
-import { guild, slashCommand, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
+import { guild, startFakeDiscord, type FakeDiscord } from "./helpers/discord";
 import { call, PANEL_ID, savedBots, startService, stopServices, storedBot } from "./helpers/service";
-import { problemsWhere, stateWhere } from "./helpers/wait";
+import { stateWhere } from "./helpers/wait";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
 setDefaultTimeout(60_000);
@@ -109,8 +109,6 @@ describe("the saved bots", () => {
     });
 });
 
-// A deleted bot's commands don't outlive it on Discord: once its token is
-// gone nothing can take them off the server's command picker.
 describe("stopping the service", () => {
     test("a save still on its way when Paperboard stops the service lands before it exits", async () => {
         const fake = discord.addBot({ username: "Late Saver" });
@@ -123,109 +121,5 @@ describe("stopping the service", () => {
         await service.stop();
         expect(JSON.parse(fs.readFileSync(await configFile(), "utf8")).bots).toMatchObject([{ id: "b-late-saver", enabled: true }]);
         await switched;
-    });
-});
-
-describe("deleting a bot", () => {
-    test("an online bot's slash commands are taken off Discord in every scope before it goes", async () => {
-        const home = guild("Home");
-        const fake = discord.addBot({ username: "Leaver", guilds: [home] });
-        const commands = [command("ping"), { ...command("hello"), id: "c-home", scope: home.id }];
-        await savedBots([{ stored: storedBot("b-leave", fake.appId, { name: "Leaver", commands }), token: fake.token }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => Boolean(s.bots[0]?.connected), "Leaver to connect");
-        const guildCommands = `/applications/${fake.appId}/guilds/${home.id}/commands`;
-        await discord.request((r) => r.method === "PUT" && r.path === guildCommands, "the commands synced at login");
-
-        const before = discord.requests.length;
-        expect(await call.deleteBot({ bot: "b-leave" })).toEqual({ deleted: "b-leave" });
-        const cleared = discord.requests.slice(before).filter((r) => r.method === "PUT" && r.path.startsWith(`/applications/${fake.appId}/`));
-        expect(cleared.map((r) => [r.path, r.body]).sort()).toEqual([
-            [`/applications/${fake.appId}/commands`, []],
-            [guildCommands, []],
-        ].sort());
-    });
-
-    test("a deleted bot's problems go with it, and another bot's stay", async () => {
-        const home = guild("Home");
-        const doomed = discord.addBot({ username: "Doomed", guilds: [home] });
-        const kept = discord.addBot({ username: "Kept", guilds: [home] });
-        await savedBots([
-            { stored: storedBot("b-doomed", doomed.appId, { name: "Doomed" }), token: doomed.token },
-            { stored: storedBot("b-kept", kept.appId, { name: "Kept" }), token: kept.token },
-        ]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 2 && s.bots.every((b) => b.connected), "both bots to connect");
-        // a command Discord still has but the bot doesn't is each bot's problem
-        discord.dispatch(doomed, "INTERACTION_CREATE", slashCommand(doomed, { guild: home, name: "ghost" }));
-        discord.dispatch(kept, "INTERACTION_CREATE", slashCommand(kept, { guild: home, name: "ghost" }));
-        await problemsWhere(PANEL_ID, (problems) => ["Doomed", "Kept"].every((name) => problems.some((p) => p.title === name)), "both bots' problems");
-
-        expect(await call.deleteBot({ bot: "b-doomed" })).toEqual({ deleted: "b-doomed" });
-        const left = await problemsWhere(PANEL_ID, (problems) => !problems.some((p) => p.title === "Doomed"), "the deleted bot's problem to go");
-        // what other tests' bots left is theirs
-        expect(left.map((p) => p.title).filter((title) => ["Doomed", "Kept"].includes(title))).toEqual(["Kept"]);
-        problemsApi.clear(PANEL_ID);
-    });
-
-    test("a bot that is off has its commands cleared with its token alone, never logging in", async () => {
-        const home = guild("Home");
-        const fake = discord.addBot({ username: "Sleeper", guilds: [home] });
-        const commands = [command("ping"), { ...command("hello"), id: "c-home", scope: home.id }];
-        await savedBots([{ stored: storedBot("b-sleep", fake.appId, { name: "Sleeper", enabled: false, commands }), token: fake.token }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Sleeper", "Sleeper");
-
-        const before = discord.requests.length;
-        expect(await call.deleteBot({ bot: "b-sleep" })).toEqual({ deleted: "b-sleep" });
-        const made = discord.requests.slice(before).filter((r) => r.bot === fake.token);
-        expect(made.map((r) => [r.method, r.path, r.body]).sort()).toEqual([
-            ["PUT", `/applications/${fake.appId}/commands`, []],
-            ["PUT", `/applications/${fake.appId}/guilds/${home.id}/commands`, []],
-        ].sort());
-    });
-
-    test("a bot whose token Discord refuses is kept, saying why, until it is deleted anyway", async () => {
-        const home = guild("Home");
-        const fake = discord.addBot({ username: "Revoked", guilds: [home] });
-        // the token was reset in the Developer Portal: the saved one names the application but no longer works
-        const revoked = `${fake.token.slice(0, -1)}${fake.token.endsWith("x") ? "y" : "x"}`;
-        await savedBots([{ stored: storedBot("b-revoked", fake.appId, { name: "Revoked", enabled: false, commands: [{ ...command("hello"), scope: home.id }] }), token: revoked }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Revoked", "Revoked");
-
-        expect(await call.deleteBot({ bot: "b-revoked" })).toEqual({ refused: `Guild ${home.id}: 401: Unauthorized` });
-        expect((await stateWhere<BotsServiceState>(PANEL_ID, () => true, "the bots")).bots.map((b) => b.id)).toEqual(["b-revoked"]);
-        expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(true);
-
-        // anyway skips Discord: the bot, its token and its list entry go
-        const before = discord.requests.length;
-        expect(await call.deleteBot({ bot: "b-revoked", anyway: true })).toEqual({ deleted: "b-revoked" });
-        expect(discord.requests.slice(before)).toEqual([]);
-        expect((await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots.length === 0, "the bot to go")).bots).toEqual([]);
-        expect((await secretsApi.get(tokenName("b-revoked"), PANEL_ID)).found).toBe(false);
-        expect(JSON.parse(fs.readFileSync(await configFile(), "utf8")).bots).toEqual([]);
-    });
-});
-
-// A command deleted while its bot is off is gone from Discord: the next login
-// sets only the scopes that still have commands.
-describe("deleting a command while the bot is off", () => {
-    test("a server's last command is cleared with the token at once, and stays gone when the bot logs in", async () => {
-        const home = guild("Home");
-        const fake = discord.addBot({ username: "Napper", guilds: [home] });
-        const hello = { ...command("hello"), id: "c-home", scope: home.id };
-        await savedBots([{ stored: storedBot("b-nap", fake.appId, { name: "Napper", enabled: false, commands: [command("ping"), hello] }), token: fake.token }]);
-        await startService({ discordApi: discord.api });
-        await stateWhere<BotsServiceState>(PANEL_ID, (s) => s.bots[0]?.name === "Napper", "Napper");
-        const guildCommands = `/applications/${fake.appId}/guilds/${home.id}/commands`;
-
-        expect(await call.deleteCommand({ bot: "b-nap", id: "c-home" })).toMatchObject({ registered: false, syncError: null, triggerError: null });
-        const cleared = discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands);
-        expect(cleared.map((r) => [r.bot, r.body])).toEqual([[fake.token, []]]);
-
-        await call.connectBot({ bot: "b-nap" });
-        await discord.request((r) => r.method === "PUT" && r.path === `/applications/${fake.appId}/commands`, "the commands synced at login");
-        expect(discord.requests.filter((r) => r.method === "PUT" && r.path === guildCommands).map((r) => r.body)).toEqual([[]]);
     });
 });

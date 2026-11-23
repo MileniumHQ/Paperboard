@@ -4,7 +4,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import WebSocket from "ws";
-import { PROTOCOL_VERSION, readResult, type RpcAction, type RpcParams, type RpcResult } from "../protocol";
+import { PROTOCOL_VERSION, type RpcAction, type RpcParams, type RpcResult } from "../protocol";
 import { challengeDaemon, HandshakeError, NOT_RUNNING_HINT, readHandshake as readHandshakeFile, type Handshake } from "../transport/localHandshake";
 import { CliError } from "./output";
 import { handshakePath } from "./paths";
@@ -105,9 +105,9 @@ export class HostConnection {
         return `127.0.0.1:${this.handshake.port}`;
     }
 
-    /** Asks the daemon; the answer is checked against the action's shape (protocol/rpc.ts). */
+    /** Asks the daemon; params and answer types come from protocol/rpc.ts. */
     async call<A extends RpcAction>(action: A, params: RpcParams<A>, timeoutMs: number | null = DEFAULT_REQUEST_TIMEOUT_MS): Promise<RpcResult<A>> {
-        return readResult(action, await this.request(action, params, timeoutMs));
+        return (await this.request(action, params, timeoutMs)) as RpcResult<A>;
     }
 
     /** Sends a request and resolves with its result, or rejects with the daemon's error. */
