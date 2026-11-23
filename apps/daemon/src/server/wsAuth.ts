@@ -5,6 +5,8 @@ import * as os from "os";
 import type { WebSocket } from "ws";
 import type { PaperCraneAuth } from "../security/auth";
 import { getDetailedOsInfo } from "../system/osInfo";
+import { paperCraneMachineId } from "../system/discovery";
+import { mdnsHostName } from "./hostname";
 import { ErrorCode } from "../core/protocol";
 import { readParams } from "@mileniumhq/paperapi/protocol";
 import { requireHost } from "../security/principal";
@@ -22,6 +24,7 @@ export interface AuthContext {
 
 async function computerFacts() {
     const osInfo = await getDetailedOsInfo();
+    const mdnsName = mdnsHostName();
     return {
         hostname: os.hostname().replace(/\.local$/i, ""),
         os: osInfo.os,
@@ -33,6 +36,8 @@ async function computerFacts() {
         board: osInfo.board,
         operator: osInfo.operator,
         arch: process.arch,
+        machineId: paperCraneMachineId(),
+        ...(mdnsName ? { mdnsName } : {}),
     };
 }
 

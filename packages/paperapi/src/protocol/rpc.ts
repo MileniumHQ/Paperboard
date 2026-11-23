@@ -172,11 +172,18 @@ const osFacts = {
     board: opt(text(512)),
     operator: opt(identityPart),
 };
+// who a computer is on the network: the .local name it answers to and its
+// stable machine id; absent from a daemon older than either
+const networkFacts = {
+    mdnsName: opt(text(253)),
+    machineId: opt(text(128)),
+};
 const systemFacts = {
     hostname: text(),
     os: text(),
     arch: text(),
     ...osFacts,
+    ...networkFacts,
 };
 const pairingStatus = object({
     active: shape.boolean(),
@@ -210,7 +217,7 @@ export const RPC = {
     // the facts are re-sent on every sign-in so a paired computer's identity stays current
     "auth:verify": {
         params: object({ token: shape.optional(shape.json()) }),
-        result: object({ success: shape.boolean(), hostname: opt(text()), os: opt(text()), arch: opt(text()), ...osFacts }),
+        result: object({ success: shape.boolean(), hostname: opt(text()), os: opt(text()), arch: opt(text()), ...osFacts, ...networkFacts }),
     },
     "auth:scope": { params: object({ panelId: panelId() }), result: ack },
     // relayTo names the computer that serves the panel; "local" is this one
