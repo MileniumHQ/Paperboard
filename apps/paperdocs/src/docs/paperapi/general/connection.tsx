@@ -142,7 +142,7 @@ const computerId = grantedComputerId();`}
                     <tr><td><PaperCode>BAD_PROTOCOL</PaperCode></td><td>The SDK and the daemon speak different protocol versions.</td></tr>
                     <tr><td><PaperCode>NOT_FOUND</PaperCode></td><td>The method or thing named does not exist, such as <PaperCode>Unknown action: system:nope</PaperCode> or an unclaimed port.</td></tr>
                     <tr><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An argument breaks a rule: a bad name, a value over a limit, a bad path. The message names the field and ends with the method, such as <PaperCode>Parameter "id" exceeds 128 characters (in term:create)</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as naming another panel or calling a host-only method.</td></tr>
+                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as calling a host-only method.</td></tr>
                     <tr><td><PaperCode>CONFLICT</PaperCode></td><td>The state does not allow it now: a port is taken, no backup location is chosen, a block is already registered by another connection.</td></tr>
                     <tr><td><PaperCode>INTERNAL</PaperCode></td><td>Anything else the daemon reports, including refused file paths.</td></tr>
                 </tbody>
@@ -151,13 +151,12 @@ const computerId = grantedComputerId();`}
                 Errors raised by the SDK itself before a call is sent, such as an invalid panel id or a timeout, carry no <PaperCode>code</PaperCode>.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { configApi } from "@mileniumhq/paperapi";
+{`import { portApi } from "@mileniumhq/paperapi";
 
 try {
-    await configApi.get("dev.paperboard.terminal");
+    await portApi.claim("dev.example.weather", { name: "web", label: "Weather", protocol: "tcp", preferred: 8080 });
 } catch (err) {
-    // FORBIDDEN: Cross-panel access refused: credential is scoped to
-    // dev.example.weather; access is limited to dev.example.weather
+    // CONFLICT: Weather can't use port 8080: Minecraft has it.
     console.error((err as { code?: string }).code, (err as Error).message);
     throw err;
 }`}

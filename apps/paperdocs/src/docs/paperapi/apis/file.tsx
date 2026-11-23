@@ -138,14 +138,14 @@ interface ImportedFile {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>exportFile</PaperCode></td><td>One file from the panel's folder to where the person chooses. At most 2 GiB.</td></tr>
+                    <tr><td><PaperCode>exportFile</PaperCode></td><td>One file from the panel's folder to where the person chooses.</td></tr>
                     <tr><td><PaperCode>importFile</PaperCode></td><td>One chosen file to <PaperCode>targetPath</PaperCode>, replacing what was there once it fully arrives.</td></tr>
                     <tr><td><PaperCode>importFiles</PaperCode></td><td>One or more chosen files into the folder <PaperCode>targetDir</PaperCode>, each under its own name. Files already copied stay if a later one fails.</td></tr>
                     <tr><td><PaperCode>importFolder</PaperCode></td><td>A chosen folder and everything in it into <PaperCode>targetDir/&lt;folder name&gt;</PaperCode>. A folder with a link in it is refused before anything is copied.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                An import holds at most 5000 files and 2 GiB in all.
+                An import fails with <PaperCode>too-large</PaperCode> when a file is larger than the computer receiving it accepts.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
