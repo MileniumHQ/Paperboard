@@ -116,9 +116,19 @@ export function panelUrl(computerId: string, panelId: string, subpath = ""): str
     return `${location.origin}${panelPath(computerId, panelId, rest)}`;
 }
 
-/** Where a computer is, for people: host:port, or how the host reaches it. */
-export function computerAddress(computer: Pick<ComputerInfo, "host" | "port" | "via">): string {
-    return computer.via ? `Through ${computer.via}` : `${computer.host}:${computer.port}`;
+/**
+ * Where a computer is, for people: the local computer's network address, a
+ * paired one's host:port, or for one the host reaches through a relay, that
+ * relay. `inSentence` words it to follow a name ("at 10.0.0.2:7210",
+ * "through Remote Relay"); without it, it stands alone, as a subtitle does.
+ */
+export function computerAddress(
+    computer: Pick<ComputerInfo, "host" | "port" | "via" | "networkAddress" | "isLocal">,
+    options: { inSentence?: boolean } = {},
+): string {
+    if (computer.via) return `${options.inSentence ? "through" : "Through"} ${computer.via}`;
+    const address = computer.isLocal ? computer.networkAddress || computer.host : `${computer.host}:${computer.port}`;
+    return options.inSentence ? `at ${address}` : address;
 }
 
 /** One file of an installed panel's manifest or store listing, as bytes. */

@@ -45,7 +45,7 @@ test("the can't-reach dialog for a relayed computer shows its answer without an 
     const rail = `[role=radio][aria-label="pxlblade"]`;
     await page.waitFor(`document.querySelector(${JSON.stringify(rail)})`, "pxlblade on the rail, through a relay");
     await page.click(rail);
-    await page.waitFor(`document.body.innerText.includes("Can't reach pxlblade") && ${errorShown("Couldn't reach this computer")}`, "the can't-reach dialog with its answer");
+    await page.waitFor(`document.body.innerText.includes("Can't reach pxlblade") && ${errorShown("Couldn't reach pxlblade through Remote Relay")}`, "the can't-reach dialog with its answer");
     const dialog = await page.evaluate<string>(`document.querySelector("[role=dialog]").innerText`);
     expect(dialog).not.toContain("127.0.0.2");
     expect(dialog).not.toContain("Nothing responded");

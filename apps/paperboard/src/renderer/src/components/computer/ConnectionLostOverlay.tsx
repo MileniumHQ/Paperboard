@@ -1,7 +1,7 @@
 import { type Component, Show } from "solid-js";
 import { PaperError, PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
 import styles from "./ConnectionLostOverlay.module.css";
-import type { ComputerInfo } from "../../lib/shell";
+import { computerAddress, type ComputerInfo } from "../../lib/shell";
 import { createReachCheck } from "../../lib/reachCheck";
 
 export interface ConnectionLostOverlayProps {
@@ -39,7 +39,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 <PaperText preset="text" class={styles.message}>
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong>{" "}
-                    {props.computer.via ? `through ${props.computer.via}` : `at ${props.computer.host}:${props.computer.port}`}.
+                    {computerAddress(props.computer, { inSentence: true })}.
                     Make sure the Paperboard server daemon is running.
                     Paperboard keeps retrying on its own.
                 </PaperText>
