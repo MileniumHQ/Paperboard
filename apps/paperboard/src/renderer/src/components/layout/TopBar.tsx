@@ -21,6 +21,8 @@ const TopBar: Component<{
     getSelectedTab: () => string;
     /** the phone layout: no window to drag, no caption buttons, no folders to open */
     mobile?: boolean;
+    /** the host can open a computer's folder beside the person (AppProps.opensFolders) */
+    opensFolders: boolean;
     inert?: boolean;
 }> = (props) => {
     const [captionReserve, setCaptionReserve] = createSignal(0);
@@ -98,7 +100,7 @@ const TopBar: Component<{
                     class={styles.controls}
                     style={{ right: `calc(${getVarCss("uigap-threefourths")} + ${props.mobile ? 0 : captionReserve()}px)` }}
                 >
-                    <Show when={!props.mobile}>
+                    <Show when={!props.mobile && props.opensFolders}>
                         <PaperButton size="tiny"
                             icon
                             title="Open panel folder"

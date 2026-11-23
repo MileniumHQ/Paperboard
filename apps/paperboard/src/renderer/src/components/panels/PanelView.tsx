@@ -38,6 +38,8 @@ export interface PanelViewProps {
      * their own.
      */
     onCrumbs: (key: string, titles: string[]) => void;
+    /** the color a panel reports along its bottom edge, or undefined before it does */
+    onFootColor?: (key: string, color: string | undefined) => void;
     /** each live panel's way back one of its own pages, by key */
     backs: Map<string, () => void>;
 }
@@ -55,6 +57,7 @@ interface PanelFrameProps {
     retryRestart: () => void;
     failed: () => void;
     onCrumbs: (titles: string[]) => void;
+    onFootColor: (color: string | undefined) => void;
     backs: Map<string, () => void>;
 }
 
@@ -134,18 +137,20 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             // frames can't vibrate; the shell plays it, if it is a kind it knows
             onHaptic: (kind) => { if (props.current) playHaptic(kind as Parameters<typeof playHaptic>[0]); },
             onCrumbs: (titles) => props.onCrumbs(titles),
+            onFootColor: (color) => props.onFootColor(color),
             choosing: () => chooser() !== null,
             onChooseLocation: (request) => setChooser({ ...request, generation: current }),
         });
         // the shell's Back goes back through the panel's own pages first; a new document has opened none yet
         props.backs.set(props.panelKey, () => { frame?.contentWindow?.postMessage({ type: PAGE_BACK_MESSAGE, generation: current }, "*"); });
         props.onCrumbs([]);
+        props.onFootColor(undefined);
         // a reloaded document asked nothing; its open window closes unanswered,
         // and a document that goes mid-swipe leaves its page where it was
         onCleanup(() => {
             if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 });
             clearTimeout(timer); setChooser(null); doc.close();
-            props.backs.delete(props.panelKey); props.onCrumbs([]);
+            props.backs.delete(props.panelKey); props.onCrumbs([]); props.onFootColor(undefined);
         });
     }));
     createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
@@ -158,7 +163,7 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
             onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode(), pageBars: props.mobile }, "*"); }}
-            class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
+            class={styles.frame} classList={{ [styles.panelFrame]: !props.mobile, [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
         <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} panelName={props.heading.name} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
@@ -233,7 +238,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
             return <Show when={live().has(key)}>
                 <PanelFrame panelKey={key} heading={heading} mobile={props.mobile} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
                     restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} failed={() => props.onPanelFailed?.(key)}
-                    onCrumbs={(titles) => props.onCrumbs(key, titles)} backs={props.backs} />
+                    onCrumbs={(titles) => props.onCrumbs(key, titles)} onFootColor={(color) => props.onFootColor?.(key, color)} backs={props.backs} />
             </Show>;
         }}</For>
     </PaperFlex>;

@@ -1,19 +1,15 @@
-// The phone layout runs no panels of its own: the computer the app runs on
-// (This Computer) is the desktop's, so a phone lists only paired computers,
-// and with none it opens on the welcome page instead of Home.
+// The desktop app's phone mock (`paperboard --mobile`) runs no panels of its
+// own: the computer it runs on (This Computer) is the desktop's, so it lists
+// only paired computers, and with none it opens on the welcome page instead
+// of Home (main.tsx).
 
 interface ListedComputer {
     isLocal?: boolean;
 }
 
-/** the computers the shell lists: every one on the desktop, the paired ones on a phone */
-export function shownComputers<T extends ListedComputer>(computers: T[], mobile: boolean): T[] {
-    return mobile ? computers.filter((c) => !c.isLocal) : computers;
-}
-
-/** whether the phone opens on its welcome page: nothing paired to show */
-export function showsWelcome(computers: ListedComputer[], mobile: boolean): boolean {
-    return mobile && shownComputers(computers, mobile).length === 0;
+/** the computers the shell lists: every one, or only the paired ones */
+export function shownComputers<T extends ListedComputer>(computers: T[], hidesThisComputer: boolean): T[] {
+    return hidesThisComputer ? computers.filter((c) => !c.isLocal) : computers;
 }
 
 /**

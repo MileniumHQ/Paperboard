@@ -19,6 +19,7 @@ interface ComputerRailProps {
         id: string;
         name: string;
         host: string;
+        via?: string;
         isLocal?: boolean;
     }[];
     value: string;
@@ -52,7 +53,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                     <PaperRailItem
                         value={comp.id}
                         icon={computerIcon(comp)}
-                        label={`${comp.name} (${comp.host})`}
+                        label={comp.via ? comp.name : `${comp.name} (${comp.host})`}
                         reorderable
                         onContextMenu={(e: MouseEvent) => props.onComputerContextMenu?.(comp.id, e)}
                     />
