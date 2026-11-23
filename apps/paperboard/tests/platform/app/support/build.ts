@@ -156,6 +156,7 @@ export const buildCrane = once(() => compileCrane());
 export const FIRST_PARTY_PANELS = [
     "dev.paperboard.agents",
     "dev.paperboard.botcreator",
+    "dev.paperboard.drive",
     "dev.paperboard.gameserver",
     "dev.paperboard.terminal",
 ] as const;

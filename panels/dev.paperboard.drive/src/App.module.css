@@ -1,0 +1,97 @@
+.app {
+    container-type: inline-size;
+    background: var(--paper-surface);
+}
+
+/* the thin bar over the files: where you are, and what you can do there */
+.bar {
+    flex: none;
+    min-height: calc(var(--paper-control-size-small) + var(--paper-uigap-half) * 2);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+    background: var(--paper-surface);
+}
+
+.crumbs {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* the path's parts give way from the top down; the folder you're in stays whole longest */
+.crumb {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: var(--paper-size-field-wide);
+    color: var(--paper-text-muted);
+    font-weight: var(--paper-weight-semibold);
+}
+
+.crumb > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.crumb.current {
+    flex-shrink: 0;
+    color: var(--paper-text);
+    font-weight: var(--paper-weight-bold);
+}
+
+.crumbSep {
+    flex: none;
+    color: var(--paper-text-faint);
+}
+
+.dropHere {
+    background: var(--paper-selection);
+    box-shadow: inset 0 0 0 var(--paper-thick-border-width) var(--paper-primary);
+}
+
+/* on a phone the path is the folder's name, with a way back up */
+.up,
+.title {
+    display: none;
+}
+
+.title {
+    flex: 1;
+    min-width: 0;
+}
+
+.modes {
+    flex: none;
+    padding: var(--paper-uigap-sixth);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+}
+
+/* the uploads under way, under the files */
+.uploads {
+    flex: none;
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    border-top: var(--paper-border-width) solid var(--paper-border-subtle);
+    background: var(--paper-surface-raised);
+}
+
+.uploadsIcon {
+    color: var(--paper-primary);
+}
+
+@container (max-width: 560px) {
+    .crumbs,
+    .wideOnly {
+        display: none;
+    }
+
+    .up {
+        display: inline-flex;
+    }
+
+    .title {
+        display: block;
+    }
+}

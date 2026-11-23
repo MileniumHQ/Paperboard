@@ -1,0 +1,459 @@
+/* ---------- the view: fills its box edge to edge, with no frame of its own ---------- */
+.PaperFileView {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    outline: none;
+    background: var(--paper-surface);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.PaperFileView.dropHere {
+    box-shadow: inset 0 0 0 var(--paper-thick-border-width) var(--paper-primary);
+    background: color-mix(in srgb, var(--paper-primary) 6%, var(--paper-surface));
+}
+
+.marquee {
+    position: absolute;
+    z-index: var(--paper-z-raised);
+    border: var(--paper-border-width) solid var(--paper-primary);
+    border-radius: var(--paper-uigap-sixth);
+    background: var(--paper-selection);
+    pointer-events: none;
+}
+
+/* empty, loading, or failed: the space under the entries */
+.fill {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--paper-size-panel-height-small);
+    padding: var(--paper-uigap-double);
+}
+
+/* ---------- icons ---------- */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--file-view-icon) + var(--paper-uigap) * 5), 1fr));
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap);
+    align-content: start;
+}
+
+.grid:empty {
+    display: none;
+}
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    padding: var(--paper-uigap-half) var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius);
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tileGlyph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--file-view-icon) + var(--paper-uigap));
+    height: calc(var(--file-view-icon) + var(--paper-uigap));
+    border-radius: var(--paper-border-radius);
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.tile.selected .tileGlyph {
+    background: var(--paper-surface-element);
+}
+
+.tileName {
+    max-width: 100%;
+    padding: var(--paper-uigap-sixth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    font-size: var(--paper-text-size-3);
+    font-weight: var(--paper-weight-medium);
+    line-height: var(--paper-leading-snug);
+    text-align: center;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tile.selected .tileName {
+    background: var(--paper-surface-element);
+}
+
+.focused .tile.selected .tileName {
+    background: var(--paper-primary);
+    color: var(--paper-on-color);
+}
+
+.tile.moving,
+.row.moving {
+    opacity: var(--paper-opacity-muted);
+}
+
+.tile.dropHere .tileGlyph,
+.row.dropHere {
+    background: var(--paper-selection);
+    box-shadow: inset 0 0 0 var(--paper-thick-border-width) var(--paper-primary);
+}
+
+/* ---------- glyphs ---------- */
+.glyph {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--glyph-size);
+    height: var(--glyph-size);
+}
+
+.folder {
+    font-size: calc(var(--glyph-size) * 1.16);
+    color: var(--paper-primary);
+    line-height: 1;
+}
+
+.folderBadge {
+    position: absolute;
+    left: 50%;
+    top: 58%;
+    transform: translate(-50%, -50%);
+    font-size: calc(var(--glyph-size) * 0.3);
+    color: color-mix(in srgb, var(--paper-primary-deep) 70%, black);
+    opacity: 0.55;
+}
+
+.sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--glyph-size) * 0.04);
+    width: calc(var(--glyph-size) * 0.74);
+    height: calc(var(--glyph-size) * 0.94);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: calc(var(--glyph-size) * 0.09);
+    background: linear-gradient(225deg, transparent calc(var(--glyph-size) * 0.15), var(--paper-surface-raised) calc(var(--glyph-size) * 0.15));
+    box-shadow: var(--paper-element-shadow);
+    color: var(--glyph-tone);
+}
+
+/* the folded corner, tinted with the kind */
+.sheet::before {
+    content: "";
+    position: absolute;
+    top: calc(var(--paper-border-width) * -1);
+    right: calc(var(--paper-border-width) * -1);
+    width: calc(var(--glyph-size) * 0.21);
+    height: calc(var(--glyph-size) * 0.21);
+    border-bottom-left-radius: calc(var(--glyph-size) * 0.05);
+    background: linear-gradient(225deg, transparent 50%, color-mix(in srgb, var(--glyph-tone) 22%, var(--paper-surface-element)) 50%);
+}
+
+.sheetIcon {
+    font-size: calc(var(--glyph-size) * 0.36);
+}
+
+.sheetExt {
+    max-width: 92%;
+    font-size: calc(var(--glyph-size) * 0.13);
+    font-weight: var(--paper-weight-black);
+    letter-spacing: var(--paper-text-tracking);
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.small .sheet {
+    width: calc(var(--glyph-size) * 0.78);
+    border-radius: calc(var(--glyph-size) * 0.14);
+}
+
+.small .sheetIcon {
+    font-size: calc(var(--glyph-size) * 0.56);
+}
+
+.small .sheet::before,
+.small .sheetExt {
+    display: none;
+}
+
+/* a picture of the file: at its own shape in a frame, like a print */
+.picture {
+    max-width: 100%;
+    max-height: 100%;
+    border: calc(var(--glyph-size) * 0.03) solid var(--paper-surface-raised);
+    border-radius: calc(var(--glyph-size) * 0.07);
+    box-shadow: var(--paper-element-shadow), 0 0 0 var(--paper-border-width) var(--paper-border-subtle);
+    object-fit: contain;
+    animation: appear var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+/* in a list row it fills the square, cropped */
+.small .picture {
+    width: 100%;
+    height: 100%;
+    border-width: 0;
+    border-radius: var(--paper-border-radius-half);
+    object-fit: cover;
+}
+
+@keyframes appear {
+    from {
+        opacity: 0;
+    }
+}
+
+/* ---------- list ---------- */
+.table {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--paper-size-field-wide) var(--paper-size-field-medium) var(--paper-size-field);
+    min-width: 100%;
+    padding-bottom: var(--paper-uigap);
+}
+
+.narrow .table {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.narrow .wideOnly {
+    display: none;
+}
+
+.head,
+.row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: center;
+}
+
+.head {
+    position: sticky;
+    top: 0;
+    z-index: var(--paper-z-sticky);
+    min-height: var(--paper-control-size-medium);
+    background: var(--paper-surface);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.head > :first-child {
+    padding-left: var(--paper-uigap);
+}
+
+.head > :last-child,
+.row > :last-child {
+    padding-right: var(--paper-uigap);
+}
+
+.narrow .head {
+    display: none;
+}
+
+.headCell {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    height: 100%;
+    padding: 0 var(--paper-uigap-half);
+    border: none;
+    background: none;
+    color: var(--paper-text-muted);
+    font: inherit;
+    font-size: var(--paper-text-size-1);
+    font-weight: var(--paper-weight-bold);
+    text-align: left;
+    cursor: pointer;
+}
+
+.headCell:hover:not(:disabled),
+.headCell.sorted {
+    color: var(--paper-text);
+}
+
+.headCell:disabled {
+    cursor: default;
+}
+
+.sortIcon {
+    font-size: var(--paper-text-size-2);
+}
+
+.row {
+    min-height: calc(var(--paper-control-size-medium) + var(--paper-uigap-half));
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.row:nth-child(even of .row) {
+    background: color-mix(in srgb, var(--paper-surface-sunken) 55%, transparent);
+}
+
+.row.selected {
+    background: var(--paper-surface-element);
+}
+
+.focused .row.selected {
+    background: var(--paper-primary);
+    color: var(--paper-on-color);
+}
+
+.focused .row.selected .cellMuted,
+.focused .row.selected .narrowOnly,
+.focused .row.selected .disclosure {
+    color: inherit;
+    opacity: 0.85;
+}
+
+/* a folder on a chosen row would vanish into the row's blue */
+.focused .row.selected .folder {
+    color: var(--paper-on-color);
+}
+
+.focused .row.selected .sheet {
+    border-color: transparent;
+}
+
+.nameCell {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    padding-left: calc(var(--paper-uigap-half) + var(--file-view-depth, 0) * var(--paper-uigap-sixfourths));
+}
+
+.nameStack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.rowName {
+    min-width: 0;
+    font-size: var(--paper-text-size-3);
+    font-weight: var(--paper-weight-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.narrowOnly {
+    display: none;
+    color: var(--paper-text-muted);
+    font-size: var(--paper-text-size-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.narrow .narrowOnly {
+    display: block;
+}
+
+.narrow .row {
+    min-height: calc(var(--paper-control-size-medium) + var(--paper-uigap));
+}
+
+.cellMuted {
+    padding: 0 var(--paper-uigap-half);
+    color: var(--paper-text-muted);
+    font-size: var(--paper-text-size-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.disclosure {
+    display: inline-flex;
+    flex: none;
+    width: var(--paper-icon-size-small);
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--paper-text-muted);
+    font-size: var(--paper-text-size-4);
+    cursor: pointer;
+    transition: transform var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.disclosure.open {
+    transform: rotate(90deg);
+}
+
+.disclosureSpace {
+    flex: none;
+    width: var(--paper-icon-size-small);
+}
+
+/* ---------- rename ---------- */
+.rename {
+    width: 100%;
+    min-width: 0;
+    padding: var(--paper-uigap-sixth) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-primary);
+    border-radius: var(--paper-border-radius-half);
+    outline: var(--paper-focus-ring);
+    background: var(--paper-field);
+    color: var(--paper-text);
+    font: inherit;
+    font-size: var(--paper-text-size-3);
+    font-weight: var(--paper-weight-medium);
+    user-select: text;
+    -webkit-user-select: text;
+    /* names grow as they are typed, and wrap under an icon */
+    field-sizing: content;
+    resize: none;
+    overflow: hidden;
+}
+
+.tile .rename {
+    min-width: 100%;
+    max-width: calc(100% + var(--paper-uigap));
+    line-height: var(--paper-leading-snug);
+    text-align: center;
+}
+
+/* what follows the pointer while dragging: off screen until the drag draws it */
+.ghost {
+    position: fixed;
+    top: calc(var(--paper-size-panel-height) * -1);
+    left: 0;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    box-shadow: var(--paper-element-shadow);
+    color: var(--paper-text);
+    font-size: var(--paper-text-size-3);
+    font-weight: var(--paper-weight-semibold);
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .picture {
+        animation: none;
+    }
+}
