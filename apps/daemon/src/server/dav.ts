@@ -580,17 +580,7 @@ export async function handleDavSessionIssue(
     const body = await readSessionBody(req, res);
     if (body === null) return;
     const idleMs = typeof body.idleMs === "number" ? body.idleMs : DEFAULT_IDLE_MS;
-    const s = (() => {
-        try {
-            return sessions.issue(idleMs, token);
-        } catch (err) {
-            // capped store: loud refusal, never a hung connection
-            logger.warn("[dav] session issue refused:", (err as Error)?.message ?? err);
-            replyText(res, 503, "Session store is full");
-            return null;
-        }
-    })();
-    if (!s) return;
+    const s = sessions.issue(idleMs, token);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ user: s.user, pass: s.pass, path: `${DAV_PREFIX}/` }));
 }

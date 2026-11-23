@@ -478,7 +478,7 @@ const serverCalls: Omit<Handlers, ServersCallName> = {
     uploadPlugins: game("uploadPlugins"), uploadDatapacks: game("uploadDatapacks"), uploadModpack: game("uploadModpack"), discardAddonUpload: game("discardAddonUpload"),
     kickPlayer: game("kickPlayer"), banPlayer: game("banPlayer"), opPlayer: game("opPlayer"), deopPlayer: game("deopPlayer"), whitelistPlayer: game("whitelistPlayer"),
     unwhitelistPlayer: game("unwhitelistPlayer"), pardonPlayer: game("pardonPlayer"), killPlayer: game("killPlayer"), deletePlayerData: game("deletePlayerData"),
-    forgetPlayerData: game("forgetPlayerData"), getPlayerSkin: game("getPlayerSkin"), queryPlayerStats: game("queryPlayerStats"), queryOnlinePlayers: game("queryOnlinePlayers"),
+    getPlayerSkin: game("getPlayerSkin"), queryPlayerStats: game("queryPlayerStats"), queryOnlinePlayers: game("queryOnlinePlayers"),
     queryPlayerPositions: game("queryPlayerPositions"), listRoster: game("listRoster"), currentPlayerNames: game("currentPlayerNames"), readBedrockNaming: game("readBedrockNaming"),
     listPlayerStats: game("listPlayerStats"), queryGamerules: game("queryGamerules"), setGamerule: game("setGamerule"),
     // Steam games'

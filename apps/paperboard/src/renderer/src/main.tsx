@@ -1,45 +1,38 @@
-import "@mileniumhq/paperui/style.css";
-import "./shell.css";
-
-import { render } from "solid-js/web";
+import { createSignal, onMount, Show } from "solid-js";
+import { errorMessage } from "@mileniumhq/paperapi";
+import { showError } from "@mileniumhq/paperui";
 import App from "./App";
-import { configureHostConnection, initPaperApi, errorMessage } from "@mileniumhq/paperapi";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperProvider } from "@mileniumhq/paperui";
-import { logToMain, shellIpc } from "./lib/shell";
+import { startShell } from "./startShell";
+import MobileWelcome from "./components/computer/MobileWelcome";
+import { logToMain, shellApi } from "./lib/shell";
 
-async function startShell() {
-    const close = configureHostConnection(() => shellIpc().invoke("crane-credentials"));
-    // the page goes away: its views stop following first, so none of them
-    // reports a read that failed only because the connections closed under it
-    let dispose: (() => void) | null = null;
-    window.addEventListener("pagehide", () => {
-        dispose?.();
-        close();
-    }, { once: true });
-    await initPaperApi({ computerId: "local" });
-    dispose = render(() => <App />, document.getElementById("root") as HTMLElement);
-}
-// drawn with PaperUI, which needs no server, so it follows the system theme
-function NoServer(props: { message: string }) {
+// The desktop app's window, or with `--mobile` its development mock of a
+// phone (mobileMock.ts): the phone layout with touch, listing only paired
+// computers, on a welcome until one is. The shell waits for the launch
+// options: a phone keeps its own Home, and a frame is told mobile mode as it
+// loads.
+function DesktopShell() {
+    const [phone, setPhone] = createSignal<boolean | null>(null);
+    onMount(() => {
+        shellApi.getLaunchOptions().then(
+            (options) => setPhone(options.mobile),
+            (err) => {
+                logToMain("error", "Couldn't read the launch options; the layout is the desktop one until restart:", err);
+                setPhone(false);
+                showError("Couldn't read how Paperboard was started", `The desktop layout shows until Paperboard restarts. ${errorMessage(err)}`);
+            },
+        );
+    });
     return (
-        <PaperProvider fullScreen>
-            <PaperFlex center fullWidth fullHeight padding="double" role="alert">
-                <PaperEmptyState
-                    icon="error"
-                    title="No local server"
-                    description={`Paperboard could not connect to its local server: ${props.message}`}
-                >
-                    <PaperButton variant="primary" onClick={() => location.reload()}>Retry</PaperButton>
-                </PaperEmptyState>
-            </PaperFlex>
-        </PaperProvider>
+        <Show when={phone() !== null}>
+            <App
+                layout={phone() ? "phone" : "desktop"}
+                mobileMode={phone() === true}
+                hidesThisComputer={phone() === true}
+                noComputers={phone() ? MobileWelcome : undefined}
+            />
+        </Show>
     );
 }
 
-void startShell().catch((err) => {
-    logToMain("error", "The shell couldn't connect to its local server:", err);
-    const root = document.getElementById("root")!;
-    root.replaceChildren();
-    const message = errorMessage(err);
-    render(() => <NoServer message={message} />, root);
-});
+startShell(() => <DesktopShell />);

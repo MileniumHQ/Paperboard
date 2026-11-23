@@ -20,7 +20,7 @@ import { useServer, type ServerStatus } from "../../lib/server";
 import type { SavedSetting } from "../../lib/saves";
 import { errorMessage } from "../../lib/failure";
 import PlayerHead from "../PlayerHead";
-import { formatDistance, formatPlaytime, type Leaderboard } from "./leaderboard";
+import { formatDistance, formatPlaytime, playtimeSeconds } from "./leaderboard";
 import type { PlayerFlagField, PlayerInfo } from "./state";
 
 // how often an online player's open page asks the game for their health,
@@ -36,11 +36,7 @@ export function canEditLists(status: ServerStatus): boolean {
 /** The open player: who they are, moderation, their stats and permissions, and deleting their data. */
 export default function PlayerInspector(props: {
     player?: PlayerInfo;
-    leaderboard: Leaderboard;
     bedrock: boolean;
-    banned: boolean;
-    /** why they are banned, as the ban list says */
-    banReason: string | null;
     /** the open player's op or whitelist switch, made once per player shown */
     flag: (field: PlayerFlagField) => SavedSetting<boolean>;
     onAction: (action: "kick" | "ban") => void;
@@ -54,7 +50,7 @@ export default function PlayerInspector(props: {
     const key = () => name().toLowerCase();
     const isPlayerOnline = () => onlinePlayerNames().has(key());
     const stats = () => playerStats().get(key());
-    const summary = () => (props.player ? props.leaderboard.summaryOf(props.player) : undefined);
+    const summary = () => props.player?.stats ?? undefined;
 
     // live stats for an online player: asked when their page opens or they
     // come online, then on a slow poll, never because other state arrived
@@ -81,7 +77,7 @@ export default function PlayerInspector(props: {
         }),
     );
 
-    const playtimeText = () => formatPlaytime(props.player ? props.leaderboard.playtimeSeconds(props.player) : undefined);
+    const playtimeText = () => formatPlaytime(props.player ? playtimeSeconds(props.player) : undefined);
     const distanceText = () => {
         const s = summary();
         return s ? formatDistance(s.distanceCm) : "–";
@@ -125,7 +121,7 @@ export default function PlayerInspector(props: {
                 <PaperFlex direction="row" gap="full" align="center" wrap>
                     <PlayerHead
                         name={name()}
-                        uuid={props.player?.uuid}
+                        uuid={props.player?.uuid ?? undefined}
                         size="xlarge"
                         onFailure={setHeadFailure}
                     />
@@ -140,9 +136,9 @@ export default function PlayerInspector(props: {
                         </PaperText>
                         <PaperFlex direction="row" gap="onefourth" align="center" wrap>
                             <PaperBadge
-                                variant={props.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
+                                variant={props.player?.banned ? "danger" : isPlayerOnline() ? "success" : "monochrome"}
                             >
-                                {props.banned
+                                {props.player?.banned
                                     ? "Banned"
                                     : isPlayerOnline()
                                         ? "Online"
@@ -158,7 +154,7 @@ export default function PlayerInspector(props: {
                                 <PaperBadge variant="monochrome">Bedrock</PaperBadge>
                             </Show>
                         </PaperFlex>
-                        <Show when={props.banned && props.banReason}>
+                        <Show when={props.player?.banned && props.player.banReason}>
                             {(reason) => <PaperText size={2} color="text-subtle">Ban reason: {reason()}</PaperText>}
                         </Show>
                         <Show when={props.player?.uuid}>
@@ -192,7 +188,7 @@ export default function PlayerInspector(props: {
                         <PaperIcon>logout</PaperIcon>Kick
                     </PaperButton>
                     <Show
-                        when={!props.banned}
+                        when={!props.player?.banned}
                         fallback={
                             <PaperButton
                                 variant="primary"

@@ -138,14 +138,14 @@ interface ImportedFile {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>exportFile</PaperCode></td><td>One file from the panel's folder to where the person chooses. At most 2 GiB.</td></tr>
+                    <tr><td><PaperCode>exportFile</PaperCode></td><td>One file from the panel's folder to where the person chooses.</td></tr>
                     <tr><td><PaperCode>importFile</PaperCode></td><td>One chosen file to <PaperCode>targetPath</PaperCode>, replacing what was there once it fully arrives.</td></tr>
                     <tr><td><PaperCode>importFiles</PaperCode></td><td>One or more chosen files into the folder <PaperCode>targetDir</PaperCode>, each under its own name. Files already copied stay if a later one fails.</td></tr>
                     <tr><td><PaperCode>importFolder</PaperCode></td><td>A chosen folder and everything in it into <PaperCode>targetDir/&lt;folder name&gt;</PaperCode>. A folder with a link in it is refused before anything is copied.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                An import holds at most 5000 files and 2 GiB in all.
+                An import fails with <PaperCode>too-large</PaperCode> when a file is larger than the computer receiving it accepts.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
@@ -163,13 +163,11 @@ interface ImportedFile {
                 <tbody>
                     <tr><td><PaperCode>Access denied: path traverses outside assigned storage for &lt;panel&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A path with <PaperCode>..</PaperCode> that leaves the folder.</td></tr>
                     <tr><td><PaperCode>Access denied: symbolic link in storage path for &lt;panel&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The path passes through a link.</td></tr>
-                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel's <PaperCode>appId</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Download refused: only http(s) URLs are downloaded, not &lt;scheme&gt;</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>file:</PaperCode>, <PaperCode>ftp:</PaperCode> or other URL.</td></tr>
                     <tr><td><PaperCode>Download refused: checksum algorithm "&lt;algorithm&gt;" is not supported (use sha1, sha256, sha512)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>checksum</PaperCode> naming another algorithm, such as <PaperCode>md5</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Download refused: the &lt;algorithm&gt; checksum has no value</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>checksum</PaperCode> with an empty <PaperCode>value</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Download failed (HTTP &lt;status&gt;)</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The server answered with an error.</td></tr>
                     <tr><td><PaperCode>SHA1 mismatch</PaperCode>, <PaperCode>SHA256 mismatch</PaperCode>, <PaperCode>SHA512 mismatch</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The file is not the one the checksum names.</td></tr>
-                    <tr><td><PaperCode>Too many concurrent downloads (max 8)</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>Eight downloads are running.</td></tr>
                     <tr><td><PaperCode>Download exceeds 2 GiB cap</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>The file is too large.</td></tr>
                     <tr><td><PaperCode>Download connection timed out</PaperCode>, <PaperCode>Download stalled</PaperCode>, <PaperCode>Download exceeded lifetime deadline</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>No data for 45 seconds, or 30 minutes in all.</td></tr>
                     <tr><td><PaperCode>Exporting and importing files needs a panel shown in Paperboard</PaperCode></td><td><PaperCode>unavailable</PaperCode></td><td>Called from a service, or from a page outside the shell.</td></tr>

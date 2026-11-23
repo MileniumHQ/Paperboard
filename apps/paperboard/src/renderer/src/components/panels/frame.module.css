@@ -28,6 +28,7 @@
     pointer-events: none;
 }
 
+/* beside the panel list; the phone's page has nothing beside it */
 .panelFrame {
     border-left: var(--paper-border-width) solid var(--paper-border);
 }

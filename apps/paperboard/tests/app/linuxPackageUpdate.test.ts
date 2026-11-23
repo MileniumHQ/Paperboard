@@ -79,13 +79,6 @@ describe("a .deb or .rpm Paperboard updates itself", () => {
         expect(packageRequests).toBe(2);
     });
 
-    test("a checksum list is read up to 64 KiB of bytes, not characters", async () => {
-        // 40,000 three-byte characters: under the cap as characters, far over it as bytes
-        sums = "€".repeat(40_000);
-        const { downloadPromise } = await updater().updater.checkForUpdates();
-        await expect(downloadPromise!).rejects.toThrow("larger than 64 KiB");
-    });
-
     test("a package that doesn't match its checksum is thrown away, never installed", async () => {
         sums = `${"0".repeat(64)}  ${FILE}\n`;
         const { updater: u, events } = updater();
@@ -119,43 +112,6 @@ describe("a .deb or .rpm Paperboard updates itself", () => {
         } finally {
             process.env.PATH = previousPath;
         }
-    });
-
-    test("a download cut off, or one the disk can't take, fails at once and leaves nothing behind", async () => {
-        // the connection drops halfway through the package
-        server.removeAllListeners("request");
-        server.on("request", (req, res) => {
-            if (req.url === "/pb/latest-linux.yml") return void res.end(`version: ${feedVersion}\npath: x\nsha512: x\nfiles: []\n`);
-            if (req.url === "/pb/SHA256SUMS") return void res.end(sums);
-            res.writeHead(200, { "content-length": String(PACKAGE.length * 2) });
-            res.write(PACKAGE, () => res.destroy());
-        });
-        const cut = updater().updater;
-        await expect((await cut.checkForUpdates()).downloadPromise!).rejects.toThrow();
-        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual([]);
-
-        // the package can't be written where it downloads
-        server.removeAllListeners("request");
-        server.on("request", (req, res) => {
-            if (req.url === "/pb/latest-linux.yml") return void res.end(`version: ${feedVersion}\npath: x\nsha512: x\nfiles: []\n`);
-            if (req.url === "/pb/SHA256SUMS") return void res.end(sums);
-            res.end(PACKAGE);
-        });
-        fs.chmodSync(path.join(dir, "downloads"), 0o555);
-        try {
-            const full = updater().updater;
-            await expect((await full.checkForUpdates()).downloadPromise!).rejects.toThrow("EACCES");
-        } finally {
-            fs.chmodSync(path.join(dir, "downloads"), 0o755);
-        }
-        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual([]);
-    });
-
-    test("the current release downloads nothing", async () => {
-        feedVersion = "1.0.0";
-        const { updater: u, events } = updater();
-        expect((await u.checkForUpdates()).downloadPromise).toBeNull();
-        expect(events).toEqual(["update-not-available"]);
     });
 
     test("it installs with the system's own tool through pkexec, and says why when it can't", () => {

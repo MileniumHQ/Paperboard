@@ -4,7 +4,6 @@
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-import { shape, type Infer } from "@mileniumhq/paperapi";
 
 export interface FileTypeFilter {
     name: string;
@@ -14,8 +13,10 @@ export interface FileTypeFilter {
 /** what an import asks the user to pick: one file (path is the file), several files, or a folder (path is the folder to copy them into) */
 export type PanelImportSelection = "file" | "files" | "folder";
 
-const importedPanelFile = shape.object({ name: shape.text(), bytes: shape.number() });
-export type ImportedPanelFile = Infer<typeof importedPanelFile>;
+export interface ImportedPanelFile {
+    name: string;
+    bytes: number;
+}
 
 export interface PanelFileTransferRequest {
     computerId: string;
@@ -29,16 +30,13 @@ export interface PanelFileTransferRequest {
     filters: FileTypeFilter[];
 }
 
-const failureCode = shape.oneOf("invalid-request", "busy", "not-found", "too-large", "unreachable", "unsupported", "failed");
-export type PanelFileTransferFailure = Infer<typeof failureCode>;
+export type PanelFileTransferFailure = "invalid-request" | "busy" | "not-found" | "too-large" | "unreachable" | "unsupported" | "failed";
 
-export const panelFileTransferResult = shape.either(
-    shape.object({ status: shape.oneOf("exported"), name: shape.text(), bytes: shape.number() }),
-    shape.object({ status: shape.oneOf("imported"), name: shape.text(), bytes: shape.number(), files: shape.optional(shape.list(importedPanelFile)) }),
-    shape.object({ status: shape.oneOf("canceled") }),
-    shape.object({ status: shape.oneOf("failed"), code: failureCode, message: shape.text() }),
-);
-export type PanelFileTransferResult = Infer<typeof panelFileTransferResult>;
+export type PanelFileTransferResult =
+    | { status: "exported"; name: string; bytes: number }
+    | { status: "imported"; name: string; bytes: number; files?: ImportedPanelFile[] }
+    | { status: "canceled" }
+    | { status: "failed"; code: PanelFileTransferFailure; message: string };
 
 export class PanelFileTransferError extends Error {
     constructor(
@@ -50,9 +48,6 @@ export class PanelFileTransferError extends Error {
 }
 
 export const PANEL_FILE_PATH_MAX = 1024;
-/** a picked folder or selection larger than this is refused before anything is copied */
-export const PANEL_IMPORT_MAX_FILES = 5000;
-export const PANEL_IMPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** A name from the user's disk that may become one path segment in a panel's storage. */
 export function isImportableName(name: string): boolean {

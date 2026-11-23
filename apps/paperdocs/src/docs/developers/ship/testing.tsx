@@ -169,12 +169,10 @@ export default function TestingGuideDoc() {
                 <tbody>
                     <tr><td><PaperCode>bunfig.toml</PaperCode></td><td>Loads <PaperCode>test/hermetic.ts</PaperCode> before every test file.</td></tr>
                     <tr><td><PaperCode>test/hermetic.ts</PaperCode></td><td>Gives the test run a throwaway data folder and blocks every network connection.</td></tr>
-                    <tr><td><PaperCode>test/uiStandards.test.ts</PaperCode></td><td>Fails on an inline style anywhere under <PaperCode>src/</PaperCode>, and on a <PaperCode>PaperModal</PaperCode> placed inside <PaperCode>Show</PaperCode> or a render callback.</td></tr>
-                    <tr><td><PaperCode>test/greet.test.ts</PaperCode></td><td>Tests the template's greeting rules. Replace it with your panel's tests.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                <PaperCode>bun test</PaperCode> runs every <PaperCode>*.test.ts</PaperCode> file. Keep the preload and the UI test as they are.
+                <PaperCode>bun test</PaperCode> runs every <PaperCode>*.test.ts</PaperCode> file. Keep the preload as it is.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="real-data">Tests never reach your Paperboard</PaperText>

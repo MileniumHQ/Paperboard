@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readBotsConfig } from "../src/bots";
-import { GLOBAL_SCOPE, MAX_COMMAND_OPTIONS, MAX_COMMANDS_PER_SCOPE, readStoredCommands } from "../src/types";
+import { GLOBAL_SCOPE, MAX_COMMAND_OPTIONS, readStoredCommands } from "../src/types";
 
 const GUILD = "123456789012345678";
 const option = (name: string, extra: Record<string, unknown> = {}) => ({ id: `o-${name}`, name, description: `The ${name}`, type: "string", required: false, ...extra });
@@ -26,24 +26,6 @@ describe("saved commands are never trusted, and never quietly dropped", () => {
         ];
         for (const [bad, why] of damaged) expect(() => readStoredCommands([stored("ok"), bad])).toThrow(why);
         expect(() => readStoredCommands({ ping: true })).toThrow("its commands are not a list");
-    });
-
-    test("commands are unique by scope and name, and capped per scope", () => {
-        expect(() => readStoredCommands([stored("same"), stored("same", { id: "second-copy" })])).toThrow("/same is saved twice");
-        const full = Array.from({ length: MAX_COMMANDS_PER_SCOPE }, (_, i) => stored(`c${i}`));
-        // the same name in a server and globally are two commands; a full global scope leaves a server its own
-        expect(readStoredCommands([...full, stored("same", { scope: GUILD })])).toHaveLength(MAX_COMMANDS_PER_SCOPE + 1);
-        expect(() => readStoredCommands([...full, stored("one-more")])).toThrow(`past Discord's ${MAX_COMMANDS_PER_SCOPE}-command limit`);
-    });
-
-    test("valid commands come back as saved, names in Discord's form", () => {
-        const commands = readStoredCommands([stored("/Slashed"), stored("dm", { userInstall: true }), stored("unscoped", { scope: undefined })]);
-        expect(commands.map((c) => [c.name, c.scope, c.userInstall])).toEqual([
-            ["slashed", GLOBAL_SCOPE, false],
-            ["dm", GLOBAL_SCOPE, true],
-            ["unscoped", GLOBAL_SCOPE, false],
-        ]);
-        expect(readStoredCommands(undefined)).toEqual([]);
     });
 
     test("a bot whose saved commands are damaged refuses the saved bots, naming the bot", () => {

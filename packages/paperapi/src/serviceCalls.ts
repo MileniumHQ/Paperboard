@@ -3,7 +3,6 @@
 // its calls and events freely ("renameTab", "agent:entry"); each becomes a
 // block id here, prefixed so it can never clash with a block the panel
 // shows in the Blocks panel.
-import { blocksApi, type BlockCallOptions } from "./blocks";
 
 /** The internal value a panel's page reads its service's state from. */
 export const STATE_VALUE = "panel-state";
@@ -34,18 +33,3 @@ function internalId(prefix: "call-" | "emit-", name: string, what: string): stri
 export const callBlockId = (name: string): string => internalId("call-", name, "service call");
 /** The internal event a service event is fired as. */
 export const eventBlockId = (name: string): string => internalId("emit-", name, "service event");
-
-/**
- * @deprecated Untyped calls by name: declare them in a contract
- * (defineContract) and reach them with serviceClient. Kept only while Game
- * Server and Agents move.
- */
-export const serviceApi = {
-    /** Runs one of the service's calls with its input, and gives back what it returned. */
-    call: <T = unknown>(panelId: string, name: string, input?: unknown, options?: BlockCallOptions): Promise<T> =>
-        blocksApi.run<T>(panelId, callBlockId(name), input === undefined ? {} : { input }, options),
-
-    /** Hears each time the service emits the event, with its payload. */
-    on: <T = unknown>(panelId: string, event: string, callback: (payload: T) => void): (() => void) =>
-        blocksApi.onEvent(panelId, eventBlockId(event), (fired) => callback(fired.payload as T)),
-};

@@ -1,22 +1,20 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
 // Every channel is the contract's (shared/shellContract.ts): calls, sends and
-// pushes are typed by it, and each answer and push is read against its shape.
+// pushes are typed by it.
 import { onCleanup } from "solid-js";
 import { panelPath } from "@mileniumhq/paperapi";
 import { createBrowserBridge } from "./browserBridge";
-import {
-    readShellAnswer,
-    readShellPush,
-    type CallAnswer,
-    type CallArgs,
-    type ComputerInfo,
-    type Given,
-    type PushPayload,
-    type SendArgs,
-    type ShellCall,
-    type ShellPush,
-    type ShellSend,
-    type ShellWire,
+import type {
+    CallAnswer,
+    CallArgs,
+    ComputerInfo,
+    Given,
+    PushPayload,
+    SendArgs,
+    ShellCall,
+    ShellPush,
+    ShellSend,
+    ShellWire,
 } from "../../../shared/shellContract";
 import type { PanelPermission, PermissionAnswer } from "../../../shared/panelPermissions";
 
@@ -41,27 +39,14 @@ function refusal(err: unknown): unknown {
 function typed(wire: ShellWire): ShellIpc {
     return {
         invoke: async (channel, ...args) => {
-            let answer: unknown;
             try {
-                answer = await wire.invoke(channel, args[0]);
+                return (await wire.invoke(channel, args[0])) as CallAnswer<typeof channel>;
             } catch (err) {
                 throw refusal(err);
             }
-            return readShellAnswer(channel, answer);
         },
         send: (channel, ...args) => wire.send(channel, args[0]),
-        on: (channel, listener) =>
-            wire.on(channel, (payload) => {
-                let read: PushPayload<typeof channel>;
-                try {
-                    read = readShellPush(channel, payload);
-                } catch (err) {
-                    // quiet: a push has no caller to reject; main's log and the console say why it was dropped
-                    logToMain("error", err);
-                    return;
-                }
-                listener(read);
-            }),
+        on: (channel, listener) => wire.on(channel, (payload) => listener(payload as PushPayload<typeof channel>)),
     };
 }
 
@@ -114,6 +99,21 @@ export function panelUrl(computerId: string, panelId: string, subpath = ""): str
     const rest = subpath.replace(/^\.?\//, "");
     if (!isBrowserShell()) return `panel://${computerId}.${panelId}/${rest}`;
     return `${location.origin}${panelPath(computerId, panelId, rest)}`;
+}
+
+/**
+ * Where a computer is, for people: the local computer's network address, a
+ * paired one's host:port, or for one the host reaches through a relay, that
+ * relay. `inSentence` words it to follow a name ("at 10.0.0.2:7210",
+ * "through Remote Relay"); without it, it stands alone, as a subtitle does.
+ */
+export function computerAddress(
+    computer: Pick<ComputerInfo, "host" | "port" | "via" | "networkAddress" | "isLocal">,
+    options: { inSentence?: boolean } = {},
+): string {
+    if (computer.via) return `${options.inSentence ? "through" : "Through"} ${computer.via}`;
+    const address = computer.isLocal ? computer.networkAddress || computer.host : `${computer.host}:${computer.port}`;
+    return options.inSentence ? `at ${address}` : address;
 }
 
 /** One file of an installed panel's manifest or store listing, as bytes. */

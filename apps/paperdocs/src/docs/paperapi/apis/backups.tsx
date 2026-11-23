@@ -270,7 +270,6 @@ await lisbon.create({ label: "Before the sensor swap" });`}
                     <tr><td><PaperCode>Invalid backup source</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A source outside the rules above.</td></tr>
                     <tr><td><PaperCode>A backup source cannot change its files or config selector</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A source defined again with other values.</td></tr>
                     <tr><td><PaperCode>The backup source's config no longer exists</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The config selector points at nothing.</td></tr>
-                    <tr><td><PaperCode>A backup source cannot stop another panel's process</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>A <PaperCode>processes</PaperCode> id another panel owns.</td></tr>
                     <tr><td><PaperCode>Choose an explicit backup source id</PaperCode></td><td>No code</td><td><PaperCode>forSource</PaperCode> with an id outside the rule. Thrown before anything is sent.</td></tr>
                 </tbody>
             </PaperTable>

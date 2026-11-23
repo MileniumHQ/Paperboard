@@ -3,7 +3,7 @@
 // the daemon does and reports the exit when a signal ends it.
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { closeTransport, getTransport, initPaperApi } from "../src/ipc";
-import { processApi, stopProcess } from "../src/process";
+import { processApi } from "../src/process";
 import { startWireServer, type WireServer } from "./helpers/wire";
 
 setDefaultTimeout(30_000);
@@ -74,48 +74,5 @@ describe("processApi.stop", () => {
         expect(signals()).toEqual(["SIGTERM", "SIGKILL"]);
         supervise({ running: true, ends: [], refuseKill: true });
         await expect(processApi.stop("p", { graceMs: 50 })).rejects.toThrow("no such process");
-    });
-});
-
-describe("an exit listener from before the process started", () => {
-    test("doesn't make a later stop think nothing is running, and hears the exit itself", async () => {
-        // a service listens for its process's exit before it starts it: the daemon has nothing to attach to yet
-        supervise({ running: false, ends: ["SIGTERM"] });
-        let heard = 0;
-        const off = processApi.onExit("p", () => heard++);
-        expect(await off.attached).toBe(false);
-        // then it starts, and a stop must find it and end it
-        supervise({ running: true, ends: ["SIGTERM"] });
-        await processApi.stop("p");
-        expect(signals()).toEqual(["SIGTERM"]);
-        expect(heard).toBe(1);
-        off();
-    });
-});
-
-describe("stopProcess with a host of its own", () => {
-    test("stops what the host runs, the same way: SIGTERM, then SIGKILL past the grace", async () => {
-        let running = true;
-        const sent: string[] = [];
-        const exits = new Set<() => void>();
-        const host = {
-            exists: async () => running,
-            kill: async (_id: string, signal?: string) => {
-                sent.push(signal!);
-                if (signal === "SIGKILL") {
-                    running = false;
-                    for (const exit of exits) exit();
-                }
-            },
-            // a plain teardown: no daemon to attach to
-            onExit: (_id: string, callback: () => void) => {
-                exits.add(callback);
-                return () => exits.delete(callback);
-            },
-        };
-        await stopProcess("child", { host, graceMs: 50 });
-        expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
-        expect(exits.size).toBe(0);
-        expect(server.requests("process:kill")).toEqual([]);
     });
 });

@@ -18,7 +18,6 @@ export const initialServerState = (): GameServerState => ({
     serverLevel: null,
     seenPlayers: [],
     playerStats: {},
-    playerPlaytime: {},
     playerPositions: {},
     gamerules: {},
     installProgress: null,

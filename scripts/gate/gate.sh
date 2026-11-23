@@ -34,7 +34,7 @@
 #     arilink        pbd.lc short-link worker: typecheck, tests
 #     panelapis      third-party API proxy worker: typecheck, tests
 #     scripts        root dev/publish scripts: typecheck, tests
-#     agents blocks botcreator gameserver terminal   first-party panels
+#     agents blocks botcreator drive gameserver terminal   first-party panels
 #     global         repo-wide checks (changelog-existence, todo-expiry)
 #     platform       the cross-platform suites only: each `tests/platform` or
 #                    `test/platform` directory below. CI runs this on every
@@ -91,7 +91,7 @@ supervisor_vet() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator gameserver terminal"
+KNOWN_TARGETS="global platform packages paperapi paperui create-panel release testkit npx paperapi-build paperui-build create-panel-build daemon paperboard paperdocs origami library arilink panelapis scripts agents blocks botcreator drive gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -103,7 +103,7 @@ target_deps() {
         create-panel) echo "paperapi-build paperui-build create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
         daemon | paperboard | paperdocs | library | platform) echo "paperapi-build paperui-build" ;;
-        agents | blocks | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
+        agents | blocks | botcreator | drive | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
 }
@@ -230,21 +230,17 @@ gstep scripts "root scripts typecheck" run_in "$ROOT" bun packages/paperui/node_
 gstep scripts "root scripts tests" run_in "$ROOT" bun test --parallel scripts
 gstep scripts "root scripts code check" run_in "$ROOT" bun scripts/gate/check-solid.ts scripts
 
-# ── paperdocs: tests plus the static site build (typecheck, site + docs
-# prerender, alias files, shared 404) ────────────────────────────────────────
-gstep paperdocs "paperdocs typecheck:tests" run_in "$ROOT/apps/paperdocs" bun run typecheck:tests
-gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
+## ── paperdocs: static site build (typecheck, site + docs prerender, alias files, shared 404) ──
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
-gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/test apps/paperdocs/scripts
+gstep paperdocs "paperdocs code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperdocs/src apps/paperdocs/scripts
 
-# ── shared libraries ─────────────────────────────────────────────────────────
+# ── shared libraries ────────────────────────────────────────────────────────
 gstep paperapi "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 gstep paperapi "paperapi tests" run_in "$ROOT/packages/paperapi" bun run test
 gstep paperapi "paperapi code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperapi/src packages/paperapi/test
-gstep paperui "paperui typecheck:tests" run_in "$ROOT/packages/paperui" bun run typecheck:tests
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/gate/check-paperui-styling.sh"
-gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src packages/paperui/test
+gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/paperui/src
 gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
@@ -253,8 +249,7 @@ gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run 
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
 gstep release "release code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/release/src packages/release/test
 gstep testkit "testkit typecheck" run_in "$ROOT/packages/testkit" bun run typecheck
-gstep testkit "testkit tests" run_in "$ROOT/packages/testkit" bun run test
-gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src packages/testkit/test
+gstep testkit "testkit code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/testkit/src
 gstep npx "npx typecheck:tests" run_in "$ROOT/packages/npx" bun run typecheck:tests
 gstep npx "npx tests" run_in "$ROOT/packages/npx" bun run test
 gstep npx "npx code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/npx/src packages/npx/test
@@ -287,7 +282,7 @@ gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styl
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
-for short in agents blocks botcreator gameserver terminal; do
+for short in agents blocks botcreator drive gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit

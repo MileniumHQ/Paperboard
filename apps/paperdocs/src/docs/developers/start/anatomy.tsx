@@ -86,7 +86,7 @@ export default function AnatomyDoc() {
                     <tr><td><PaperCode>src/widget.tsx</PaperCode></td><td>The widget page's mount functions, through <PaperLink href="/docs/paperapi/widgets/">defineWidgets</PaperLink>.</td></tr>
                     <tr><td><PaperCode>src/widget.css</PaperCode></td><td>Gives the widget page a full-height, painted body.</td></tr>
                     <tr><td><PaperCode>src/lib/</PaperCode></td><td>Logic with no PaperAPI and no interface in it, such as <PaperCode>greet.ts</PaperCode>. Code here is what the unit tests reach.</td></tr>
-                    <tr><td><PaperCode>test/</PaperCode></td><td>Unit tests, the UI standards test, and <PaperCode>hermetic.ts</PaperCode>, which keeps tests away from your real Paperboard. See <PaperLink href="/docs/developers/testing/">Test a panel</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>test/</PaperCode></td><td>Unit tests and <PaperCode>hermetic.ts</PaperCode>, which keeps tests away from your real Paperboard. See <PaperLink href="/docs/developers/testing/">Test a panel</PaperLink>.</td></tr>
                     <tr><td><PaperCode>store/about.md</PaperCode></td><td>The long description on the panel's page in the Panel Library. See <PaperLink href="/docs/paperapi/store-listing/">Store listing</PaperLink>.</td></tr>
                     <tr><td><PaperCode>.gitignore</PaperCode></td><td>Keeps <PaperCode>node_modules/</PaperCode>, <PaperCode>dist/</PaperCode> and the release folder <PaperCode>out/</PaperCode> out of version control.</td></tr>
                 </tbody>

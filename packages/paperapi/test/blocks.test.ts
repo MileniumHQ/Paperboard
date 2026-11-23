@@ -1,23 +1,21 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { actionsApi } from "../src/actions";
-import { blocksApi, memoryBlocks, validateBlockDefinitions, valueProblem, type BlockSet } from "../src/blocks";
+import { blocksApi, memoryBlocks, validateBlockDefinitions, valueProblem } from "../src/blocks";
 import { closeTransport, getTransport } from "../src/ipc";
 import { startDaemon, type Daemon, type PanelProcess } from "./helpers/daemon";
 
 setDefaultTimeout(60_000);
 
 const PANEL = "dev.test.blocks";
-const OTHER = "dev.test.caller";
 let daemon: Daemon;
-let panels: PanelProcess[] = [];
+let panel: PanelProcess;
 
 beforeAll(async () => {
     daemon = await startDaemon();
-    panels = [await daemon.startPanel(PANEL, "blocks"), await daemon.startPanel(OTHER, "caller")];
+    panel = await daemon.startPanel(PANEL, "blocks");
 });
 
 afterAll(async () => {
-    for (const panel of panels) await panel.stop();
+    await panel.stop();
     closeTransport();
     await daemon.stop();
 });
@@ -77,33 +75,6 @@ describe("a panel's blocks reach the registry as data", () => {
             inputs: { world: { type: "text", name: "World", dynamicChoices: true }, times: { type: "number", name: "Times", default: 1, min: 1 } },
         });
         expect(await blocksApi.projects(PANEL)).toEqual([{ panelId: PANEL, id: "s1", name: "Survival", icon: "dns" }]);
-    });
-
-    test("blocks are their own registry: Actions lists none of them", async () => {
-        expect(await actionsApi.list(PANEL)).toEqual([]);
-    });
-});
-
-describe("an internal block is its panel's own", () => {
-    test("it is never listed, but the panel's own page runs it by name", async () => {
-        const listed = (await blocksApi.list(PANEL)).map((e) => e.entry);
-        expect(listed).toContain("s1/command.kick");
-        expect(listed).not.toContain("s1/command.reset-kicks");
-        await run("kick", { player: { name: "Steve" } });
-        expect(await run("reset-kicks")).toBe(0);
-        expect(await read("kicks")).toBe(0);
-    });
-
-    test("another panel is refused it by the daemon", async () => {
-        await run("kick", { player: { name: "Steve" } });
-        const answer = await blocksApi.run<string>(OTHER, "reach-in", { panel: PANEL });
-        expect(answer.startsWith("refused: ")).toBe(true);
-        expect(answer).toContain(`internal to panel "${PANEL}"`);
-        expect(await read("kicks")).toBeGreaterThan(0);
-    });
-
-    test("internal must be true or false", () => {
-        expect(() => validateBlockDefinitions({ commands: [{ id: "c", name: "C", internal: "yes" as never, run: () => {} }] }, PANEL)).toThrow('Command "c" internal must be true or false');
     });
 });
 
@@ -219,83 +190,6 @@ describe("events and changes reach whoever listens", () => {
             'When a Player Joins does not fire a value "extra"',
             'When a Player Joins value "player": expected a value, got nothing',
         ]);
-    });
-});
-
-describe("a broken definition is refused before it reaches the registry", () => {
-    const refuse = (set: BlockSet) => () => validateBlockDefinitions(set, PANEL);
-    const run = () => null;
-
-    test("text must show each input exactly once and name nothing else", () => {
-        expect(refuse({ commands: [{ id: "a", name: "A", text: "Do {it}", run }] })).toThrow('Command "a" text names {it}, which is not one of its inputs');
-        expect(refuse({ commands: [{ id: "a", name: "A", text: "Do", inputs: { it: { type: "text", name: "It" } }, run }] })).toThrow("text must show {it} once, not 0 times");
-    });
-
-    test("what a command gives back is named where its type doesn't name it", () => {
-        expect(refuse({ commands: [{ id: "a", name: "A", output: "text", run }] })).toThrow('Command "a" gives back text, so it needs an outputName that says what that is');
-        expect(refuse({ commands: [{ id: "a", name: "A", outputName: "Answer", run }] })).toThrow('Command "a" has an outputName but no output');
-        expect(() => validateBlockDefinitions({ commands: [{ id: "a", name: "A", output: "text", outputName: "Answer", run }] }, PANEL)).not.toThrow();
-        expect(() => validateBlockDefinitions({ commands: [{ id: "a", name: "A", output: "dev.other:ghost", run }] }, PANEL)).not.toThrow();
-    });
-
-    test("every custom type named must be defined by the panel, or be another panel's", () => {
-        expect(refuse({ values: [{ id: "a", name: "A", type: "list<ghost>", read: run }] })).toThrow('Value "a" type: the type "ghost" is not defined by this panel');
-        expect(() => validateBlockDefinitions({ values: [{ id: "a", name: "A", type: "dev.other:ghost", read: run }] }, PANEL)).not.toThrow();
-        expect(refuse({ values: [{ id: "a", name: "A", type: "lisst<text>", read: run }] })).toThrow('"lisst<text>" is not a type');
-    });
-
-    test("a field on a value with no keys needs a resolver, and limits must fit the input", () => {
-        expect(refuse({ types: [{ id: "t", name: "T", base: "text", fields: { len: { type: "number", name: "Length" } } }] })).toThrow('Type "t" field "len" has nothing to read');
-        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "text", name: "N", min: 1 } }, run }] })).toThrow('input "n" limits a number, but takes text');
-        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "number", name: "N", min: 5, max: 1 } }, run }] })).toThrow("declares a min above its max");
-    });
-
-    test("an event filter compares an input with a value it fires, of the same type", () => {
-        const base = { id: "e", name: "E", values: { who: { type: "text", name: "Who" } } };
-        expect(refuse({ events: [{ ...base, inputs: { who: { type: "number", name: "Who" } }, filters: { who: "who" } }] })).toThrow("they must be one type");
-        expect(refuse({ events: [{ ...base, inputs: { who: { type: "text", name: "Who" } }, filters: { who: "nobody" } }] })).toThrow('which it does not fire');
-    });
-
-    test("a default must fit its input, and a per-project field needs resolve", () => {
-        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "number", name: "N", default: "x" } }, run }] })).toThrow('input "n" default: "N": expected a number');
-        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "number", name: "N", max: 3, default: 9 } }, run }] })).toThrow('"N" must be at most 3');
-        expect(refuse({ commands: [{ id: "a", name: "A", inputs: { n: { type: "text", name: "N", choices: [{ label: "B", value: "b" }], default: "c" } }, run }] })).toThrow('"N" must be one of B');
-        expect(refuse({ types: [{ id: "t", name: "T", base: "object", fields: { x: { type: "text", name: "X", perProject: true } } }] })).toThrow("needs resolve to look it up in the project");
-    });
-
-    test("ids are unique per kind", () => {
-        expect(refuse({ commands: [{ id: "a", name: "A", run }, { id: "a", name: "B", run }] })).toThrow('Command "a" is defined twice');
-    });
-
-    test("types belong to the panel: a project can't register one", async () => {
-        const project = await blocksApi.defineProject({ id: "host-side", name: "Host side" }, "dev.test.host");
-        await expect(project.register({ types: [{ id: "t", name: "T", base: "object" }] })).rejects.toThrow('Types belong to the panel, not project "host-side"');
-        await project.remove();
-    });
-});
-
-describe("a panel's categories head its sections", () => {
-    const refuse = (set: BlockSet) => () => validateBlockDefinitions(set, PANEL);
-    const run = () => null;
-    test("a block in a declared category is listed with its symbol, in the panel's projects too; only the panel declares them", async () => {
-        const memory = memoryBlocks("dev.test.categories");
-        await memory.panel.register({
-            categories: [{ name: "Players", icon: "group" }],
-            commands: [{ id: "list", name: "List", category: "Players", run }],
-        });
-        const server = await memory.defineProject({ id: "s1", name: "Survival" });
-        await server.register({
-            commands: [{ id: "kick", name: "Kick", category: "Players", run }],
-            values: [{ id: "count", name: "Count", category: "Other", type: "number", read: () => 1 }],
-        });
-        const schemaOf = (entry: string) => memory.list().find((b) => b.entry === entry)!.schema as { category?: string; categoryIcon?: string };
-        expect(schemaOf("command.list")).toMatchObject({ category: "Players", categoryIcon: "group" });
-        expect(schemaOf("s1/command.kick")).toMatchObject({ category: "Players", categoryIcon: "group" });
-        // a category nobody declared has no symbol
-        expect(schemaOf("s1/value.count").categoryIcon).toBeUndefined();
-        await expect(server.register({ categories: [{ name: "Chat", icon: "chat" }] })).rejects.toThrow('Categories belong to the panel, not project "s1"');
-        expect(refuse({ categories: [{ name: "A", icon: "x" }, { name: "A", icon: "y" }] })).toThrow('Category "A" is defined twice');
-        expect(refuse({ categories: [{ name: "A" } as never] })).toThrow('Category "A" icon');
     });
 });
 

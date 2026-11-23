@@ -6,7 +6,6 @@ import {
     queryOnlinePlayers,
     queryPlayerStats,
     queryPlayerPositions,
-    forgetPlayerData,
     deletePlayerData,
     usernameFromUuid,
 } from "../../service/players";
@@ -435,13 +434,6 @@ export const minecraftCalls: ServerCalls = {
             size: inputs?.size,
             naming: () => bedrockNaming(ctx),
         });
-    },
-    forgetPlayerData: async (
-        ctx: Server,
-        inputs: { player: string },
-    ) => {
-        forgetPlayerData(ctx, inputs?.player);
-        return true;
     },
     queryPlayerStats: async (
         ctx: Server,

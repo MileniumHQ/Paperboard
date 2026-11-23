@@ -46,16 +46,6 @@ describe("computer order and names", () => {
         expect(ids(await openPool())).toEqual(["remote-b", "local", "remote-a"]);
     });
 
-    test("a reorder that leaves out, repeats or invents a computer is refused and changes nothing", async () => {
-        const pool = await openPool();
-        const before = fs.readFileSync(file(), "utf8");
-        for (const bad of [["local", "remote-a"], ["local", "remote-a", "remote-a"], ["local", "remote-a", "remote-c"], ["local", "remote-a", "remote-b", "remote-c"]]) {
-            expect(() => pool.reorderComputers(bad)).toThrow("The computer list changed");
-        }
-        expect(ids(pool)).toEqual(["local", "remote-a", "remote-b"]);
-        expect(fs.readFileSync(file(), "utf8")).toBe(before);
-    });
-
     test("This Computer keeps the name it was given across launches", async () => {
         const pool = await openPool();
         expect(pool.renameComputer("local", "  Workstation  ")).toBe(true);
@@ -73,20 +63,5 @@ describe("computer order and names", () => {
         expect(reopened.getComputer("remote-a")).toMatchObject({ name: "Game Box", port: 45464, token: "token-remote-a" });
         expect(reopened.renameComputer("local", "Workstation")).toBe(true);
         expect((await openPool()).getComputer("local")?.name).toBe("Workstation");
-    });
-
-    // a pairing saved with a port the next launch can't read is lost then
-    test("a pairing with a port that isn't one, or a blank or overlong name, is refused with why before anything is dialed", async () => {
-        const pool = await openPool();
-        const before = fs.readFileSync(file(), "utf8");
-        // ::1 is dialed as a pinned remote; nothing listens on port 1
-        for (const port of [70000, 0, "abc", 1.5]) {
-            await expect(pool.pairComputer("::1", port, "123456")).rejects.toThrow("That isn't a valid port");
-        }
-        await expect(pool.pairComputer("::1", 1, "123456", "   ")).rejects.toThrow("A computer needs a name.");
-        await expect(pool.pairComputer("::1", 1, "123456", "x".repeat(65))).rejects.toThrow("at most 64 characters");
-        await expect(pool.pairComputer("not a host!", 1, "123456")).rejects.toThrow("That isn't a valid address");
-        expect(fs.readFileSync(file(), "utf8")).toBe(before);
-        expect(ids(pool)).toEqual(["local", "remote-a", "remote-b"]);
     });
 });

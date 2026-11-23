@@ -10,7 +10,7 @@ import { killWorkloads, startCrane } from "testkit/crane";
 import { dataDir, listTree } from "testkit/fs";
 import { type InProcessDaemon, startDaemon, stopDaemon } from "testkit/inproc";
 import { release, startOrigami } from "./support/origami";
-import { serviceSource } from "testkit/panels";
+import { serviceCall, serviceSource } from "testkit/panels";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signPanel } from "testkit/release";
 import { Rpc } from "testkit/rpc";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
@@ -35,7 +35,7 @@ function useFixtureRegistry(daemon: InProcessDaemon) {
 const versionService = (version: string, startsLog: string) =>
 	serviceSource({
 		extra: `import * as fs from "node:fs"; fs.appendFileSync(${JSON.stringify(startsLog)}, ${JSON.stringify(version)} + "\\n");`,
-		actions: `{ version: async () => ${JSON.stringify(version)} }`,
+		calls: `{ version: async () => ${JSON.stringify(version)} }`,
 	});
 
 // The daemon installs only what its signed registry lists.
@@ -256,19 +256,19 @@ describe("upgrades and uninstall", () => {
 		await release(origami, { id: "test.upgrade", version: "1.0.0", service: versionService("1.0.0", starts) });
 		const host = await daemon.rpc();
 		await host.ok("panel:install", { panelId: "test.upgrade" });
-		expect((await host.ok("actions:call", { panelId: "test.upgrade", action: "version", args: [] })).result).toBe("1.0.0");
+		expect((await host.ok("blocks:call", serviceCall("test.upgrade", "version"))).result).toBe("1.0.0");
 
 		await release(origami, { id: "test.upgrade", version: "2.0.0", service: serviceSource({ extra: "process.exit(3);" }) });
 		expect((await host.fail("panel:install", { panelId: "test.upgrade" })).error).toBeTruthy();
 		await waitFor("the previous release to answer again", async () => {
-			const answer = await host.call("actions:call", { panelId: "test.upgrade", action: "version", args: [] });
+			const answer = await host.call("blocks:call", serviceCall("test.upgrade", "version"));
 			return answer.result?.result === "1.0.0";
 		});
 		expect(JSON.parse(fs.readFileSync(path.join(daemon.dataDir, "panels", "test.upgrade", "manifest.json"), "utf8")).version).toBe("1.0.0");
 
 		await release(origami, { id: "test.upgrade", version: "3.0.0", service: versionService("3.0.0", starts) });
 		await host.ok("panel:install", { panelId: "test.upgrade" });
-		expect((await host.ok("actions:call", { panelId: "test.upgrade", action: "version", args: [] })).result).toBe("3.0.0");
+		expect((await host.ok("blocks:call", serviceCall("test.upgrade", "version"))).result).toBe("3.0.0");
 		expect(fs.readdirSync(path.join(daemon.dataDir, "panels")).filter((n) => /\.replaced-|\.trash-|\.staging-|\.tmp-/.test(n))).toEqual([]);
 		expect(fs.readFileSync(starts, "utf8").trim().split("\n")).toEqual(["1.0.0", "1.0.0", "3.0.0"]);
 	});

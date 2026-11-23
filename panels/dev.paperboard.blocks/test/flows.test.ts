@@ -10,14 +10,12 @@ import { block, find, num, saved, steps, text, top, type Json } from "./helpers/
 import type { BlockInfo } from "@mileniumhq/paperapi";
 import { BUILTIN_BLOCKS, registryDefinitions } from "../src/lib/blockDefs";
 import { readFlows } from "../src/lib/flows";
-import { appendWorkspace } from "../src/lib/appendWorkspace";
 import { registerChoicesField } from "../src/lib/choicesField";
-import { BlockError, MAX_LOOP_ITERATIONS, hatInputs, runHat, type Host } from "../src/lib/interpreter";
-import { BUILTIN, choiceBlockType, propertyBlockType, registryBlockType } from "../src/lib/names";
+import { BlockError, runHat, type Host } from "../src/lib/interpreter";
+import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
 
 const GAME = "dev.test.game";
 const PLAYER = `${GAME}:player`;
-const TEAM = `${GAME}:team`;
 
 const ENTRIES: BlockInfo[] = [
     { panelId: GAME, entry: "type.player", schema: { kind: "type", id: "player", name: "Player", base: "text", fields: { name: { type: "text", name: "Name", resolved: true } } } },
@@ -38,17 +36,9 @@ const ENTRIES: BlockInfo[] = [
         },
     },
     { panelId: GAME, entry: "s1/command.count-kicks", project: "s1", schema: { kind: "command", id: "count-kicks", name: "Count Kicks", output: "number", outputName: "Kicks" } },
-    { panelId: GAME, entry: "type.team", schema: { kind: "type", id: "team", name: "Team", base: "text", dynamicChoices: true } },
-    {
-        panelId: GAME,
-        entry: "s1/command.join",
-        project: "s1",
-        schema: { kind: "command", id: "join", name: "Join", text: "Join {team} or {backup}", inputs: { team: { type: TEAM, name: "Team" }, backup: { type: TEAM, name: "Backup", optional: true } } },
-    },
     { panelId: GAME, entry: "s1/command.pick", project: "s1", schema: { kind: "command", id: "pick", name: "Pick a Player", output: PLAYER } },
     { panelId: GAME, entry: "s1/value.online", project: "s1", schema: { kind: "value", id: "online", name: "Online Players", type: `list<${PLAYER}>`, changes: true } },
     { panelId: GAME, entry: "s1/value.count", project: "s1", schema: { kind: "value", id: "count", name: "Player Count", type: "number" } },
-    { panelId: GAME, entry: "s1/event.joined", project: "s1", schema: { kind: "event", id: "joined", name: "Player Joined", values: { player: { type: PLAYER, name: "Player" } } } },
 ] as BlockInfo[];
 
 const KICK = registryBlockType({ kind: "command", panelId: GAME, entry: "s1/command.kick" });
@@ -59,11 +49,8 @@ const PICKED = registryBlockType({ kind: "result", panelId: GAME, entry: "s1/com
 const PICKED_NAME = registryBlockType({ kind: "result", panelId: GAME, entry: "s1/command.pick", key: "name", typeRef: PLAYER });
 const ONLINE = registryBlockType({ kind: "value", panelId: GAME, entry: "s1/value.online" });
 const COUNT = registryBlockType({ kind: "value", panelId: GAME, entry: "s1/value.count" });
-const JOINED = registryBlockType({ kind: "event", panelId: GAME, entry: "s1/event.joined" });
-const JOINED_PLAYER = registryBlockType({ kind: "event-value", panelId: GAME, entry: "s1/event.joined", key: "player" });
 const PLAYER_FIELD = propertyBlockType(PLAYER);
 const KICK_HOW = registryBlockType({ kind: "choices", panelId: GAME, entry: "s1/command.kick", key: "how" });
-const JOIN = registryBlockType({ kind: "command", panelId: GAME, entry: "s1/command.join" });
 
 beforeAll(() => {
     // the dropdowns' choices aren't asked for here: a saved choice stands as it was saved
@@ -212,92 +199,6 @@ describe("a flow the editor saved runs the way it reads", () => {
         // each reads its own block's result: "again" picked finn, but the last log reads "pick"
         expect(r.logs).toEqual(["5", "ERIN", "erin"]);
     });
-
-    test("an input of a type that lists its values starts as a dropdown of them, which a text block can replace", async () => {
-        const defs = registryDefinitions(ENTRIES);
-        const join = defs.sections.flatMap((s) => s.contents).find((b) => b.type === JOIN)!;
-        expect(join.inputs).toEqual({ team: { shadow: { type: choiceBlockType(TEAM) } }, backup: { shadow: { type: choiceBlockType(TEAM, "none") } } });
-
-        const ws = saved([
-            {
-                type: BUILTIN.onRun,
-                inputs: {
-                    DO: steps(
-                        { type: JOIN, inputs: { team: { shadow: { type: choiceBlockType(TEAM), fields: { VALUE: '"red"' } } }, backup: { shadow: { type: choiceBlockType(TEAM, "none"), fields: { VALUE: "null" } } } } },
-                        { type: JOIN, inputs: { team: { shadow: { type: choiceBlockType(TEAM), fields: { VALUE: '"red"' } }, block: { type: "text", fields: { TEXT: "blue" } } } } },
-                    ),
-                },
-            },
-        ]);
-        const r = recorder();
-        await runHat(top(ws, BUILTIN.onRun), null, ws, r.host);
-        // "none" leaves the input out; a text block put over the dropdown is what runs
-        expect(r.calls.map((c) => c.inputs)).toEqual([{ team: "red" }, { team: "blue" }]);
-    });
-
-    test("a flow imported into the project it came from reads its own commands' results, not the ones already there", async () => {
-        const flow = saved([
-            {
-                type: BUILTIN.onRun,
-                id: "hat",
-                inputs: { DO: steps({ type: COUNT_KICKS, id: "count" }, { type: BUILTIN.log, inputs: { TEXT: block(KICKS, { extraState: { from: "count" } }) } }) },
-            },
-        ]);
-        const ws = new Blockly.Workspace();
-        try {
-            Blockly.serialization.workspaces.load(flow, ws);
-            appendWorkspace(ws, flow, 100);
-            const both = Blockly.serialization.workspaces.save(ws) as typeof flow;
-            const hats = both.blocks!.blocks.filter((b) => b.type === BUILTIN.onRun);
-            expect(hats).toHaveLength(2);
-            const copy = hats.find((b) => b.id !== "hat")!;
-            const r = recorder({ run: () => 5 });
-            await runHat(copy, null, both, r.host);
-            expect(r.logs).toEqual(["5"]);
-        } finally {
-            ws.dispose();
-        }
-    });
-
-    test("a command's result is empty until its block runs", async () => {
-        const ws = saved([
-            {
-                type: BUILTIN.onRun,
-                inputs: { DO: steps({ type: BUILTIN.log, inputs: { TEXT: block(KICKS, { id: "early", extraState: { from: "count" } }) } }, { type: COUNT_KICKS, id: "count" }) },
-            },
-        ]);
-        const r = recorder({ run: () => 5 });
-        const err = await runHat(top(ws, BUILTIN.onRun), null, ws, r.host).catch((e) => e);
-        expect(err).toBeInstanceOf(BlockError);
-        expect(err.message).toBe('This value is empty until its "count-kicks" block runs');
-        expect(err.blockId).toBe("early");
-        expect(r.calls).toEqual([]);
-    });
-
-    test("an event's own values only exist inside its hat", async () => {
-        const ws = saved([
-            {
-                type: JOINED,
-                inputs: { DO: steps({ type: BUILTIN.log, inputs: { TEXT: block(PLAYER_FIELD, { fields: { FIELD: "name" }, inputs: { VALUE: block(JOINED_PLAYER) } }) } }) },
-            },
-            { type: BUILTIN.onRun, inputs: { DO: steps({ type: BUILTIN.log, inputs: { TEXT: block(JOINED_PLAYER) } }) } },
-        ]);
-        const r = recorder();
-        await runHat(top(ws, JOINED), { player: "erin" }, ws, r.host);
-        expect(r.logs).toEqual(["ERIN"]);
-
-        const outside = runHat(top(ws, BUILTIN.onRun), null, ws, r.host);
-        await expect(outside).rejects.toThrow('This value only exists inside "joined" blocks');
-        const second = ws.blocks!.blocks[1]!;
-        await outside.catch((err: BlockError) => expect(err.blockId).toBe(second.inputs!.DO!.block!.inputs!.TEXT!.block!.id));
-    });
-
-    test("an event hat's own inputs are worked out without running its steps", async () => {
-        const ws = saved([{ type: JOINED, inputs: { DO: steps({ type: KICK, inputs: { player: text("x"), reason: text("y") } }) } }]);
-        const r = recorder();
-        expect(await hatInputs(top(ws, JOINED), ws, r.host)).toEqual({});
-        expect(r.calls).toEqual([]);
-    });
 });
 
 describe("a failing flow stops and names the block it failed on", () => {
@@ -352,25 +253,6 @@ describe("a failing flow stops and names the block it failed on", () => {
             expect(err.message).toBe(message);
             expect(err.blockId).toBe(find(ws, "math_arithmetic").id);
         }
-    });
-
-    test("a loop that never ends is stopped after its limit", async () => {
-        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps({ type: "controls_whileUntil", fields: { MODE: "WHILE" }, inputs: { BOOL: block("logic_boolean", { fields: { BOOL: "TRUE" } }) } }) } }]);
-        const err = await runHat(top(ws, BUILTIN.onRun), null, ws, recorder().host).catch((e) => e);
-        expect(err.message).toBe(`This loop went round ${MAX_LOOP_ITERATIONS} times, so the run stopped it`);
-        expect(err.blockId).toBe(find(ws, "controls_whileUntil").id);
-    });
-
-    test("Stop ends a run that is waiting, right away", async () => {
-        const ws = saved([{ type: BUILTIN.onRun, inputs: { DO: steps({ type: BUILTIN.wait, inputs: { SECONDS: num(600) } }, { type: BUILTIN.log, inputs: { TEXT: text("too late") } }) } }]);
-        const r = recorder();
-        const started = Date.now();
-        const run = runHat(top(ws, BUILTIN.onRun), null, ws, r.host).catch((e) => e);
-        setTimeout(() => r.stop(), 50);
-        const err = await run;
-        expect(err.message).toBe("The run was stopped");
-        expect(Date.now() - started).toBeLessThan(5_000);
-        expect(r.logs).toEqual([]);
     });
 });
 

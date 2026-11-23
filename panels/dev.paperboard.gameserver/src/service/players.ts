@@ -6,7 +6,6 @@ import { type PlayerStatData, PLAYER_NAME_PATTERN, SERVER_PROC_ID, appendCapped,
 import {
     STAT_QUERIES,
     assertPlayerName,
-    consoleTimeToSeconds,
     extractDimension,
     extractEntityDataSubject,
     extractJoinedName,
@@ -32,71 +31,18 @@ export { usernameFromUuid } from "./playerStats";
 export type { PlayerStatData };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 
-// Recently seen player names in their original casing (state keys are
-// normalized), newest last. The list must stay bounded like every other
-// buffer in the panel.
-
-function rememberPlayerName(ctx: Server, name: string): void {
-    const key = normalizePlayerKey(name);
-    const existing = minecraftOf(ctx).players.recentNames.findIndex((n) => normalizePlayerKey(n) === key);
-    if (existing >= 0) minecraftOf(ctx).players.recentNames.splice(existing, 1);
-    minecraftOf(ctx).players.recentNames.push(name);
-    while (minecraftOf(ctx).players.recentNames.length > MAX_BUFFERED_ENTRIES) minecraftOf(ctx).players.recentNames.shift();
-}
-
-function nameKnown(ctx: Server, name: string): boolean {
-    const key = normalizePlayerKey(name);
-    return minecraftOf(ctx).players.recentNames.some((n) => normalizePlayerKey(n) === key);
-}
-
-// join timestamps are keyed per username and only deleted on leave —
-// without a cap, spoofed joins grow the map forever. Map preserves
-// insertion order, so evict oldest first.
-function rememberJoin(ctx: Server, key: string, ts: number): void {
-    minecraftOf(ctx).players.lastJoinAt.delete(key);
-    minecraftOf(ctx).players.lastJoinAt.set(key, ts);
-    while (minecraftOf(ctx).players.lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
-        const oldest = minecraftOf(ctx).players.lastJoinAt.keys().next();
-        if (oldest.done) break;
-        minecraftOf(ctx).players.lastJoinAt.delete(oldest.value);
-    }
-}
-
-// per-player records grow with unique players; keep them bounded the same
-// way every other buffer in the panel is (evict oldest insertion first)
-function capEntries<T>(
-    record: Record<string, T>,
-    max = MAX_BUFFERED_ENTRIES,
-): Record<string, T> {
-    const keys = Object.keys(record);
-    if (keys.length <= max) return record;
-    const next: Record<string, T> = {};
-    for (const key of keys.slice(keys.length - max)) next[key] = record[key];
-    return next;
-}
-
 export function trackPlayerActivity(
     ctx: Server,
     clean: string,
 ): void {
-    const ts = consoleTimeToSeconds(clean);
-
     const joined = extractJoinedName(clean);
     if (joined) {
         const key = normalizePlayerKey(joined);
-        if (ts !== undefined) rememberJoin(ctx, key, ts);
-        rememberPlayerName(ctx, joined);
-        ctx.setState((prev) => {
-            // seenPlayers is history, not presence: cap it like every other
-            // buffer instead of growing one entry per unique join forever
-            const seen = prev.seenPlayers.includes(key)
-                ? prev.seenPlayers
-                : appendCapped(prev.seenPlayers, key);
-            const online = prev.onlinePlayers.includes(key)
-                ? prev.onlinePlayers
-                : [...prev.onlinePlayers, key];
-            return { seenPlayers: seen, onlinePlayers: online };
-        });
+        // seenPlayers is history, not presence: capped like every game's
+        ctx.setState((prev) => ({
+            seenPlayers: prev.seenPlayers.includes(key) ? prev.seenPlayers : appendCapped(prev.seenPlayers, key),
+            onlinePlayers: prev.onlinePlayers.includes(key) ? prev.onlinePlayers : [...prev.onlinePlayers, key],
+        }));
         ctx.trigger(TRIGGER_IDS.playerJoined, joined);
         return;
     }
@@ -104,20 +50,9 @@ export function trackPlayerActivity(
     const left = extractLeftName(clean);
     if (left) {
         const key = normalizePlayerKey(left);
-        const joinAt = minecraftOf(ctx).players.lastJoinAt.get(key);
-        let sessionSeconds = 0;
-        if (ts !== undefined && joinAt !== undefined) {
-            sessionSeconds = ts - joinAt;
-            if (sessionSeconds < 0) sessionSeconds += 86400;
-        }
-        minecraftOf(ctx).players.lastJoinAt.delete(key);
-
-        ctx.setState((prev) => {
-            const online = prev.onlinePlayers.filter((p) => p !== key);
-            const playtime = { ...prev.playerPlaytime };
-            playtime[key] = (playtime[key] ?? 0) + sessionSeconds;
-            return { onlinePlayers: online, playerPlaytime: capEntries(playtime) };
-        });
+        ctx.setState((prev) => ({
+            onlinePlayers: prev.onlinePlayers.filter((p) => p !== key),
+        }));
         ctx.trigger(TRIGGER_IDS.playerLeft, left);
         return;
     }
@@ -131,20 +66,10 @@ export function trackPlayerActivity(
 
     const names = extractListedNames(clean);
     if (names) {
-        for (const name of names) {
-            if (ts !== undefined && !minecraftOf(ctx).players.lastJoinAt.has(name)) rememberJoin(ctx, name, ts);
-            // the list lowercases names; keep the join's original casing when
-            // one is already known so the options match the event payload
-            if (!nameKnown(ctx, name)) rememberPlayerName(ctx, name);
-        }
-        ctx.setState((prev) => {
-            const seen = new Set([...prev.seenPlayers, ...names]);
-            return {
-                onlinePlayers: names,
-                // same cap as the join path: history stays bounded
-                seenPlayers: Array.from(seen).slice(-MAX_BUFFERED_ENTRIES),
-            };
-        });
+        ctx.setState((prev) => ({
+            onlinePlayers: names,
+            seenPlayers: [...new Set([...prev.seenPlayers, ...names])].slice(-MAX_BUFFERED_ENTRIES),
+        }));
     }
 }
 
@@ -165,7 +90,7 @@ export function handleStatResponse(
         const data = { ...(stats[query.player] ?? {}) };
         data[query.field] = reply.value;
         stats[query.player] = data;
-        return { playerStats: capEntries(stats) };
+        return { playerStats: stats };
     });
     return true;
 }
@@ -189,9 +114,7 @@ export function queryPlayerStats(
         pending.push({ player: key, field, path });
         writeServerLineBestEffort(ctx, `data get entity ${safe} ${path} ${scale}\n`);
     }
-    // bounded: queries the server never answers (a player who just left)
-    // would otherwise pile up; the oldest go first
-    minecraftOf(ctx).players.pendingStats = pending.slice(-MAX_BUFFERED_ENTRIES);
+    minecraftOf(ctx).players.pendingStats = pending;
 }
 
 export type PendingStatQuery = { player: string; field: keyof PlayerStatData; path: string };
@@ -227,9 +150,6 @@ export function queryPlayerPositions(ctx: Server): void {
         minecraftOf(ctx).players.pendingPositionQueries.push({ player: key, kind: "dim" });
         writeServerLineBestEffort(ctx, `data get entity ${safe} Pos\n`);
         writeServerLineBestEffort(ctx, `data get entity ${safe} Dimension\n`);
-    }
-    while (minecraftOf(ctx).players.pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
-        minecraftOf(ctx).players.pendingPositionQueries.shift();
     }
     // drop markers for players who left since the last poll
     ctx.setState((prev) => {
@@ -272,21 +192,17 @@ export function forgetPlayerData(
     name: string,
 ): void {
     const key = normalizePlayerKey(assertPlayerName(name));
-    minecraftOf(ctx).players.lastJoinAt.delete(key);
     ctx.setState((prev) => {
         const seen = prev.seenPlayers.filter((p) => p !== key);
         const online = prev.onlinePlayers.filter((p) => p !== key);
         const stats = { ...prev.playerStats };
         delete stats[key];
-        const playtime = { ...prev.playerPlaytime };
-        delete playtime[key];
         const positions = { ...prev.playerPositions };
         delete positions[key];
         return {
             seenPlayers: seen,
             onlinePlayers: online,
             playerStats: stats,
-            playerPlaytime: playtime,
             playerPositions: positions,
         };
     });

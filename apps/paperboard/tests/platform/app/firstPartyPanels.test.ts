@@ -80,31 +80,4 @@ describe("first-party panels under the compiled daemon", () => {
         await restarted.stop();
         expect(fs.existsSync(path.join(dataDir, "panels", PANEL, "dist", "service.js"))).toBe(true);
     }, WAIT_MS * 4);
-    test("a panel's screen share asks about the screen in the shell, and Don't allow refuses it", async () => {
-        const dataDir = tempDataDir("panels-screen");
-        await installBuiltPanel(dataDir, PANEL);
-        const daemon = await startCrane(crane.file, dataDir);
-        const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
-        await shellReady(electron);
-        await electron.evalIn(SHELL, `document.querySelector('[role=radio][aria-label^="This Computer"]').click()`);
-        const item = `document.querySelector('[class*=panelList] label[data-value="${PANEL}"]')`;
-        await electron.evalIn(SHELL, domCondition(item));
-        await electron.evalIn(SHELL, `${item}.click()`);
-        await electron.evalIn(SHELL, domCondition(`document.querySelector('iframe[src^="${FRAME}"]')`));
-        await electron.evalInFrame(FRAME, domCondition("window.__PAPERBOARD_CRANE"));
-
-        // Chromium names this request display-capture (Electron 45 on): it
-        // reaches the question, not a refusal as a camera or microphone
-        await electron.evalInFrame(FRAME, `(window.__shared = navigator.mediaDevices.getDisplayMedia({ video: true }).then(() => "shared", (e) => e.name), true)`);
-        const question = `[...document.querySelectorAll('dialog, [role=dialog]')].find((d) => d.innerText.includes("use your screen?"))`;
-        await electron.evalIn(SHELL, domCondition(question));
-        await electron.evalIn(SHELL, `[...${question}.querySelectorAll('button')].find((b) => b.innerText.trim() === "Don't allow").click()`);
-        // the display-media handler answers a refusal with nothing to share,
-        // which Chromium hands the page as an AbortError
-        expect(await electron.evalInFrame(FRAME, "window.__shared")).toBe("AbortError");
-
-        expect(electron.failures()).toEqual([]);
-        await electron.quit();
-        await daemon.stop();
-    }, WAIT_MS * 4);
 });

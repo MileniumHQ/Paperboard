@@ -1,13 +1,52 @@
 /* The shell's frame: the top bar over the rail and the main area. */
 .window {
+    box-sizing: border-box;
     width: 100vw;
     height: 100vh;
+    /* a device's status bar and sensor housing take the screen's edges:
+       the shell sits inside them (the strips below fill them). The foot is
+       each surface's own, so it runs on under the home indicator. */
+    padding: var(--paper-safe-area-top) var(--paper-safe-area-right) 0 var(--paper-safe-area-left);
 }
 
 .main {
-    height: 100vh;
+    min-height: 0;
 }
 
-.main.underTopBar {
-    height: calc(100vh - var(--paperboard-titlebar-height));
+/* A device's status bar: one solid strip along each edge it takes (the
+   top of most phones, a side of a foldable or a landscape phone), ruled off
+   from the shell. An edge with no inset draws nothing, not even the rule.
+   Pages that open over the screen draw their own bar. */
+.statusTop,
+.statusLeft,
+.statusRight {
+    position: fixed;
+    z-index: var(--paper-z-float);
+    background: var(--paper-surface-sunken);
+    border: 0 solid var(--paper-border);
+    pointer-events: none;
+}
+
+.statusTop {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--paper-safe-area-top);
+    border-bottom-width: min(var(--paper-border-width), var(--paper-safe-area-top));
+}
+
+.statusLeft {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--paper-safe-area-left);
+    border-right-width: min(var(--paper-border-width), var(--paper-safe-area-left));
+}
+
+.statusRight {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--paper-safe-area-right);
+    border-left-width: min(var(--paper-border-width), var(--paper-safe-area-right));
 }

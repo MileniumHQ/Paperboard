@@ -49,7 +49,6 @@ The panel's own README.md has what comes after: `bun test`, and
 
 What it writes is a panel as the first-party ones are built today: PaperUI
 components and props with no inline styles, a service whose state the pages
-mirror through the bridge, failures shown with their reason, a
-`test/uiStandards.test.ts` that keeps it that way, and a test preload that
-keeps the tests off the network and off your real Paperboard data (a
+mirror through the bridge, failures shown with their reason, and a test preload
+that keeps the tests off the network and off your real Paperboard data (a
 throwaway `PAPERBOARD_DIR`).

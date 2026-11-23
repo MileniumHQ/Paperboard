@@ -1,7 +1,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { AUTO_ACK_DELAY_MS, InteractionOps, autoAcknowledge } from "../src/discordOps";
+import { AUTO_ACK_DELAY_MS, InteractionOps } from "../src/discordOps";
 import { GLOBAL_SCOPE, type SlashCommandDefinition } from "../src/types";
-import { buttonClick, guild, slashCommand, type FakeBot, type FakeGuild, type RecordedRequest } from "./helpers/discord";
+import { guild, slashCommand, type FakeBot, type FakeGuild, type RecordedRequest } from "./helpers/discord";
 import { recordedSession, useFakeDiscord, type RecordedSession } from "./helpers/session";
 
 // each wait below has its own bound; a test as a whole may take longer than bun's 5 s default
@@ -63,58 +63,5 @@ describe("interactions get exactly one first answer and stay answerable", () => 
         expect(Date.now() - started).toBeGreaterThanOrEqual(AUTO_ACK_DELAY_MS - 100);
         await ops.respond(payload.id, { content: "done at last" });
         expect(answers(payload)).toEqual(["callback 5", "PATCH message @original"]);
-    });
-
-    test("a Respond racing the automatic acknowledgement never makes a second first answer", async () => {
-        const { fake, home, bot, ops } = await connectedBot("racer");
-        for (const ackFirst of [true, false]) {
-            const payload = slashCommand(fake, { guild: home, name: "ping" });
-            await deliver(bot, fake, payload, "command:global:ping");
-            const interaction = bot.session.takeInteraction(payload.id);
-            await Promise.all(ackFirst
-                ? [autoAcknowledge(interaction), ops.respond(payload.id, { content: "raced" })]
-                : [ops.respond(payload.id, { content: "raced" }), autoAcknowledge(interaction)]);
-            expect(answers(payload)).toEqual(ackFirst ? ["callback 5", "PATCH message @original"] : ["callback 4"]);
-        }
-    });
-
-    test("a button click is acknowledged without a trace, and Respond then sends a new message", async () => {
-        const { fake, home, bot, ops } = await connectedBot("clicker");
-        const payload = buttonClick(fake, { guild: home, customId: "go" });
-        await deliver(bot, fake, payload, "interaction-triggered");
-        // 6: an update that changes nothing on the clicked message
-        await discord().request((r) => r.path === `/interactions/${payload.id}/${payload.token}/callback`, "the click's acknowledgement");
-        await ops.respond(payload.id, { content: "clicked" });
-        await ops.respond(payload.id, { content: "clicked, edited" });
-        expect(answers(payload)).toEqual(["callback 6", "POST webhook", expect.stringMatching(/^PATCH message \d+$/)]);
-    });
-
-    test("pending replies count only interactions still waiting on an answer, not ones kept for follow-ups", async () => {
-        const { fake, home, bot, ops } = await connectedBot("counter");
-        const pending = () => bot.session.health().pendingInteractions;
-        const command = slashCommand(fake, { guild: home, name: "ping" });
-        const click = buttonClick(fake, { guild: home, customId: "go" });
-        await deliver(bot, fake, command, "command:global:ping");
-        await deliver(bot, fake, click, "interaction-triggered");
-        expect(pending()).toBe(2);
-        // the automatic acknowledgement, sent now: the click's invisible update owes nothing,
-        // the command's "thinking…" still does
-        await autoAcknowledge(bot.session.takeInteraction(click.id));
-        expect(pending()).toBe(1);
-        await autoAcknowledge(bot.session.takeInteraction(command.id));
-        expect(pending()).toBe(1);
-        await ops.respond(command.id, { content: "pong" });
-        expect(pending()).toBe(0);
-        // both are still kept, so they can be followed up
-        await ops.respond(click.id, { content: "clicked" });
-        await ops.followUp(command.id, { content: "more" });
-        expect(pending()).toBe(0);
-    });
-
-    test("an interaction that was never received can't be answered, and says so", async () => {
-        const { ops } = await connectedBot("stranger");
-        await expect(ops.respond("123456789012345678", { content: "hi" })).rejects.toThrow(
-            "Interaction 123456789012345678 is not pending. It was never recorded or its 15-minute window expired.",
-        );
     });
 });

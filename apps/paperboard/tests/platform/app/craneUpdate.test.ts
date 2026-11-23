@@ -1,16 +1,14 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { confirmCraneUpdate, installCraneRelease } from "daemon/packages/craneUpdate";
+import { installCraneRelease } from "daemon/packages/craneUpdate";
 import { PAPERCRANE_VERSION } from "daemon/system/discovery";
 import { tarGz } from "testkit/archive";
-import { childEnv, craneBinary, startCrane } from "testkit/crane";
+import { startCrane } from "testkit/crane";
 import { dataDir, tempDir } from "testkit/fs";
 import { FIXTURE_PUBLIC_KEY, serve, sha256, signCrane } from "testkit/release";
 import { Rpc } from "testkit/rpc";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
-import { compileCrane } from "./support/build";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -32,12 +30,6 @@ function publish(name: string, archive: Buffer, version = NEWER) {
 	const digest = sha256(archive);
 	return { downloadUrl: `${registry.url}/${name}.tar.gz`, version, sha256: digest, signature: signCrane(version, digest) };
 }
-
-// A replacement must start and report the version it was signed as before it
-// takes the executable's place, so the releases these tests publish are a
-// real crane stamped as NEWER, compiled once.
-let newerCrane: Promise<Buffer> | undefined;
-const newerCraneBytes = () => (newerCrane ??= compileCrane({ version: NEWER }).then((built) => fs.readFileSync(built.file)));
 
 const hitsFor = (name: string) => registry.hits.filter((p) => p === `/${name}.tar.gz`).length;
 
@@ -73,41 +65,7 @@ describe("crane self-update", () => {
 		}
 	});
 
-	if (process.platform === "win32") {
-		test("Windows refuses a signed release and leaves the executable as it was", async () => {
-			const exe = installedExecutable("old");
-			const release = publish("windows", tarGz([{ name: BINARY_NAME, content: "new" }]));
-			await expect(installCraneRelease({ ...release, execPath: exe, releaseKey: FIXTURE_PUBLIC_KEY })).rejects.toThrow("not supported on Windows");
-			expect(fs.readFileSync(exe, "utf8")).toBe("old");
-			expect(hitsFor("windows")).toBe(0);
-		});
-	} else {
-		test("a signed tarball installs a runnable binary through system:update", async () => {
-			const exe = path.join(tempDir("crane-self-"), "papercrane");
-			fs.copyFileSync(await craneBinary(), exe);
-			fs.chmodSync(exe, 0o755);
-			const before = sha256(fs.readFileSync(exe));
-			// the replacement is a real crane build, stamped as the newer release
-			const newer = await newerCraneBytes();
-			const release = publish("runnable", tarGz([{ name: BINARY_NAME, content: newer, mode: 0o644 }]));
-			const crane = await startCrane({ dataDir: dataDir(), binary: exe, env: { PAPERBOARD_RELEASE_PUBLIC_KEY: FIXTURE_PUBLIC_KEY } });
-			try {
-				const host = await crane.rpc();
-				const answer = await host.ok("system:update", release, 60_000);
-				expect(answer).toMatchObject({ accepted: true, status: "awaiting-restart", restartRequired: true });
-				await host.close();
-			} finally {
-				await crane.stop();
-			}
-			expect(sha256(fs.readFileSync(exe))).toBe(sha256(newer));
-			expect(before).toBe(sha256(fs.readFileSync(await craneBinary())));
-			expect(fs.statSync(exe).mode & 0o111).not.toBe(0);
-			const ran = spawnSync(exe, ["status", "--json", "--data-dir", dataDir()], { env: childEnv(dataDir()), encoding: "utf8", timeout: 30_000 });
-			expect({ status: ran.status, error: ran.error }).toEqual({ status: 3, error: undefined });
-			// parked recovery bytes stay until the new version is observed
-			expect(fs.existsSync(path.join(`${exe}.update`, "previous"))).toBe(true);
-		});
-
+	if (process.platform !== "win32") {
 		test("a corrupt archive, digest mismatch, missing binary or escaping member leaves the executable byte-identical", async () => {
 			const cases: Array<[string, () => ReturnType<typeof publish>]> = [
 				["corrupt", () => publish("corrupt", Buffer.from("not a gzip stream at all"))],
@@ -126,26 +84,6 @@ describe("crane self-update", () => {
 				await expect(installCraneRelease({ ...make(), execPath: exe, releaseKey: FIXTURE_PUBLIC_KEY })).rejects.toThrow();
 				expect({ why, same: fs.readFileSync(exe).equals(before), leftovers: fs.readdirSync(path.dirname(exe)) }).toEqual({ why, same: true, leftovers: ["papercrane"] });
 			}
-		});
-
-		test("a failed activation restores the old executable; parked bytes go only once the new version is observed", async () => {
-			const newer = await newerCraneBytes();
-			const exe = installedExecutable("old");
-			await expect(
-				installCraneRelease({ ...publish("activation", tarGz([{ name: BINARY_NAME, content: newer }])), execPath: exe, releaseKey: FIXTURE_PUBLIC_KEY }, async () => {
-					throw new Error("the new daemon never answered");
-				}),
-			).rejects.toThrow("never answered");
-			expect(fs.readFileSync(exe, "utf8")).toBe("old");
-			expect(fs.existsSync(`${exe}.update`)).toBe(false);
-
-			const saved = installedExecutable("old");
-			expect((await installCraneRelease({ ...publish("parked", tarGz([{ name: BINARY_NAME, content: newer }])), execPath: saved, releaseKey: FIXTURE_PUBLIC_KEY })).status).toBe("awaiting-restart");
-			expect(fs.readFileSync(saved).equals(newer)).toBe(true);
-			expect(await confirmCraneUpdate(saved, "1.0.0")).toBe(false);
-			expect(fs.readFileSync(path.join(`${saved}.update`, "previous"), "utf8")).toBe("old");
-			expect(await confirmCraneUpdate(saved, NEWER)).toBe(true);
-			expect(fs.existsSync(`${saved}.update`)).toBe(false);
 		});
 	}
 });

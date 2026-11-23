@@ -55,7 +55,7 @@ export default function PaperApiOverviewDoc() {
 {`import { problemsApi } from "@mileniumhq/paperapi";
 import { fetchPublic } from "@mileniumhq/paperapi/net";
 import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
-import { RPC, readResult } from "@mileniumhq/paperapi/protocol";`}
+import { RPC, readParams } from "@mileniumhq/paperapi/protocol";`}
             </PaperCode>
             <PaperText preset="body" as="p">
                 The package also exports modules by name, such as <PaperCode>@mileniumhq/paperapi/panelPath</PaperCode>. They are Paperboard's own: its daemon, app and Origami import them from source. A panel doesn't, and they change without notice.

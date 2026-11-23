@@ -85,12 +85,6 @@ export function normalizePlayerKey(name: string): string {
     return name.toLowerCase();
 }
 
-export function consoleTimeToSeconds(clean: string): number | undefined {
-    const m = clean.match(/\[(\d{2}):(\d{2}):(\d{2})\]/);
-    if (!m) return undefined;
-    return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-}
-
 // the server's own line: the message starts the line or right after the log
 // prefix's brackets and their colon (26.3 adds "System chat: "), so a chat
 // line ("<Mallory> Steve joined the game") or a /say ("[Mallory] ...") can

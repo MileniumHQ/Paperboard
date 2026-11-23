@@ -10,7 +10,7 @@ export default function HelpersDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Helpers</PaperText>
             <PaperText preset="body" as="p">
-                PaperAPI exports a few plain functions that every panel needs and none should write again: the words of a failure, a check for a JSON object, lines of tasks that run in order or a few at a time, and a file write that lands whole.
+                PaperAPI exports a few plain functions that every panel needs and none should write again: the words of a failure, a check for a JSON object, lines of tasks that run in order or a few at a time, files sent over calls in pieces, and a file write that lands whole.
                 All but the file write work on a panel page and in a service and import from <PaperCode>@mileniumhq/paperapi</PaperCode>. The file write is service-only.
             </PaperText>
 
@@ -116,6 +116,107 @@ export const editFile = (file: string, change: (text: string) => string) =>
                 One past the limit starts as soon as a running one settles, whichever way it ended. Each caller gets its own task's outcome, as with <PaperCode>SerialQueue</PaperCode>.
                 A limit below 1 throws.
             </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="pieces">sendInPieces and readInPieces</PaperText>
+            <PaperCode block language="tsx">
+{`sendInPieces<T>(blob: Blob, options: SendInPiecesOptions<T>): Promise<T>;
+readInPieces(options: ReadInPiecesOptions): Promise<Blob>;
+
+interface SendInPiecesOptions<T> {
+    /** the most bytes one piece holds */
+    pieceBytes: number;
+    /** asks the service for an upload; called once, before the first piece */
+    begin(): Promise<PieceUpload<T>>;
+    onProgress?: (sent: number) => void;
+    signal?: AbortSignal;
+}
+
+interface PieceUpload<T> {
+    put(offset: number, data: string): Promise<unknown>;
+    finish(): Promise<T>;
+    cancel(): Promise<unknown>;
+}
+
+interface ReadInPiecesOptions {
+    /** the piece at offset: its bytes as base64, and the whole file's size */
+    piece(offset: number): Promise<{ data: string; size: number }>;
+    /** the Blob's media type; leave it out to keep the bytes opaque */
+    type?: string;
+    /** what a failure names, such as the file's name */
+    name?: string;
+    onProgress?: (read: number) => void;
+    signal?: AbortSignal;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                One contract call can't carry a big file, so a page sends a file to its service, and reads one back, a piece at a time, each piece as base64.
+                The service's calls stay the panel's own: these run the loop over them.
+            </PaperText>
+            <PaperTextList>
+                <li><PaperCode>sendInPieces</PaperCode> calls <PaperCode>begin</PaperCode> once, sends every piece in order, each after the last has landed, and resolves with what <PaperCode>finish</PaperCode> gives.</li>
+                <li>A piece that fails, or an abort, calls <PaperCode>cancel</PaperCode> and rejects with why the upload stopped. A cancel that fails too is logged, so the service should also drop an upload nothing sends to.</li>
+                <li><PaperCode>readInPieces</PaperCode> asks for pieces from offset 0 until it has the size they report. A file that comes back shorter or longer is an error, never a short Blob.</li>
+                <li>Type only media, such as pictures, films, sound and PDFs. A Blob of anything else stays opaque, so opening its URL can never run it as a page.</li>
+                <li><PaperCode>blobToBase64</PaperCode> and <PaperCode>base64ToBytes</PaperCode> are the encoding they use, for a call that carries bytes whole.</li>
+            </PaperTextList>
+            <PaperCode block language="tsx">
+{`import { readInPieces, sendInPieces } from "@mileniumhq/paperapi";
+
+const PIECE = 4 * 1024 * 1024;
+
+export const upload = (file: File, folder: string, onProgress: (sent: number) => void, signal: AbortSignal) =>
+    sendInPieces(file, {
+        pieceBytes: PIECE,
+        onProgress,
+        signal,
+        begin: async () => {
+            const { id } = await calls.uploadBegin({ folder, name: file.name, size: file.size });
+            return {
+                put: (offset, data) => calls.uploadPut({ id, offset, data }),
+                finish: () => calls.uploadFinish({ id }),
+                cancel: () => calls.uploadCancel({ id }),
+            };
+        },
+    });
+
+export const download = (path: string, name: string) =>
+    readInPieces({ name, piece: (offset) => calls.read({ path, offset }) });`}
+            </PaperCode>
+
+            <PaperText preset="subheader" as="h2" id="blob-url-cache">createBlobUrlCache</PaperText>
+            <PaperCode block language="tsx">
+{`createBlobUrlCache(limits: { files: number; bytes: number }): BlobUrlCache;
+
+interface BlobUrlCache {
+    /** key's blob URL, made once by make and shared; bytes counts it until it's made */
+    get(key: string, make: () => Promise<Blob>, bytes?: number): Promise<string>;
+    /** keeps key's URL alive however full the cache gets, until the returned release */
+    hold(key: string): () => void;
+    /** revokes every URL, held ones too */
+    clear(): void;
+}`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                The blob URLs a page shows of what it read, such as files in a preview or pictures in a chat, kept so a file is read once and not again each time it's shown.
+            </PaperText>
+            <PaperTextList>
+                <li>The most recently asked for stay. Once there are more than <PaperCode>files</PaperCode> of them or they keep more than <PaperCode>bytes</PaperCode>, the oldest are revoked.</li>
+                <li>A URL counts as <PaperCode>bytes</PaperCode>, such as a size a listing gave, while it's made, and as its Blob's size after.</li>
+                <li>Hold a URL while something reads from it over time, such as a film that seeks or a PDF's pages, and release it once that has left the screen. A hold can start before the URL is asked for.</li>
+                <li>A make that fails isn't kept, so the next ask tries again.</li>
+                <li>Key a file that can change by what it is now, such as its path, size and change time, so a changed file is read again.</li>
+            </PaperTextList>
+            <PaperCode block language="tsx">
+{`import { createBlobUrlCache } from "@mileniumhq/paperapi";
+
+const urls = createBlobUrlCache({ files: 48, bytes: 256 * 1024 * 1024 });
+
+const key = \`\${entry.path}|\${entry.modified}|\${entry.size}\`;
+const release = urls.hold(key);
+const url = await urls.get(key, () => download(entry.path, entry.name), entry.size);
+// when the preview has left the screen
+release();`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="write-file-atomic">writeFileAtomic</PaperText>
             <PaperCode block language="tsx">

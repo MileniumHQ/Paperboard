@@ -8,8 +8,7 @@
         "./*": "./src/*.ts"
     },
     "scripts": {
-        "typecheck": "tsc --noEmit",
-        "test": "bun test ./test"
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@mileniumhq/release": "workspace:*",

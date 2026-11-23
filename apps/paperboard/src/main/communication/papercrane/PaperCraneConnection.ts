@@ -9,7 +9,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "daemon";
 import { PROTOCOL_VERSION } from "daemon/core/protocol";
-import { readEvent, readResult, type ProgressEvent, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
+import type { ProgressEvent, RpcAction, RpcParams, RpcResult } from "@mileniumhq/paperapi/protocol";
 import {
     readCraneHandshake, verifyDaemonProof,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
@@ -648,18 +648,12 @@ export class PaperCraneConnection extends EventEmitter {
     // only hears progress for the updater's package downloads
     private handlePushEvent(event: string, payload: unknown) {
         if (event !== "progress") return;
-        let progress: ProgressPayload;
-        try {
-            progress = readEvent(event, payload);
-        } catch (err) {
-            // quiet: a report that doesn't fit is said here and dropped; the download's own answer still settles it
-            logger.error(`[PaperCraneClient] ${this.host}:`, errorMessage(err));
-            return;
-        }
+        if (!payload || typeof payload !== "object" || typeof (payload as ProgressPayload).downloadId !== "string") return;
+        const progress = payload as ProgressPayload;
         this.progressListeners.get(progress.downloadId)?.(progress);
     }
 
-    /** Asks the daemon; the answer is checked against the action's shape (PaperAPI's protocol/rpc.ts). */
+    /** Asks the daemon; params and answer types come from PaperAPI's protocol/rpc.ts. */
     public async call<A extends RpcAction>(
         action: A,
         params: RpcParams<A>,
@@ -696,13 +690,7 @@ export class PaperCraneConnection extends EventEmitter {
                 reject(new Error(`Paperboard Server RPC '${action}' timed out after ${timeoutMs}ms`));
             }, timeoutMs);
             this.pendingRequests.set(id, {
-                resolve: (value) => {
-                    try {
-                        resolve(readResult(action, value));
-                    } catch (err) {
-                        reject(err);
-                    }
-                },
+                resolve: (value) => resolve(value as RpcResult<A>),
                 reject,
                 timer,
                 socket,

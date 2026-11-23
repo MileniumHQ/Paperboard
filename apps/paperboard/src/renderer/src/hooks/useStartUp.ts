@@ -1,13 +1,11 @@
 import { onCleanup, onMount } from "solid-js";
-import { showError, showToast } from "@mileniumhq/paperui";
-import { logToMain, shellApi } from "../lib/shell";
-import { setMobileMode } from "../lib/mobileMode";
+import { showToast } from "@mileniumhq/paperui";
+import { logToMain } from "../lib/shell";
 import { startTarget } from "../lib/startOn";
 import type { useAppSettings } from "./useAppSettings";
 import type { useComputers } from "./useComputers";
 import type { usePanels } from "./usePanels";
 import type { useShellNavigation } from "./useShellNavigation";
-import { errorMessage } from "@mileniumhq/paperapi";
 
 export interface StartUpOptions {
     computers: ReturnType<typeof useComputers>;
@@ -16,22 +14,11 @@ export interface StartUpOptions {
     navigation: ReturnType<typeof useShellNavigation>;
 }
 
-// How the shell opens: the layout from the launch options, then the
-// settings, computers and panels, and last where Paperboard starts.
+// How the shell opens: the settings, computers and panels, and last where
+// Paperboard starts. The layout and mobile mode are the host's (AppProps).
 export function useStartUp(options: StartUpOptions) {
     const { refreshComputers, activeComputerId, computersLoaded, subscribeComputerChanges } = options.computers;
     const { appSettings, loadAppSettings, applyAppSettings } = options.settings;
-
-    onMount(async () => {
-        try {
-            setMobileMode((await shellApi.getLaunchOptions()).mobile);
-        } catch (err) {
-            logToMain("error", "Couldn't read the launch options; the layout is the desktop one until restart:", err);
-            // panels follow the shell: the desktop's behavior too
-            setMobileMode(false);
-            showError("Couldn't read how Paperboard was started", `The desktop layout shows until Paperboard restarts. ${errorMessage(err)}`);
-        }
-    });
 
     const startUp = async () => {
         // Application-wide settings are read first, beside the daemon calls

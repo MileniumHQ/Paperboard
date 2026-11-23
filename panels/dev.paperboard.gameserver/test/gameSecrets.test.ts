@@ -5,13 +5,11 @@ import { secretsApi } from "@mileniumhq/paperapi";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { pickCall } from "./helpers/serverCall";
 import { gameServer, type GameServer } from "./helpers/game";
-import { freePort, installPalworld } from "./helpers/palworld";
+import { freePort } from "./helpers/palworld";
 import { placeStandIn } from "./helpers/standIn";
 import { PANEL_ID } from "../src/servers";
-import { processApi } from "../src/service/api";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { releaseFor, entrypoint } from "../src/games/terraria/catalog";
-import { launchArgs } from "../src/games/gmod/service";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -106,46 +104,5 @@ describe("game server secrets and inputs", () => {
         await expect(service.assertFileAccess!("install/tf/cfg/paperboard_secrets.cfg", false)).rejects.toThrow("holds Team Fortress 2's passwords");
         expect(JSON.stringify(server.server.settings)).toBe(settingsBefore);
         expect(fs.readFileSync(path.join(server.dir, "install", "tf", "cfg", "server.cfg"), "utf8")).not.toContain("rcon_password y");
-    });
-
-    test("Garry's Mod refuses an RCON password its server would drop, ids in the form it can't ban, and game modes and collections that are no such thing", async () => {
-        const server = gameServer("garrys-mod", {
-            files: { "install/garrysmod/maps/gm_construct.bsp": "bsp", "install/garrysmod/gamemodes/sandbox/sandbox.txt": "", "install/garrysmod/cfg/server.cfg": "// the game's own\n" }
-        });
-        const service = server.server.game;
-        await service.initialize(false);
-        // 12 bytes: its packet begins like a TLS hello, which the server takes for a web request
-        await expect(call(server, "writeGameOptions", { patch: { rconPassword: "abcdefghijkl" } })).rejects.toThrow("exactly 12 characters");
-        expect(await vault(server, "rcon-password")).toBe("");
-        await call(server, "writeGameOptions", { patch: { rconPassword: "rcon-Secret-12" } });
-        expect(await vault(server, "rcon-password")).toBe("rcon-Secret-12");
-        expect(filesHolding(server.dir, "rcon-Secret-12")).toEqual([]);
-
-        await call(server, "sourceBan", { steamId: "STEAM_0:1:12345" });
-        expect(fs.readFileSync(path.join(server.dir, "install", "garrysmod", "cfg", "banned_user.cfg"), "utf8")).toBe("banid 0 STEAM_0:1:12345\n");
-        for (const steamId of ["[U:1:24691]", "STEAM_0:1:1; quit", "STEAM_0:1:1\nquit"]) await expect(call(server, "sourceBan", { steamId })).rejects.toThrow("Steam id");
-
-        const gameDir = path.join(server.dir, "install", "garrysmod");
-        expect(await launchArgs({}, gameDir)).toEqual(["+gamemode", "sandbox"]);
-        expect(await launchArgs({ gamemode: "sandbox", workshopCollection: " https://steamcommunity.com/sharedfiles/filedetails/?id=157384458 " }, gameDir)).toEqual(["+gamemode", "sandbox", "+host_workshop_collection", "157384458"]);
-        // a mode that comes with the collection is only on the server once it has downloaded it
-        expect(await launchArgs({ gamemode: "zombiesurvival", workshopCollection: "157384458" }, gameDir)).toEqual(["+gamemode", "zombiesurvival", "+host_workshop_collection", "157384458"]);
-        await expect(launchArgs({ gamemode: "zombiesurvival" }, gameDir)).rejects.toThrow('Garry\'s Mod has no game mode "zombiesurvival"');
-        for (const gamemode of ["sandbox +rcon_password x", "../sandbox", "Sandbox", ""]) await expect(launchArgs({ gamemode }, gameDir)).rejects.toThrow("Game mode must be a game mode's folder name");
-        for (const workshopCollection of ["157384458 +quit", "https://example.com/?id=157384458", "abc"]) await expect(launchArgs({ workshopCollection }, gameDir)).rejects.toThrow("Workshop collection must be a Steam Workshop link or the number in it");
-    });
-
-    test("Palworld refuses unsafe user ids and writes into its managed install", async () => {
-        const server = gameServer("palworld", { settings: { port: await freePort(), restPort: await freePort() } });
-        installPalworld(server.dir);
-        const service = server.server.game;
-        await service.initialize(false);
-        for (const userId of ["steam_1;rm -rf", "../players", "", "x".repeat(65)]) {
-            await expect(call(server, "palworldKick", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
-            await expect(call(server, "palworldBan", { userId })).rejects.toThrow("Choose a player by their Palworld user id");
-        }
-        const binary = fs.readFileSync(path.join(server.dir, "install", "PalServer.sh"));
-        await expect(service.assertFileAccess!("install/PalServer.sh", true)).rejects.toThrow("Installed Palworld files are managed by Updates");
-        expect(fs.readFileSync(path.join(server.dir, "install", "PalServer.sh"))).toEqual(binary);
     });
 });

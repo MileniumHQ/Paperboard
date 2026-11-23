@@ -85,7 +85,6 @@ secretsApi.purge(panelId: string): Promise<number>;`}
                     <tr><td><PaperCode>Secret value must be a non-empty string</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An empty value. To remove a secret, call <PaperCode>delete</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Secret exceeds 8192 character limit</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A long value.</td></tr>
                     <tr><td><PaperCode>Secret vault full for &lt;panel&gt; (64 entries). Delete one before adding another.</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A 65th name.</td></tr>
-                    <tr><td><PaperCode>Cross-panel access refused: credential is scoped to "&lt;panel&gt;"</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>Another panel's id.</td></tr>
                 </tbody>
             </PaperTable>
         </PaperFlex>

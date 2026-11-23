@@ -59,7 +59,6 @@ export function serverFields(state: Accessor<GameServerState | null>) {
         onlinePlayerNames: createMemo(() => new Set(fields.onlinePlayers())),
         seenPlayerNames: createMemo(() => new Set(fields.seenPlayers())),
         playerStats: createMemo(() => new Map(Object.entries(fields.playerStats() ?? {}))),
-        playerPlaytime: createMemo(() => new Map(Object.entries(fields.playerPlaytime() ?? {}))),
         playerPositions: createMemo(() => new Map(Object.entries(fields.playerPositions() ?? {}))),
     };
 }

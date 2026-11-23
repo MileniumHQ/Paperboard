@@ -163,15 +163,15 @@ export class Attachments {
         return JSON.parse(fs.readFileSync(meta, "utf8")) as Attachment;
     }
 
-    /** One chunk of a file, base64, from an offset; `done` when it reaches the end. It says what the file is, too. */
-    read(id: unknown, offset: unknown): { data: string; done: boolean; file: Attachment } {
+    /** One chunk of a file, base64, from an offset; the file's `bytes` say where it ends. It says what the file is, too. */
+    read(id: unknown, offset: unknown): { data: string; file: Attachment } {
         const a = this.get(id);
         if (typeof offset !== "number" || !Number.isSafeInteger(offset) || offset < 0 || offset > a.bytes) throw new Error("that's not a place in the file");
         const fd = fs.openSync(this.file(id), "r");
         try {
             const buf = Buffer.alloc(Math.min(L.chunkBytes, a.bytes - offset));
             const n = fs.readSync(fd, buf, 0, buf.length, offset);
-            return { data: buf.subarray(0, n).toString("base64"), done: offset + n >= a.bytes, file: a };
+            return { data: buf.subarray(0, n).toString("base64"), file: a };
         } finally {
             fs.closeSync(fd);
         }

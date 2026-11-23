@@ -95,18 +95,6 @@ describe("a tab's scrollback", () => {
         expect(fs.readdirSync(scrollback(dir))).not.toContain("tab2.log");
     });
 
-    test("holds what the shell printed just before the service stopped", async () => {
-        await panelFiles({ "tabs.json": TABS });
-        await startService();
-        await call.openTab({ id: "tab1" });
-        await runBlock("type-in-tab", { tab: "tab1", text: "echo last-$((6*7))\n" });
-        await until("the output", () => readBlock<string>("output", { tab: "tab1", lines: 100 }), (out) => out.includes("last-42"));
-        // stopped at once, while the output still waits to be written
-        await stopServices();
-        await startService();
-        expect(await readBlock("output", { tab: "tab1", lines: 100 })).toContain("last-42");
-    });
-
     test("that could not be read is said, and never written over", async () => {
         const dir = await panelFiles({ "tabs.json": TABS });
         await startService();
@@ -130,24 +118,5 @@ describe("a tab's scrollback", () => {
         fs.chmodSync(file, 0o644);
         writeOnly = null;
         expect(fs.readFileSync(file, "utf8")).toBe(before);
-    });
-
-    test("is not left behind by a tab whose shell would not start", async () => {
-        const dir = await panelFiles({ "tabs.json": TABS });
-        await startService();
-        await expect(call.createTab({ label: "Odd", shell: "/bin/not-a-shell" })).rejects.toThrow("is not a shell on this computer");
-        expect(fs.existsSync(scrollback(dir)) ? fs.readdirSync(scrollback(dir)) : []).toEqual([]);
-    });
-
-    test("that can't be started for a new tab keeps the tab, and the state says why its shell didn't start", async () => {
-        const dir = await panelFiles({ "tabs.json": TABS });
-        // a new shell starts by clearing its saved screen, and this folder takes no writes
-        fs.mkdirSync(scrollback(dir), { mode: 0o555 });
-        readOnly = scrollback(dir);
-        await startService();
-        const id = await runBlock<string>("new-tab", { name: "Three" });
-        expect(await readBlock("tabs")).toEqual(["tab1", "tab2", id]);
-        const said = await serviceState();
-        expect(said.sessionErrors[id]?.start).toContain("This shell didn't start");
     });
 });

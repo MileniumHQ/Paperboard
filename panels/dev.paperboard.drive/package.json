@@ -1,0 +1,25 @@
+{
+    "name": "dev.paperboard.drive",
+    "private": true,
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @mileniumhq/paperui",
+        "pack": "bunx paperapi pack",
+        "preview": "vite preview",
+        "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
+        "test": "bun test"
+    },
+    "dependencies": {
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
+        "solid-js": "^1.9.19"
+    },
+    "devDependencies": {
+        "@types/node": "^24.19.2",
+        "typescript": "~6.0.3",
+        "vite": "^8.3.8",
+        "vite-plugin-solid": "^2.11.16"
+    }
+}

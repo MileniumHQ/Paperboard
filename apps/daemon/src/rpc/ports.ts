@@ -19,21 +19,19 @@ export function portRegistryFor(engine: PaperCraneEngine): PortRegistry {
     return registry;
 }
 
-// a panel reaches only its own claims: the token claim names the panel
-const claimsOf = (panelId: string, action: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), panelId, action)!;
+const claimsOf = (panelId: string, ctx: RpcContext) => resourcePanelId(ctx.callerPanelId(), panelId)!;
 const ports = (ctx: RpcContext) => portRegistryFor(ctx.engine);
 
-// Claims are panel-scoped. The policy and the list of every claim are the
-// user's, shown in the shell: those need host authority (PaperAPI's protocol/rpc.ts).
+// The policy and the list of every claim are host-only (PaperAPI's protocol/rpc.ts).
 // A failure's message is the user's answer ("port 25565: Game Server has it"), unprefixed.
 export const portsRpc = rpcModule({
-    "ports:claim": (params, ctx, action) => ports(ctx).claim(claimsOf(params.panelId, action, ctx), params),
-    "ports:prepare": ({ panelId, name }, ctx, action) => ports(ctx).prepare(claimsOf(panelId, action, ctx), name),
-    "ports:release": async ({ panelId, name }, ctx, action) => {
-        await ports(ctx).release(claimsOf(panelId, action, ctx), name);
+    "ports:claim": (params, ctx) => ports(ctx).claim(claimsOf(params.panelId, ctx), params),
+    "ports:prepare": ({ panelId, name }, ctx) => ports(ctx).prepare(claimsOf(panelId, ctx), name),
+    "ports:release": async ({ panelId, name }, ctx) => {
+        await ports(ctx).release(claimsOf(panelId, ctx), name);
         return { success: true };
     },
-    "ports:list": ({ panelId }, ctx, action) => ({ claims: ports(ctx).list(claimsOf(panelId, action, ctx)) }),
+    "ports:list": ({ panelId }, ctx) => ({ claims: ports(ctx).list(claimsOf(panelId, ctx)) }),
     "ports:all": (_, ctx) => ({ claims: ports(ctx).all(), policy: ports(ctx).policy() }),
     "ports:policy-set": async ({ policy }, ctx) => ({ policy: await ports(ctx).setPolicy(policy) }),
 }, "Port operation failed");

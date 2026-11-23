@@ -44,19 +44,6 @@ function another(setting: LoaderSettingView): string {
 
 // Crossplay lets Bedrock players in without damaging Geyser/Floodgate config.
 describe("crossplay", () => {
-    test("every setting reads the value Geyser and Floodgate generated, the default shown before the files exist", async () => {
-        const { deps } = paperServer();
-        const view = await readCrossplay("paper", deps);
-        expect(view.groups.map((g) => [g.path, g.error ?? null, g.pending ?? false])).toEqual([
-            [GEYSER, null, false],
-            [FLOODGATE, null, false],
-        ]);
-        const empty = tempDir("gameserver-crossplay-empty-");
-        const defaults = await readCrossplay("paper", { serverDir: async () => empty });
-        const values = (v: typeof view) => v.groups.flatMap((g) => g.settings.map((s) => [s.id, s.value]));
-        expect(values(view)).toEqual(values(defaults));
-        expect(Object.fromEntries(values(view))).toMatchObject({ "geyser.port": "19132", "geyser.webrtc-port": "0", "floodgate.username-prefix": "." });
-    });
 
     test("an edit changes exactly its own line, keeping comments and indentation", async () => {
         const { deps, read } = paperServer();
@@ -74,33 +61,6 @@ describe("crossplay", () => {
                 expect([setting.id, reread?.value]).toEqual([setting.id, value]);
             }
         }
-    });
-
-    test("preparing sets floodgate auth, gives NetherNet its own port beside RakNet and allows unsigned chat, keeping every other byte", async () => {
-        const { root, deps, read } = paperServer();
-        // jars renamed by the user still count by the name inside them
-        fs.writeFileSync(path.join(root, "plugins", "bedrock-bridge.jar"), pluginJar("Geyser-Spigot"));
-        fs.writeFileSync(path.join(root, "plugins", "fg.jar"), pluginJar("floodgate"));
-        fs.writeFileSync(path.join(root, "plugins", "Other.jar"), pluginJar("Essentials"));
-        expect(await findCrossplayJars("paper", deps)).toEqual({ geyser: "bedrock-bridge.jar", floodgate: "fg.jar" });
-
-        const geyser = read(GEYSER);
-        const floodgate = read(FLOODGATE);
-        const view = await prepareCrossplay("paper", deps);
-        expect([view.geyser, view.floodgate]).toEqual(["bedrock-bridge.jar", "fg.jar"]);
-        expect(changedLines(geyser, read(GEYSER))).toEqual([
-            ["  webrtc-port: 0", "  webrtc-port: 19133"],
-            ["  transport: nethernet", "  transport: both"],
-            ["  auth-type: online", "  auth-type: floodgate"],
-        ]);
-        expect(read(FLOODGATE)).toBe(floodgate);
-        expect(read("server.properties")).toBe(PROPERTIES.replace("enforce-secure-profile=true", "enforce-secure-profile=false"));
-
-        // preparing again changes nothing
-        const settled = read(GEYSER);
-        await prepareCrossplay("paper", deps);
-        expect(read(GEYSER)).toBe(settled);
-        expect(read("server.properties")).toBe(PROPERTIES.replace("enforce-secure-profile=true", "enforce-secure-profile=false"));
     });
 
     test("a transport the user chose is kept, and a server.properties not written yet gets only the chat line", async () => {

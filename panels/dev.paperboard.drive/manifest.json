@@ -1,0 +1,14 @@
+{
+    "name": "Drive",
+    "id": "dev.paperboard.drive",
+    "version": "0.1.0",
+    "description": "Your files, kept on your computer and open from anywhere",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png",
+    "store": {
+        "about": "./store/about.md",
+        "services": []
+    }
+}

@@ -6,9 +6,8 @@ import { problemsFor } from "./problems";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { DownloadProgressPayload } from "../packages/download";
 
-// a scoped caller reaches only its own panel
-function ownPanel(requested: string, action: string, ctx: RpcContext): string {
-    return resourcePanelId(ctx.callerPanelId(), requested, action)!;
+function ownPanel(requested: string, ctx: RpcContext): string {
+    return resourcePanelId(ctx.callerPanelId(), requested)!;
 }
 
 // a failure of the operation itself is answered as what failed, with no code
@@ -57,8 +56,8 @@ export const panelsRpc = rpcModule({
         );
         return { panels: installed, failures };
     },
-    "panel:uninstall": ({ panelId, deleteData }, ctx, action) => {
-        const owned = ownPanel(panelId, action, ctx);
+    "panel:uninstall": ({ panelId, deleteData }, ctx) => {
+        const owned = ownPanel(panelId, ctx);
         return failedAs("Uninstall", async () => {
             const result = await ctx.engine.uninstallPanel(owned, { deleteData: deleteData === true });
             // what went wrong with it went with it
@@ -66,12 +65,10 @@ export const panelsRpc = rpcModule({
             return { success: true, ...result };
         });
     },
-    "panel:restartService": ({ panelId }, ctx, action) => {
-        const owned = ownPanel(panelId, action, ctx);
+    "panel:restartService": ({ panelId }, ctx) => {
+        const owned = ownPanel(panelId, ctx);
         return failedAs("Restart", async () => ({ restarted: await ctx.engine.restartPanelService(owned) }));
     },
-    // config ids are panel-scoped (default config in configs/, an explicit
-    // path in the panel's files dir); a scoped caller may only touch its own claim
-    "config:get": async ({ id, path }, ctx, action) => ({ data: await ctx.engine.getConfig(ownPanel(id, action, ctx), path) }),
-    "config:set": async ({ id, path, data }, ctx, action) => ({ success: await ctx.engine.setConfig(ownPanel(id, action, ctx), data, path) }),
+    "config:get": async ({ id, path }, ctx) => ({ data: await ctx.engine.getConfig(ownPanel(id, ctx), path) }),
+    "config:set": async ({ id, path, data }, ctx) => ({ success: await ctx.engine.setConfig(ownPanel(id, ctx), data, path) }),
 }, "Panel operation failed");

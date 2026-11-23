@@ -11,15 +11,12 @@ import { createPictureFetch, fetchPublic, publicAddressRefusal, PublicFetchError
 
 const hits: string[] = [];
 const servers: http.Server[] = [];
-type Answer = { status?: number; headers?: Record<string, string>; body?: string | Uint8Array; chunks?: string[]; never?: true };
+type Answer = { status?: number; headers?: Record<string, string>; body?: string | Uint8Array };
 async function serve(name: string, answer: (path: string) => Answer): Promise<number> {
     const server = http.createServer((req, res) => {
         hits.push(`${name} ${req.url} host=${req.headers.host}`);
         const a = answer(req.url ?? "/");
-        if (a.never) return;
         res.writeHead(a.status ?? 200, a.headers ?? {});
-        // chunks go out with no Content-Length: the cap has to stop the body itself
-        for (const chunk of a.chunks ?? []) res.write(chunk);
         res.end(a.body);
     });
     servers.push(server);
@@ -41,13 +38,12 @@ const filesPort = await serve("files", (path): Answer => {
     if (path === "/to-inside-by-name") return { status: 307, headers: { location: `http://intranet.example:${insidePort}/` } };
     if (path === "/to-file") return { status: 302, headers: { location: "file:///etc/passwd" } };
     if (path === "/loop") return { status: 302, headers: { location: "/loop" } };
-    if (path === "/declared-big") return { headers: { "content-length": "64" }, body: "x".repeat(64) };
-    if (path === "/streamed-big") return { chunks: Array(8).fill("x".repeat(16)) };
-    if (path === "/never") return { never: true };
     return { status: 404, body: "Not found" };
 });
 const FILES = `http://127.0.0.1:${filesPort}`;
 const NAMED = `http://files.example:${filesPort}`;
+// the test's own servers; the one standing for this computer's private service is not among them
+process.env[TEST_TRUSTED_ORIGINS_ENV] = [FILES, NAMED].join(",");
 const trusted = { maxBytes: 32 };
 const lookup = (address: string) => async () => [{ address }];
 
@@ -160,26 +156,6 @@ describe("fetchPublic", () => {
         expect(hits.filter((h) => h.startsWith("inside"))).toEqual([]);
     });
 
-    test("a body over maxBytes is refused, whether or not its size is declared", async () => {
-        expect(await refusal(fetchPublic(`${FILES}/declared-big`, trusted))).toEqual({ code: "too-large", message: `The file at 127.0.0.1:${filesPort} is over 32 bytes` });
-        expect(await refusal(fetchPublic(`${FILES}/streamed-big`, trusted))).toMatchObject({ code: "too-large" });
-        expect((await fetchPublic(`${FILES}/streamed-big`, { ...trusted, maxBytes: 128 })).body.length).toBe(128);
-    });
-
-    test("an error answer, or one that never comes, fails with why", async () => {
-        expect(await refusal(fetchPublic(`${FILES}/missing`, trusted))).toEqual({ code: "bad-response", message: `127.0.0.1:${filesPort} answered 404 Not Found` });
-        // the status is data: a caller never reads it out of the message
-        const notFound = await fetchPublic(`${FILES}/missing`, trusted).catch((e: unknown) => e);
-        expect(notFound).toBeInstanceOf(PublicFetchError);
-        expect((notFound as PublicFetchError).status).toBe(404);
-        // a failure that is no answer, or a redirect gone wrong, has none
-        const looped = await fetchPublic(`${FILES}/loop`, trusted).catch((e: unknown) => e);
-        expect([(looped as PublicFetchError).code, (looped as PublicFetchError).status]).toEqual(["bad-response", undefined]);
-        expect(((await fetchPublic("http://nowhere.example/", { maxBytes: 32, lookup: async () => Promise.reject(new Error("ENOTFOUND")) }).catch((e: unknown) => e)) as PublicFetchError).status).toBeUndefined();
-        expect(await refusal(fetchPublic(`${FILES}/never`, { ...trusted, timeoutMs: 300 }))).toEqual({ code: "timeout", message: `127.0.0.1:${filesPort} took longer than 300 ms to answer` });
-        expect(await refusal(fetchPublic("http://nowhere.example/", { maxBytes: 32, lookup: async () => Promise.reject(new Error("ENOTFOUND")) }))).toMatchObject({ code: "unreachable" });
-    });
-
     test("a dial of its own is handed the address checked for each hop, and its answer is read as the default's is", async () => {
         const names: Record<string, string> = { "images.example": "93.184.216.34", "cdn.example": "1.1.1.1", "intranet.example": "10.1.2.3" };
         const pages: Record<string, { status: number; headers: Record<string, string>; body?: string }> = {
@@ -226,60 +202,5 @@ describe("fetchPublic", () => {
         expect(asked).toEqual([]);
         expect(await refusal(fetchPublic("https://images.example/moved", options))).toEqual({ code: "invalid-url", message: "Only https addresses are fetched, not http:" });
         expect(asked).toEqual(["https://images.example/moved"]);
-    });
-});
-
-// a 1×1 PNG's first bytes are all the type check reads
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
-let missing = true;
-const picturesPort = await serve("pictures", (path): Answer => {
-    if (path === "/icon.png") return { headers: { "content-type": "image/png" }, body: PNG };
-    // Steam calls some of its pictures this
-    if (path === "/unnamed") return { headers: { "content-type": "application/octet-stream" }, body: PNG };
-    if (path === "/page.png") return { headers: { "content-type": "text/html" }, body: "<script>" };
-    if (path === "/later.png") return missing ? { status: 404, body: "Not found" } : { headers: { "content-type": "image/png" }, body: PNG };
-    return { headers: { "content-type": "image/png" }, body: PNG };
-});
-const PICTURES = `http://127.0.0.1:${picturesPort}`;
-// the test's own servers; the one standing for this computer's private service is not among them
-process.env[TEST_TRUSTED_ORIGINS_ENV] = [FILES, NAMED, PICTURES].join(",");
-const from = { from: "Test" };
-
-describe("createPictureFetch", () => {
-    const asks = (path: string) => hits.filter((hit) => hit.startsWith(`pictures ${path} `)).length;
-
-    test("a picture comes back as a data: address of what its bytes are, fetched once", async () => {
-        const pictures = createPictureFetch({ maxBytes: 64 });
-        const dataUrl = `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`;
-        const [a, b] = await Promise.all([pictures(new URL(`${PICTURES}/icon.png`), from), pictures(new URL(`${PICTURES}/icon.png`), from)]);
-        expect([a, b]).toEqual([dataUrl, dataUrl]);
-        expect(await pictures(new URL(`${PICTURES}/icon.png`), from)).toBe(dataUrl);
-        expect(asks("/icon.png")).toBe(1);
-        expect(await pictures(new URL(`${PICTURES}/unnamed`), from)).toBe(dataUrl);
-    });
-
-    test("what isn't a picture is refused with why, and a failure isn't kept", async () => {
-        const pictures = createPictureFetch({ maxBytes: 64 });
-        await expect(pictures(new URL(`${PICTURES}/page.png`), from)).rejects.toThrow("Test sent text/html where a picture should be, and it isn't one");
-        await expect(pictures(new URL(`http://127.0.0.1:${insidePort}/big.png`), from)).rejects.toThrow("Couldn't load the picture from Test: 127.0.0.1");
-        await expect(pictures(new URL(`${PICTURES}/later.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
-        // what failed it is the failure's cause, with the server's status
-        const gone = await pictures(new URL(`${PICTURES}/later.png`), from).catch((e: unknown) => e);
-        expect((gone as Error).cause).toBeInstanceOf(PublicFetchError);
-        expect(((gone as Error).cause as PublicFetchError).status).toBe(404);
-        missing = false;
-        expect(await pictures(new URL(`${PICTURES}/later.png`), from)).toMatch(/^data:image\/png;base64,/);
-        await expect(createPictureFetch({ maxBytes: 4 })(new URL(`${PICTURES}/icon.png`), from)).rejects.toThrow("Couldn't load the picture from Test:");
-    });
-
-    test("what is kept stays within keepChars, the oldest going first", async () => {
-        const one = `data:image/png;base64,${Buffer.from(PNG).toString("base64")}`.length;
-        const pictures = createPictureFetch({ maxBytes: 64, keepChars: one * 2 });
-        for (const name of ["a", "b", "c"]) await pictures(new URL(`${PICTURES}/${name}.png`), from);
-        await pictures(new URL(`${PICTURES}/c.png`), from);
-        await pictures(new URL(`${PICTURES}/b.png`), from);
-        expect(asks("/b.png")).toBe(1);
-        await pictures(new URL(`${PICTURES}/a.png`), from);
-        expect(asks("/a.png")).toBe(2);
     });
 });

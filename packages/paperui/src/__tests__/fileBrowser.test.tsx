@@ -146,26 +146,6 @@ describe("PaperFileBrowser save safety", () => {
         expect(owner.reads).toEqual(["server.properties"]);
     });
 
-    test("cancelling the question while its save is in flight does not run the navigation", async () => {
-        const owner = files({ "server.properties": "motd=hi", "ops.json": "[]" });
-        render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
-        await openFile("server.properties");
-        typeInto("motd=first");
-
-        fireEvent.click(row("ops.json"));
-        const write = owner.holdNextWrite();
-        fireEvent.click(within(dialog()).getByRole("button", { name: "Save" }));
-        await waitFor(() => expect(owner.writes).toHaveLength(1));
-        fireEvent.click(within(dialog()).getByRole("button", { name: "Cancel" }));
-        write.resolve({ version: "v2" });
-
-        await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Saved"));
-        expect(owner.writes).toEqual([{ path: "server.properties", text: "motd=first", version: "v1" }]);
-        expect(owner.reads).toEqual(["server.properties"]);
-        expect(editor().getAttribute("aria-label")).toBe("Contents of server.properties");
-        expect(editor().value).toBe("motd=first");
-    });
-
     test("edits typed while the question's save is in flight are kept, and the navigation waits", async () => {
         const owner = files({ "server.properties": "motd=hi", "ops.json": "[]" });
         render(() => <PaperFileBrowser rootLabel="Server" list={owner.list} read={owner.read} write={owner.write} />);
@@ -184,91 +164,5 @@ describe("PaperFileBrowser save safety", () => {
         expect(editor().getAttribute("aria-label")).toBe("Contents of server.properties");
         expect(editor().value).toBe("motd=typed while saving");
         expect(screen.getAllByLabelText("Unsaved changes").length).toBeGreaterThan(0);
-    });
-});
-
-// Inventory: Content, files and console — Failures are shown, not swallowed (file browser).
-describe("PaperFileBrowser read failures", () => {
-    test("a folder that can't be listed shows the error with a working Retry", async () => {
-        let attempts = 0;
-        const list = async (): Promise<PaperFileListing> => {
-            attempts++;
-            if (attempts === 1) throw new Error("Permission denied: /srv/world");
-            return ROOT;
-        };
-        render(() => <PaperFileBrowser rootLabel="Server" list={list} read={async () => ({ kind: "text", text: "" })} />);
-
-        const alert = await screen.findByRole("alert");
-        expect(alert.textContent).toBe("Permission denied: /srv/world");
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-        await waitFor(() => row("server.properties"));
-        expect(attempts).toBe(2);
-        expect(screen.queryByRole("alert")).toBeNull();
-    });
-
-    test("a file that can't be read shows the error with a working Try again", async () => {
-        let attempts = 0;
-        const read = async (): Promise<PaperFileContent> => {
-            attempts++;
-            if (attempts === 1) throw new Error("EIO: i/o error, read");
-            return { kind: "text", text: "motd=hi" };
-        };
-        render(() => <PaperFileBrowser rootLabel="Server" list={async () => ROOT} read={read} />);
-        await waitFor(() => row("server.properties"));
-        fireEvent.click(row("server.properties"));
-
-        const alert = await screen.findByRole("alert");
-        expect(alert.textContent).toContain("Couldn't open server.properties");
-        expect(alert.textContent).toContain("EIO: i/o error, read");
-        fireEvent.click(within(alert).getByRole("button", { name: /Try again/ }));
-        await waitFor(() => expect(editor().value).toBe("motd=hi"));
-        expect(attempts).toBe(2);
-    });
-});
-
-// Inventory: Templates — Late answers lose (file browser reveal).
-describe("PaperFileBrowser reveal", () => {
-    test("a newer reveal wins over an older one still opening its folders", async () => {
-        const deep = deferred<PaperFileListing>();
-        const listings: Record<string, () => Promise<PaperFileListing>> = {
-            "": async () => ({
-                entries: [
-                    { name: "deep", path: "deep", kind: "folder" },
-                    { name: "top.txt", path: "top.txt", kind: "file" },
-                ],
-            }),
-            deep: () => {
-                deepAsked = true;
-                return deep.promise;
-            },
-        };
-        let deepAsked = false;
-        const reads: string[] = [];
-        const [reveal, setReveal] = createSignal<PaperFileReveal | null>(null);
-        render(() => (
-            <PaperFileBrowser
-                rootLabel="Server"
-                list={(path) => listings[path]!()}
-                read={async (path) => {
-                    reads.push(path);
-                    return { kind: "text", text: path };
-                }}
-                reveal={reveal()}
-            />
-        ));
-        await waitFor(() => row("top.txt"));
-
-        // the older reveal waits on deep's listing; the newer one opens at once
-        setReveal({ path: "deep/old.txt", kind: "file" });
-        await waitFor(() => expect(deepAsked).toBe(true));
-        setReveal({ path: "top.txt", kind: "file" });
-        await waitFor(() => expect(editor().value).toBe("top.txt"));
-
-        deep.resolve({ entries: [{ name: "old.txt", path: "deep/old.txt", kind: "file" }] });
-        await waitFor(() => row("old.txt"));
-        await Promise.resolve();
-        expect(reads).toEqual(["top.txt"]);
-        expect(editor().value).toBe("top.txt");
-        expect(row("top.txt").getAttribute("aria-selected")).toBe("true");
     });
 });

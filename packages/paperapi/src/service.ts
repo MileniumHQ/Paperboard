@@ -1,8 +1,5 @@
-import { actionsApi } from "./actions";
 import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
-import type { ActionDefinition, ActionCategoryDefinition, CustomTypeDefinition } from "./schema";
-import { defineType } from "./schema";
 import { STATE_EVENT, STATE_KEY_VALUE, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import type { BackupEnded, BackupRecord } from "./backups";
@@ -51,20 +48,15 @@ export interface ServiceContext<TState, TEvents extends EventShapes | undefined 
     ) => void;
     /**
      * Tells the panel's page something happened (its client's `events`); other
-     * panels can't hear it. With a contract the event must be one it names,
-     * with the payload it says: anything else throws here.
+     * panels can't hear it. The event must be one the contract names, with the
+     * payload it says: anything else throws here.
      */
     emit: TEvents extends EventShapes
         ? <E extends keyof TEvents & string>(event: E, payload: Infer<TEvents[E]>) => void
         : (event: string, payload?: unknown) => void;
-    /** @deprecated Actions is being removed: fire a block event (blocksApi) instead. Kept only while Agents moves to Blocks. */
-    emitTrigger: <T = any>(triggerId: string, output: T) => void;
     /** the contract's keyed state, by field */
     keyed: { readonly [F in keyof TKeyed]: KeyedEntries<TKeyed[F]> };
 }
-
-/** @deprecated An untyped call (serviceApi.call): declare it in a contract (defineContract) instead. Kept only while Game Server and Agents move. */
-export type ServiceCall<TState> = (ctx: ServiceContext<TState>, input?: any) => unknown | Promise<unknown>;
 
 /** What runs each call of a contract: its checked input and the scope's values in, its output back. */
 export type CallHandlers<C extends PanelContract<any>, TState = ContractState<C, Record<string, any>>> = {
@@ -84,7 +76,6 @@ type ContextOf<TState, C> = ServiceContext<ContractState<C, TState>, C extends P
 
 export interface DefinePanelServiceOptions<
     TState extends Record<string, any>,
-    TCalls extends Record<string, ServiceCall<TState>>,
     C extends PanelContract<any> | undefined = undefined,
 > {
     id?: string;
@@ -97,27 +88,12 @@ export interface DefinePanelServiceOptions<
      */
     contract?: C;
     /**
-     * What the panel's own page asks its service: with a contract, one
-     * handler for each of its calls. Each is an internal block: no other
-     * panel may call it, and nothing lists it. What a person would
-     * automate is a block of its own (blocksApi).
-     *
-     * Without a contract (deprecated, kept only while Game Server and
-     * Agents move): untyped handlers by name, called with serviceApi.call.
+     * What the panel's own page asks its service: one handler for each of the
+     * contract's calls. Each is an internal block: no other panel may call it,
+     * and nothing lists it. What a person would automate is a block of its own
+     * (blocksApi).
      */
-    calls?: C extends PanelContract<any> ? NoInfer<CallHandlers<C, ContractState<C, TState>>> : TCalls;
-    /**
-     * @deprecated TRANSITIONAL: untyped calls beside a contract's, only
-     * while Game Server moves onto its contract slice by slice. Removed with
-     * serviceApi.call.
-     */
-    untypedCalls?: Record<string, ServiceCall<ContractState<C, TState>>>;
-    /** @deprecated Actions is being removed: use `calls` and blocks. Kept only while Agents moves to Blocks. */
-    actions?: ActionDefinition[] | Record<string, (ctx: ServiceContext<TState>, ...args: any[]) => any>;
-    /** @deprecated with `actions` */
-    types?: CustomTypeDefinition[];
-    /** @deprecated with `actions` */
-    categories?: ActionCategoryDefinition[];
+    calls?: C extends PanelContract<any> ? NoInfer<CallHandlers<C, ContractState<C, TState>>> : never;
     /**
      * What each widget option's dropdown offers in Home's gallery, by widget
      * id then option id, as the manifest declares them. Asked each time the
@@ -198,17 +174,16 @@ const PAGES_OPEN: Shape<number> = shape.read((value) => {
     return value as number;
 });
 const UPDATE_ENDED: Shape<UpdateEnded> = shape.object({ processes: shape.list(shape.text()), ok: shape.boolean(), error: shape.optional(shape.text()) });
-type AnyOptions = DefinePanelServiceOptions<any, Record<string, ServiceCall<any>>, any>;
+type AnyOptions = DefinePanelServiceOptions<any, any>;
 
 // how long a failed state sync waits before it tries again, doubling each time
 const STATE_RETRY_BASE_MS = 500;
 const STATE_RETRY_MAX_MS = 30_000;
 
 export function definePanelService<
-    TState extends Record<string, any>,
-    TCalls extends Record<string, ServiceCall<TState>> = Record<string, ServiceCall<TState>>,
+    TState extends Record<string, any> = Record<string, any>,
     C extends PanelContract<any> | undefined = undefined,
->(options: DefinePanelServiceOptions<TState, TCalls, C>) {
+>(options: DefinePanelServiceOptions<TState, C>) {
     type State = ContractState<C, TState>;
     const contract = options.contract as AnyContract | undefined;
     const stateShape = contract?.state?.shape;
@@ -265,11 +240,7 @@ export function definePanelService<
             return currentState;
         },
         setState,
-        emit: pageEvents(panelId, blocks, !!options.actions, contract),
-        emitTrigger: (triggerId, output) => {
-            // quiet: TRANSITIONAL (Actions removal): Actions is deprecated, and its triggers have no page to show a failure in
-            actionsApi.emitTrigger(triggerId, output, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit trigger '${triggerId}':`, err));
-        },
+        emit: pageEvents(panelId, blocks, contract),
         keyed: keyed?.entries ?? {},
     };
 
@@ -277,9 +248,7 @@ export function definePanelService<
         internals,
         ...(keyed ? [keyed.registered] : []),
         ...registerWidgetChoices(blocks, options, ctx, () => ready),
-        ...(contract ? registerContractCalls(contract, blocks, options, ctx) : registerCalls(panelId, blocks, options.calls as Record<string, ServiceCall<any>> | undefined, ctx)),
-        ...(contract && options.untypedCalls ? registerCalls(panelId, blocks, options.untypedCalls, ctx, contract) : []),
-        ...registerLegacyActions(panelId, options, ctx),
+        ...(contract ? registerContractCalls(contract, blocks, options, ctx) : []),
     ];
 
     ready = Promise.all(registrations).then(async () => {
@@ -305,7 +274,7 @@ export function definePanelService<
 }
 
 // ctx.emit: an event is registered the first time it is emitted, then fired
-function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean, contract: AnyContract | undefined): (event: string, payload?: unknown) => void {
+function pageEvents(panelId: string, blocks: Blocks, contract: AnyContract | undefined): (event: string, payload?: unknown) => void {
     const events = new Map<string, Promise<void>>();
     const registerEvent = (id: string, event: string): Promise<void> => {
         let registered = events.get(id);
@@ -332,11 +301,6 @@ function pageEvents(panelId: string, blocks: Blocks, legacyActions: boolean, con
         void registerEvent(id, event)
             .then(() => blocks.fire(id, payload === undefined ? {} : { payload }))
             .catch((err) => problemsApi.report(panelId, { key: `paperapi:emit:${event}`, title: "The panel's page missed an update", message: `${event}: ${errorMessage(err)}` }));
-        // TRANSITIONAL (Actions removal): a page still listening with actionsApi.on hears it too
-        if (legacyActions) {
-            // quiet: TRANSITIONAL (Actions removal): the deprecated Actions page is the only one listening
-            actionsApi.emit(event, payload, panelId).catch((err) => console.error(`[Service:${panelId}] Failed to emit event '${event}':`, err));
-        }
     };
 }
 
@@ -458,30 +422,6 @@ function registerWidgetChoices(blocks: Blocks, options: AnyOptions, ctx: Service
     })];
 }
 
-// DEPRECATED: untyped calls without a contract, kept only while Game Server
-// and Agents move onto contracts
-function registerCalls(panelId: string, blocks: Blocks, calls: Record<string, ServiceCall<any>> | undefined, ctx: ServiceContext<any>, contract?: AnyContract): Promise<void>[] {
-    if (!calls) return [];
-    const seen = new Map<string, string>(Object.keys(contract?.calls ?? {}).map((name) => [callBlockId(name), name]));
-    const commands = Object.entries(calls).map(([name, call]) => {
-        const id = callBlockId(name);
-        const clash = seen.get(id);
-        if (clash !== undefined) throw new Error(`[Service:${panelId}] the calls "${clash}" and "${name}" share the name ${id}`);
-        seen.set(id, name);
-        return {
-            id,
-            name,
-            internal: true,
-            inputs: { input: { type: "any", name: "Input", optional: true } },
-            output: "any",
-            outputName: "Result",
-            // nothing given back reads as null, so the page always hears an answer
-            run: async ({ input }: { input?: unknown }) => (await call(ctx, input)) ?? null,
-        };
-    });
-    return [blocks.register({ commands })];
-}
-
 // each call of the contract, its input checked before its handler runs and
 // its answer before it leaves
 function registerContractCalls(contract: AnyContract, blocks: Blocks, options: AnyOptions, ctx: ServiceContext<any, any>): Promise<void>[] {
@@ -518,29 +458,6 @@ function registerContractCalls(contract: AnyContract, blocks: Blocks, options: A
         };
     });
     return [blocks.register({ commands })];
-}
-
-// TRANSITIONAL (Actions removal): a service still declaring v1 actions
-// registers them as before. Deleted with actionsApi once Agents moved.
-function registerLegacyActions(panelId: string, options: AnyOptions, ctx: ServiceContext<any>): Promise<void>[] {
-    if (options.types) for (const typeDef of options.types) defineType(typeDef);
-    if (Array.isArray(options.actions)) {
-        return options.actions.map((def) => {
-            const category = typeof def.category === "string" ? options.categories?.find((c) => c.name === def.category) ?? def.category : def.category;
-            return actionsApi.register({
-                ...def,
-                category,
-                run: def.run ? (_c: unknown, inputs: unknown) => def.run!(ctx, inputs) : undefined,
-                listen: def.listen ? (_c: unknown, emitFn: (output: unknown) => void) => def.listen!(ctx, emitFn) : undefined,
-            }, undefined, panelId);
-        });
-    }
-    if (options.actions) {
-        const fns: Record<string, (...args: unknown[]) => unknown> = {};
-        for (const [name, fn] of Object.entries(options.actions)) fns[name] = (...args: unknown[]) => fn(ctx, ...args);
-        return [actionsApi.registerMultiple(fns, panelId)];
-    }
-    return [];
 }
 
 // A spawned service hears the daemon over its process channel: requests it

@@ -122,8 +122,7 @@ const computerId = grantedComputerId();`}
                 <li>A dropped socket reconnects with a backoff from 400 milliseconds up to 5 seconds. Registered blocks, event subscriptions and process and terminal attachments are restored after it reconnects.</li>
                 <li>When the tunnel to a paired computer closes, the transport reports itself disconnected with the reason and reopens the tunnel the same way, restoring the same subscriptions and attachments through it. A failed attempt is logged to the console.</li>
                 <li>Every frame carries the credential and the protocol version, exported as <PaperCode>PROTOCOL_VERSION</PaperCode> (2).</li>
-                <li>Every answer and every event is checked against the protocol before the SDK hands it on. Fields it doesn't read pass, so a daemon of another release on the same protocol works. An answer without what the SDK reads rejects with <PaperCode>{"Paperboard Server's answer to <method> doesn't fit: <why>"}</PaperCode>. An event that doesn't fit is logged to the console and not delivered, and so is any other frame the protocol doesn't know.</li>
-                <li>The protocol is exported from <PaperCode>@mileniumhq/paperapi/protocol</PaperCode>: each method's params and answer (<PaperCode>RPC</PaperCode>, <PaperCode>readParams</PaperCode>, <PaperCode>readResult</PaperCode>) and each event's payload (<PaperCode>EVENTS</PaperCode>, <PaperCode>readEvent</PaperCode>). A panel doesn't need it: the SDK's APIs speak it. Paperboard's daemon, app and CLI read the wire through it too.</li>
+                <li>The protocol is exported from <PaperCode>@mileniumhq/paperapi/protocol</PaperCode>: each method's params and answer types (<PaperCode>RPC</PaperCode>, <PaperCode>readParams</PaperCode>) and each event's payload type (<PaperCode>RpcEventPayloads</PaperCode>). The daemon checks incoming params through <PaperCode>readParams</PaperCode>; a panel doesn't need the protocol directly because the SDK's APIs speak it.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>
@@ -143,7 +142,7 @@ const computerId = grantedComputerId();`}
                     <tr><td><PaperCode>BAD_PROTOCOL</PaperCode></td><td>The SDK and the daemon speak different protocol versions.</td></tr>
                     <tr><td><PaperCode>NOT_FOUND</PaperCode></td><td>The method or thing named does not exist, such as <PaperCode>Unknown action: system:nope</PaperCode> or an unclaimed port.</td></tr>
                     <tr><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An argument breaks a rule: a bad name, a value over a limit, a bad path. The message names the field and ends with the method, such as <PaperCode>Parameter "id" exceeds 128 characters (in term:create)</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as naming another panel or calling a host-only method.</td></tr>
+                    <tr><td><PaperCode>FORBIDDEN</PaperCode></td><td>The credential may not do this, such as calling a host-only method.</td></tr>
                     <tr><td><PaperCode>CONFLICT</PaperCode></td><td>The state does not allow it now: a port is taken, no backup location is chosen, a block is already registered by another connection.</td></tr>
                     <tr><td><PaperCode>INTERNAL</PaperCode></td><td>Anything else the daemon reports, including refused file paths.</td></tr>
                 </tbody>
@@ -152,13 +151,12 @@ const computerId = grantedComputerId();`}
                 Errors raised by the SDK itself before a call is sent, such as an invalid panel id or a timeout, carry no <PaperCode>code</PaperCode>.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { configApi } from "@mileniumhq/paperapi";
+{`import { portApi } from "@mileniumhq/paperapi";
 
 try {
-    await configApi.get("dev.paperboard.terminal");
+    await portApi.claim("dev.example.weather", { name: "web", label: "Weather", protocol: "tcp", preferred: 8080 });
 } catch (err) {
-    // FORBIDDEN: Cross-panel access refused: credential is scoped to
-    // dev.example.weather; access is limited to dev.example.weather
+    // CONFLICT: Weather can't use port 8080: Minecraft has it.
     console.error((err as { code?: string }).code, (err as Error).message);
     throw err;
 }`}

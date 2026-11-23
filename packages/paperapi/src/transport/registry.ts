@@ -1,7 +1,6 @@
 export interface RegisteredAction {
     panelId: string;
     action: string;
-    // sent to the daemon as given: an Actions or a Blocks schema
     schema?: unknown;
 }
 
@@ -16,21 +15,12 @@ export interface RegisteredProject {
 /** A registered handler: called with the args a call carries, which it reads itself. */
 export type ActionHandler = (...args: unknown[]) => unknown;
 
-/**
- * Which daemon registry this mirrors: "actions" (v1, actions:* RPCs, entries
- * named by "action") or "blocks" (v2, blocks:* RPCs, entries named by
- * "entry"). Both replay the same way after a reconnect.
- */
-export type RegistryPrefix = "actions" | "blocks";
-
 export class TransportRegistry {
-    constructor(private readonly prefix: RegistryPrefix = "actions") {}
-
-    // handlers keyed by "panelId:action": every name is owned by its panel,
-    // so two panels may register the same action name without colliding
+    // handlers keyed by "panelId:entry": every name is owned by its panel,
+    // so two panels may register the same name without colliding
     public readonly actionHandlers = new Map<string, ActionHandler>();
     public readonly registeredActions = new Map<string, RegisteredAction>();
-    // projects keyed "panelId:projectId"; replayed before the actions in them
+    // projects keyed "panelId:projectId"; replayed before the blocks in them
     public readonly registeredProjects = new Map<string, RegisteredProject>();
 
     public getHandler(action: string): ActionHandler | undefined {
@@ -46,18 +36,6 @@ export class TransportRegistry {
         });
     }
 
-    public addActions(panelId: string, actionsMap: Record<string, ActionHandler>): string[] {
-        const names = Object.keys(actionsMap);
-        for (const name of names) {
-            this.actionHandlers.set(`${panelId}:${name}`, actionsMap[name]);
-            this.registeredActions.set(`${panelId}:${name}`, {
-                panelId,
-                action: name,
-            });
-        }
-        return names;
-    }
-
     public removeAction(panelId: string, actionName: string): void {
         this.actionHandlers.delete(`${panelId}:${actionName}`);
         this.registeredActions.delete(`${panelId}:${actionName}`);
@@ -67,7 +45,7 @@ export class TransportRegistry {
         this.registeredProjects.set(`${project.panelId}:${project.id}`, project);
     }
 
-    /** Forgets a project and every action registered into it. */
+    /** Forgets a project and every block registered into it. */
     public removeProject(panelId: string, projectId: string): void {
         this.registeredProjects.delete(`${panelId}:${projectId}`);
         const prefix = `${panelId}:${projectId}/`;
@@ -79,24 +57,23 @@ export class TransportRegistry {
     }
 
     // replay registrations after reconnect: projects first, since the daemon
-    // refuses an action into a project it doesn't know
+    // refuses a block into a project it doesn't know
     public async resubscribe(
         call: (action: string, params: Record<string, unknown>) => Promise<unknown>,
         onError: (label: string, err: unknown) => void,
     ): Promise<void> {
         await Promise.all(
             [...this.registeredProjects.entries()].map(([key, p]) =>
-                call(`${this.prefix}:project-define`, { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon, image: p.image })
-                    .catch((err) => onError(`${this.prefix}:project-define resubscribe ${key}`, err)),
+                call("blocks:project-define", { panelId: p.panelId, project: p.id, name: p.name, icon: p.icon, image: p.image })
+                    .catch((err) => onError(`blocks:project-define resubscribe ${key}`, err)),
             ),
         );
         for (const [key, entry] of this.registeredActions.entries()) {
-            call(`${this.prefix}:register`, {
+            call("blocks:register", {
                 panelId: entry.panelId,
-                [this.prefix === "actions" ? "action" : "entry"]: entry.action,
+                entry: entry.action,
                 schema: entry.schema,
-            }).catch((err) => onError(`${this.prefix}:register resubscribe ${key}`, err));
+            }).catch((err) => onError(`blocks:register resubscribe ${key}`, err));
         }
-
     }
 }

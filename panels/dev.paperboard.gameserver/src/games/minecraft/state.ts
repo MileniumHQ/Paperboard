@@ -15,11 +15,9 @@ export function minecraftState() {
         saving: { waiters: new Set<Waiter>(), pausing: false },
         /** the panel's own queries a console command asked the answer of (observe) */
         asked: [] as { kind: QueryKind; at: number }[],
-        /** joins, names and the stat and position replies waited for (players) */
+        /** stat and position replies waited for (players) */
         players: {
-            lastJoinAt: new Map<string, number>(),
             pendingStats: [] as PendingStatQuery[],
-            recentNames: [] as string[],
             pendingPositionQueries: [] as PendingPositionQuery[],
         },
         /** names looked up from Mojang, and one player list edit at a time (playerLists) */

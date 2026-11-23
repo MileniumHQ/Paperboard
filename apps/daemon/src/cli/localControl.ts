@@ -9,7 +9,7 @@ import * as fs from "fs";
 import { WebSocket } from "ws";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, craneHandshakePath, verifyDaemonProof } from "../security/handshake";
 import { PROTOCOL_VERSION } from "../core/protocol";
-import { readResult, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
+import type { RpcAction, RpcParams, RpcResult } from "@mileniumhq/paperapi/protocol";
 import { getPaperboardDir } from "../core/paths";
 import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "../core/util";
@@ -135,13 +135,7 @@ export async function connectLocalDaemon(): Promise<LocalDaemon> {
             reject(new Error(`The daemon did not answer ${action} within ${RPC_TIMEOUT_MS / 1000} seconds.`));
         }, RPC_TIMEOUT_MS);
         pending.set(id, {
-            resolve: (value) => {
-                try {
-                    resolve(readResult(action, value));
-                } catch (err) {
-                    reject(err);
-                }
-            },
+            resolve: (value) => resolve(value as RpcResult<A>),
             reject,
             timer,
         });

@@ -25,19 +25,31 @@ is closed: a server, a bot, a schedule. Name its built file in the manifest's
 `service` field and call `definePanelService` once at its top level.
 
 ```ts
-import { blocksApi, definePanelService } from "@mileniumhq/paperapi";
+import { blocksApi, defineContract, definePanelService, shape } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.example.counter";
 
-definePanelService({
-    id: PANEL_ID,
-    state: { count: 0 },
-    // what the panel's own page asks: bridge.calls.increment({ by: 2 })
+export const counterContract = defineContract(PANEL_ID, {
     calls: {
-        increment: (ctx, input?: { by?: number }) => {
-            const count = ctx.state.count + (input?.by ?? 1);
+        increment: { input: shape.object({ by: shape.optional(shape.number()) }), output: shape.number() },
+    },
+    events: {
+        countChanged: shape.object({ count: shape.number() }),
+    },
+    state: {
+        shape: shape.object({ count: shape.number() }),
+        initial: { count: 0 },
+    },
+});
+
+definePanelService({
+    contract: counterContract,
+    // what the panel's own page asks: client.calls.increment({ by: 2 })
+    calls: {
+        increment: ({ by }, ctx) => {
+            const count = ctx.state.count + (by ?? 1);
             ctx.setState({ count });
-            ctx.emit("count-changed", { count });
+            ctx.emit("countChanged", { count });
             return count;
         },
     },
@@ -55,22 +67,23 @@ definePanelService({
 });
 ```
 
-State set with `ctx.setState` reaches the panel's page through the bridge.
+State set with `ctx.setState` reaches the panel's page through the contract client.
 
 ## Quickstart: panel page
 
 The host injects the page's credential when it serves the panel, so a page
-connects on its own. The bridge keeps a copy of the service's state, calls it
-and hears what it emits:
+connects on its own. `serviceClient` keeps a copy of the service's state, calls
+it and hears what it emits:
 
 ```ts
-import { createPanelBridge, configApi, getPanelId, requirePanelId } from "@mileniumhq/paperapi";
+import { serviceClient, configApi, getPanelId, requirePanelId } from "@mileniumhq/paperapi";
+import { counterContract } from "./contract";
 
-const bridge = createPanelBridge<{ count: number }>({ defaultState: { count: 0 } });
-const stop = bridge.onStateChange((_patch, full) => render(full));
+const client = serviceClient(counterContract);
+const stop = client.state.subscribe((full) => render(full));
 
-await bridge.calls.increment({ by: 2 }); // same as bridge.call("increment", { by: 2 })
-const off = bridge.on("count-changed", (payload) => console.log(payload));
+await client.calls.increment({ by: 2 });
+const off = client.events.countChanged((payload) => console.log(payload));
 
 // config names its panel every time
 const panelId = requirePanelId(getPanelId());
@@ -79,7 +92,7 @@ await configApi.set({ theme: "dark" }, panelId);
 // when the component unmounts
 stop();
 off();
-bridge.dispose();
+client.state.dispose();
 ```
 
 ## Credentials
@@ -155,7 +168,7 @@ are shown, and every other argument by its shape (`‹14 chars›`, `[3]`,
 | Call family | Timeout |
 | --- | --- |
 | most calls (`terminalApi`, `fileApi`, `configApi`, `secretsApi`, `systemApi`, `packageApi`, `panelsApi.list`) | 30 s |
-| `blocksApi.run`/`read`, `serviceApi.call` | 30 s by default; `options.timeoutMs` sets it, up to 60 s, or `null` waits for work that runs long. `bridge.call` uses the default |
+| `blocksApi.run`/`read`, `serviceClient` calls | 30 s by default; `timeoutMs` sets it, up to 60 s, or `null` waits for work that runs long |
 | panel install and uninstall, backup and restore | none: the daemon may take longer than 30 s |
 | `fileApi.download`, `packageApi.download` | none (progress events streamed) |
 | registry index fetch | 10 s, with a 1 MB size cap |

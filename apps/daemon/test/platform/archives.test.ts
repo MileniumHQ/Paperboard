@@ -31,8 +31,14 @@ const hostile: Record<string, TarMember[]> = {
 	"a directory link resolved before ..": [
 		{ name: "s", type: "symlink", target: "." },
 		{ name: "t", type: "symlink", target: "s/.." },
+		{ name: "t/planted", content: "x" },
 	],
-	"a link loop": [
+	"a link reached by another case": [
+		{ name: "S", type: "symlink", target: "." },
+		{ name: "s/x", type: "symlink", target: ".." },
+		{ name: "s/X/planted", content: "x" },
+	],
+	"a link through a link": [
 		{ name: "a", type: "symlink", target: "b" },
 		{ name: "b", type: "symlink", target: "a" },
 		{ name: "c", type: "symlink", target: "a/x" },
@@ -42,7 +48,7 @@ const hostile: Record<string, TarMember[]> = {
 		{ name: "l", type: "symlink", target: "sub" },
 		{ name: "l/f.txt", content: "x" },
 	],
-	"a hardlink outside the tree": [{ name: "h", type: "hardlink", target: "../../etc/passwd" }],
+	"a hardlink outside the tree":[{ name: "h", type: "hardlink", target: "../../etc/passwd" }],
 	"a fifo": [{ name: "pipe", type: "fifo" }],
 	"a character device": [{ name: "dev", type: "chardev" }],
 	"a member too deep for node-tar": [{ name: `${Array.from({ length: 1100 }, () => "d").join("/")}/f.txt`, content: "x" }],
@@ -110,7 +116,7 @@ describe("archives cannot write outside their destination", () => {
 				{ name: "pkg/sub/data", content: "x" },
 				{ name: "pkg/sub/tool", type: "symlink", target: "../../pkg/sub/data" },
 			]));
-			await expect(applyPackageRecipe(file, dest, { unpack: "tar", take: { "bin/tool": "pkg/sub/tool" } })).rejects.toThrow();
+			await expect(applyPackageRecipe(file, dest, { unpack: "tar", take: { "bin/tool": "pkg/sub/tool" } })).rejects.toThrow("escapes");
 			expect(fs.readdirSync(parent)).toEqual(["dest"]);
 		});
 	}

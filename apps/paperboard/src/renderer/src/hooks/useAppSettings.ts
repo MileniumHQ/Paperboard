@@ -12,7 +12,7 @@ const APPLY_FAILED = "Couldn't apply Run on startup";
 // before notifying main. Settings that didn't load are said as a toast when
 // they fail, and stand in App Settings, with Try again, until a load works; a
 // save or an apply that fails is a toast.
-export function useAppSettings() {
+export function useAppSettings(systemMotion: () => boolean = () => false) {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
     // why the stored settings couldn't be read: the defaults show, and nothing saves
@@ -29,7 +29,7 @@ export function useAppSettings() {
     });
 
     // Mirrors the motion preference onto the document for PaperUI tokens
-    createEffect(on(() => look().disableAnimations, (reduced) => {
+    createEffect(on(() => !systemMotion() && look().disableAnimations, (reduced) => {
         if (typeof document === "undefined") return;
         if (reduced) document.documentElement.setAttribute("data-paperui-motion", "reduced");
         else document.documentElement.removeAttribute("data-paperui-motion");

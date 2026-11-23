@@ -3,6 +3,10 @@
     height: 100%;
     min-height: 0;
     overflow-y: auto;
+    padding-top: var(--paper-uigap-half);
+    /* Settings rests a little above the home indicator, not on it */
+    padding-bottom: calc(var(--paper-uigap) + var(--paper-safe-area-bottom));
+    padding-left: var(--paper-uigap-half);
 }
 
 /* a short rule between the rail's groups, narrower than the rail's items */

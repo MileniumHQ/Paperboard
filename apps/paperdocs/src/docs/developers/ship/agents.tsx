@@ -116,7 +116,7 @@ export default function AgentsGuideDoc() {
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>bun run build</PaperCode></td><td>The page, widgets and service compile, with no type errors.</td></tr>
-                    <tr><td><PaperCode>bun test</PaperCode></td><td>The panel's rules hold, and no page has an inline style or a modal in the wrong place.</td></tr>
+                    <tr><td><PaperCode>bun test</PaperCode></td><td>The panel's unit tests pass.</td></tr>
                     <tr><td><PaperCode>bunx paperapi doctor</PaperCode></td><td>The manifest is valid, the build is complete, the panel is linked, and its service answers. Each failed line says what to run next.</td></tr>
                     <tr><td><PaperCode>bunx paperapi call &lt;panel-id&gt;</PaperCode></td><td>Lists the panel's blocks. With a block's entry and JSON inputs, or a service call's name and JSON input, runs it and prints the result or the error.</td></tr>
                     <tr><td><PaperCode>bunx paperapi monitor --panel &lt;panel-id&gt; --json</PaperCode></td><td>Every call, event and service change of the panel, one JSON object per line.</td></tr>

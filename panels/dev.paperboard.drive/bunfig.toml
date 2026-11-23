@@ -1,0 +1,6 @@
+# Hermetic tests: test/hermetic.ts gives the whole test process a throwaway
+# PAPERBOARD_DIR and replaces the WebSocket constructor, so no suite can reach
+# a live daemon or your real Paperboard data. See test/hermetic.ts for why
+# this matters.
+[test]
+preload = ["./test/hermetic.ts"]

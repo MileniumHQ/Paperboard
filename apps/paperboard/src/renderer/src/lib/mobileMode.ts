@@ -1,8 +1,8 @@
-// Mobile mode as the shell knows it: from the launch options, once they are
-// read. The shell's own document carries it as PaperUI's data-paper-mobile
-// (so its CSS and paperMobile() agree with every panel), and each panel and
-// widget frame is told, when it is challenged and whenever it changes. Null
-// until it is known.
+// Mobile mode as the shell knows it: the host's to say (App's `mobileMode`),
+// set before App draws anything. The shell's own document carries it as
+// PaperUI's data-paper-mobile (so its CSS and paperMobile() agree with every
+// panel), and each panel and widget frame is told, when it is challenged and
+// whenever it changes. Null only before App starts.
 import { createSignal } from "solid-js";
 import { setPaperMobile } from "@mileniumhq/paperui";
 
@@ -18,9 +18,9 @@ export function setMobileMode(on: boolean): void {
     setPaperMobile(on);
 }
 
-/** mobile mode for a frame being told; throws before the launch options are read */
+/** mobile mode for a frame being told; throws if App hasn't set it */
 export function requireMobileMode(): boolean {
     const on = mobileMode();
-    if (on === null) throw new Error("A panel frame was told about mobile mode before the launch options were read");
+    if (on === null) throw new Error("A panel frame was told about mobile mode before App set it");
     return on;
 }

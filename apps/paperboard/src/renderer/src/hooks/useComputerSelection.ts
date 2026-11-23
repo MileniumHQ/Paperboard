@@ -1,6 +1,7 @@
 import { createEffect, createSignal, on } from "solid-js";
 import { computersApi, logToMain } from "../lib/shell";
 import { START_ON_HOME } from "../lib/startOn";
+import { computerAfterRemoval } from "../lib/hostComputers";
 import type { AppSettingsData } from "../lib/appSettings";
 import type { useComputers } from "./useComputers";
 import type { usePanels } from "./usePanels";
@@ -105,8 +106,12 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         if (untold !== null) return untold;
         forgetPanels(compId);
         await refreshComputers();
-        // forgetting another computer leaves you where you are
-        if (activeComputerId() === compId) await selectComputer("local");
+        // forgetting another computer leaves you where you are; with none
+        // left, the host's empty state shows (AppProps.noComputers)
+        if (activeComputerId() === compId) {
+            const next = computerAfterRemoval(computers());
+            if (next) await selectComputer(next.id);
+        }
         // Paperboard can't open on a computer it forgot
         if (options.appSettings().startOn === compId) {
             await options.onAppSettingsChange({ ...options.appSettings(), startOn: START_ON_HOME });

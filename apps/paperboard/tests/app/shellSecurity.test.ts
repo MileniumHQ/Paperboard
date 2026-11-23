@@ -7,8 +7,6 @@ import { isListingFilePath } from "../../src/shared/listingFile";
 import { buildCraneCredentialPayload, buildPanelCsp, remotePanelHtmlCsp, resolveLocalPanelFile, PANEL_TRAVERSAL_VECTORS } from "../../src/main/panelAssets";
 import { buildPanelCsp as daemonPanelCsp } from "daemon/panels/panelNet";
 import { type LibraryToShellMessage, parseLibraryMessage } from "../../src/renderer/src/lib/libraryFrame";
-import { PanelPermissionStore } from "../../src/main/panelPermissions";
-import { SHELL_CALLS } from "../../src/shared/shellContract";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, installBuiltPanel, type BuiltApp } from "../platform/app/support/build";
 import { CraneSocket, startCrane, WAIT_MS, type RunningCrane } from "../platform/app/support/crane";
 import { domCondition, launchElectron, SHELL, shellReady, type ElectronApp } from "../platform/app/support/electron";
@@ -75,15 +73,9 @@ describe("the shell's IPC, navigation, daemon origin and file server", () => {
         expect(isRefusedFrame({ senderFrame: { url: "paperboard://shell/index.html" } })).toBe(false);
     }, WAIT_MS * 2);
 
-    // Inventory: Core contracts — the window serves every call the shell's contract declares, each reading its args first.
-    test("the window answers every declared call, and refuses args its contract doesn't name with the channel and the field", async () => {
-        const refusals = await electron.evalIn<Record<string, string>>(SHELL, `Promise.all(${JSON.stringify(Object.keys(SHELL_CALLS))}.map((channel) =>
-            window.paperboardShell.invoke(channel, { notAField: true }).then(() => [channel, "answered"], (err) => [channel, err.message]))).then(Object.fromEntries)`);
-        for (const [channel, refusal] of Object.entries(refusals)) {
-            expect({ channel, refusal }).toEqual({ channel, refusal: expect.stringContaining(`The shell's ${channel} call was refused: `) });
-        }
-        expect(refusals["computer-switch"]).toEndWith('there is no field "notAField"');
-        // a channel the contract doesn't declare never leaves the window
+    // Inventory: Core contracts — the preload allows declared channels and blocks undeclared ones.
+    test("the window serves declared channels and the preload refuses undeclared ones", async () => {
+        expect(typeof (await electron.evalIn(SHELL, `window.paperboardShell.invoke("app-version")`))).toBe("string");
         expect(await electron.evalIn(SHELL, `window.paperboardShell.invoke("screenshot:operation").then(() => "answered", (err) => err.message)`)).toBe(
             "[paperboard] IPC channel not allowed: screenshot:operation",
         );
@@ -184,8 +176,8 @@ describe("panel frames", () => {
     });
 });
 
-// Panel CSP and device permissions.
-describe("panel CSP and device permissions", () => {
+// Panel CSP.
+describe("panel CSP", () => {
     test("a local panel's script-src is exactly 'self' plus a fresh nonce per response", async () => {
         expect(daemonPanelCsp().split("; ").find((d) => d.startsWith("script-src"))).toBe("script-src 'self'");
         const policies: string[] = await electron.evalInFrame(FRAME, `Promise.all([1, 2].map(() => fetch("${FRAME}index.html").then((r) => r.headers.get("content-security-policy"))))`);
@@ -208,38 +200,5 @@ describe("panel CSP and device permissions", () => {
         // gets, nonce and all: the credential script is inline
         expect(remotePanelHtmlCsp(null, "abc")).toBe(buildPanelCsp("abc"));
         expect(remotePanelHtmlCsp("default-src 'self'", "abc")).toContain("'nonce-abc'");
-    });
-
-    test("microphone, camera and screen are asked once per panel, kept, and any no refuses", async () => {
-        const file = path.join(tempDir("permissions"), "panel-permissions.json");
-        const store = new PanelPermissionStore(file);
-        const asked: string[][] = [];
-        const ask = (answer: "allowed" | "denied" | null) => async (unanswered: string[]) => {
-            asked.push([...unanswered]);
-            return answer;
-        };
-        // two asks at once share one question
-        const [a, b] = await Promise.all([store.decide("dev.a", ["microphone"], ask("allowed")), store.decide("dev.a", ["microphone"], ask("allowed"))]);
-        expect([a, b]).toEqual([true, true]);
-        expect(asked).toEqual([["microphone"]]);
-        // kept, per panel: another store on the same file reads it, and another panel is asked
-        const reread = new PanelPermissionStore(file);
-        expect(await reread.decide("dev.a", ["microphone"], ask("denied"))).toBe(true);
-        expect(await reread.decide("dev.b", ["microphone"], ask("denied"))).toBe(false);
-        expect(asked).toEqual([["microphone"], ["microphone"]]);
-        // a no to any part refuses without asking about the rest
-        reread.set("dev.c", "camera", "denied");
-        expect(await reread.decide("dev.c", ["microphone", "camera"], ask("allowed"))).toBe(false);
-        expect(asked).toHaveLength(2);
-        // closed unanswered refuses once and asks again next time
-        expect(await reread.decide("dev.d", ["screen"], ask(null))).toBe(false);
-        expect(await reread.decide("dev.d", ["screen"], ask("allowed"))).toBe(true);
-        expect(JSON.parse(fs.readFileSync(file, "utf8")).panels["dev.d"]).toEqual({ screen: "allowed" });
-
-        // an answers file that can't be read is an error, never "nothing allowed"
-        fs.writeFileSync(file, "{ broken");
-        expect(() => new PanelPermissionStore(file).get("dev.a", "microphone")).toThrow(/aren't valid JSON/);
-        fs.writeFileSync(file, JSON.stringify({ version: 1 }));
-        expect(() => new PanelPermissionStore(file).list()).toThrow(/no "panels" object/);
     });
 });

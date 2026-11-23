@@ -1,8 +1,6 @@
-// The Blocks registry (Actions API v2, PaperAPI's blocksApi): panels
-// register types, commands, values and events here, each one entry named
-// "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls
-// them. It is the Actions registry's machinery as a separate registry, so
-// v1 actions and v2 blocks never see each other's names.
+// The Blocks registry (PaperAPI's blocksApi): panels register types,
+// commands, values and events here, each one entry named "kind.id"
+// (or "project/kind.id"), and the Blocks panel lists and calls them.
 import { blocksRegistry } from "../server/actions";
 import { ErrorCode } from "../core/protocol";
 import type { RpcContext } from "./context";
@@ -13,10 +11,8 @@ import { rpcErrorCode } from "./errors";
 import { resourcePanelId } from "../security/principal";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
-// The namespace a socket writes to is the token claim: a scoped caller
-// naming another panel is refused. Host callers keep the explicit parameter.
-export function ownNamespace(panelId: string, action: string, ctx: RpcContext): string {
-    return resourcePanelId(ctx.callerPanelId(), panelId, action)!;
+export function ownNamespace(panelId: string, ctx: RpcContext): string {
+    return resourcePanelId(ctx.callerPanelId(), panelId)!;
 }
 
 /** A registry refusal: the namespace belongs to another socket. */
@@ -37,26 +33,26 @@ const conflict = (what: string, panelId: string) =>
     `Registry namespace is owned by another socket: ${what} for panel "${panelId}" conflicts`;
 
 export const blocksRpc = rpcModule({
-    "blocks:register": ({ panelId, entry, schema }, ctx, action) => {
-        const owner = ownNamespace(panelId, action, ctx);
+    "blocks:register": ({ panelId, entry, schema }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
         ownedElsewhere(blocksRegistry.register(owner, entry, ctx.ws, schema), conflict(`block "${entry}"`, owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "block:registered", panelId: owner, entry });
         return { success: true };
     },
-    "blocks:unregister": ({ panelId, entry }, ctx, action) => {
-        const owner = ownNamespace(panelId, action, ctx);
+    "blocks:unregister": ({ panelId, entry }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
         ownedElsewhere(blocksRegistry.unregister(owner, entry, ctx.ws), conflict(`block "${entry}"`, owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "block:unregistered", panelId: owner, entry });
         return { success: true };
     },
-    "blocks:project-define": ({ panelId, project, name, icon, image }, ctx, action) => {
-        const owner = ownNamespace(panelId, action, ctx);
+    "blocks:project-define": ({ panelId, project, name, icon, image }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
         ownedElsewhere(blocksRegistry.defineProject(owner, { id: project, name, icon, image }, ctx.ws), conflict(`project "${project}"`, owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "project:defined", panelId: owner, project });
         return { success: true };
     },
-    "blocks:project-remove": ({ panelId, project }, ctx, action) => {
-        const owner = ownNamespace(panelId, action, ctx);
+    "blocks:project-remove": ({ panelId, project }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
         ownedElsewhere(blocksRegistry.removeProject(owner, project, ctx.ws), conflict(`project "${project}"`, owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "project:removed", panelId: owner, project });
         return { success: true };
@@ -74,8 +70,8 @@ export const blocksRpc = rpcModule({
         answeredAs(() => blocksRegistry.call(panelId, entry, [request ?? null], ctx.ws, timeoutMs === undefined ? 30_000 : timeoutMs, ctx.callerPanelId())),
     // an event firing, or a value saying it changed: delivered to whoever
     // subscribed to "blocks:<panel>:<entry>"
-    "blocks:emit": ({ panelId, entry, payload }, ctx, action) => {
-        const owner = ownNamespace(panelId, action, ctx);
+    "blocks:emit": ({ panelId, entry, payload }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
         const kind = entry.slice(entry.indexOf("/") + 1).split(".")[0];
         if (kind !== "event" && kind !== "value") {
             throw new InvalidParamsError(`Only events fire and only values change; "${entry}" is neither`);

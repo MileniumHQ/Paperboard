@@ -117,7 +117,7 @@ interface GpuInfo {
                 <li>Other devices on the same network reach the computer at that address. Devices outside it need the router's public address and a forwarded port.</li>
                 <li>Each layer of the identity is there only when the daemon detected it. A rolling distribution such as Arch has no release version, so it has no <PaperCode>osVersion</PaperCode>.</li>
                 <li><PaperCode>getGpus</PaperCode> asks the system each time. A probe that fails, such as a missing <PaperCode>nvidia-smi</PaperCode>, adds to <PaperCode>errors</PaperCode> instead of failing the call.</li>
-                <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel, for Paperboard's computer page. A panel's call is refused with <PaperCode>system:usage is host-only</PaperCode> (<PaperCode>FORBIDDEN</PaperCode>).</li>
+                <li><PaperCode>getUsage</PaperCode> reports CPU, memory, disk and network use split by panel.</li>
             </PaperTextList>
 
         </PaperFlex>
