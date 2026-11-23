@@ -394,7 +394,6 @@ export class PaperCraneEngine {
     public attachProcess(id: string, subscriber: object, streams?: ProcessStreams): Promise<boolean> { return this.workloads.attachProcess(id, subscriber, streams); }
     public detachStreams(subscriber: object): void { this.workloads.detachStreams(subscriber); }
     public setClientOwner(id: string, owner: string | null): void { this.workloads.setClientOwner(id, owner); }
-    public clientOwner(id: string): string | null { return this.workloads.clientOwner(id); }
     public holdsUpdates(id: string): boolean { return this.workloads.holdsUpdates(id); }
     public panelWorkloads(panelId: string): string[] { return this.workloads.panelWorkloads(panelId); }
     /** Each live workload's supervisor process and the panel that created it (null: the host). */

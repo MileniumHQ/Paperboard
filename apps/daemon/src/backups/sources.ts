@@ -223,12 +223,7 @@ export class BackupSources {
         const parkedNames: string[] = [];
         const installedNames: string[] = [];
         const stop = async () => {
-            for (const id of source.processes) {
-                const owner = this.engine.clientOwner(id);
-                if (owner !== null && owner !== source.owner)
-                    throw new Error("A backup source cannot stop another panel's process");
-                await this.engine.killProcess(id);
-            }
+            for (const id of source.processes) await this.engine.killProcess(id);
         };
         let rolledBack = false;
         try {
