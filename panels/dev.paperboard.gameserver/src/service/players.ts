@@ -2,7 +2,7 @@ import { minecraftOf } from "../games/minecraft/state";
 import type { Server } from "./server";
 
 import { writeServerLineBestEffort } from "./serverConsole";
-import { type PlayerStatData, PLAYER_NAME_PATTERN, SERVER_PROC_ID } from "./types";
+import { type PlayerStatData, PLAYER_NAME_PATTERN, SERVER_PROC_ID, appendCapped, MAX_BUFFERED_ENTRIES } from "./types";
 import {
     STAT_QUERIES,
     assertPlayerName,
@@ -38,8 +38,9 @@ export function trackPlayerActivity(
     const joined = extractJoinedName(clean);
     if (joined) {
         const key = normalizePlayerKey(joined);
+        // seenPlayers is history, not presence: capped like every game's
         ctx.setState((prev) => ({
-            seenPlayers: prev.seenPlayers.includes(key) ? prev.seenPlayers : [...prev.seenPlayers, key],
+            seenPlayers: prev.seenPlayers.includes(key) ? prev.seenPlayers : appendCapped(prev.seenPlayers, key),
             onlinePlayers: prev.onlinePlayers.includes(key) ? prev.onlinePlayers : [...prev.onlinePlayers, key],
         }));
         ctx.trigger(TRIGGER_IDS.playerJoined, joined);
@@ -67,7 +68,7 @@ export function trackPlayerActivity(
     if (names) {
         ctx.setState((prev) => ({
             onlinePlayers: names,
-            seenPlayers: [...new Set([...prev.seenPlayers, ...names])],
+            seenPlayers: [...new Set([...prev.seenPlayers, ...names])].slice(-MAX_BUFFERED_ENTRIES),
         }));
     }
 }
