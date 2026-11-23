@@ -5,6 +5,8 @@ export interface RemoteEntry {
     id: string;
     name?: string;
     host: string;
+    /** the IP it last answered at, dialed alongside a .local host */
+    address?: string;
     port: number;
     token?: string;
     // the remote daemon's certificate, pinned when it was paired
