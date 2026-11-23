@@ -97,11 +97,13 @@ async function resolveStatsDir(ctx: Server, level: string): Promise<string | nul
     return null;
 }
 
+/** Every stats file in the world; `known` is the server's name book when the caller has read it already. */
 export async function listPlayerStats(
     ctx: Server,
+    known?: Map<string, string>,
 ): Promise<PlayerStatSummary[]> {
     const level = await resolveLevelName(ctx);
-    const names = await resolvePlayerIdentities(ctx);
+    const names = known ?? (await resolvePlayerIdentities(ctx));
 
     const statsDir = await resolveStatsDir(ctx, level);
     if (!statsDir) return [];

@@ -47,11 +47,17 @@ export interface ListedPlayer {
 
 /** one row of the Players tab */
 export interface RosterEntry extends Omit<ListedPlayer, "uuid"> {
-    /** the row's identity: the uuid, else the lowercased name of a player whose first session isn't saved yet */
+    /** the row's identity: the uuid, else the lowercased name of a player the server has no uuid for yet */
     key: string;
     uuid: string | null;
     /** the world's stats file for them; null when it has none */
     stats: PlayerStatSummaryData | null;
+}
+
+/** the Players tab: every row, and why the world's stats couldn't be read (null when they could) */
+export interface Roster {
+    players: RosterEntry[];
+    statsError: string | null;
 }
 
 type ListEntry = { uuid?: unknown; name?: unknown } & Record<string, unknown>;
@@ -181,12 +187,12 @@ export function offlinePlayerUuid(name: string): string {
  * the lists keep the name a player had when they were added) and the name
  * Mojang last reported, when one was looked up this hour.
  */
-export async function listListed(ctx: Server): Promise<ListedPlayer[]> {
+export async function listListed(ctx: Server, known?: Map<string, string>): Promise<ListedPlayer[]> {
     const [whitelist, ops, banned, identities] = await Promise.all([
         readList(ctx, LIST_FILES.whitelist),
         readList(ctx, LIST_FILES.op),
         readList(ctx, LIST_FILES.banned),
-        resolvePlayerIdentities(ctx),
+        known ?? resolvePlayerIdentities(ctx),
     ]);
     const roster = new Map<string, ListedPlayer>();
     const add = (entries: ListEntry[], flag: "whitelisted" | "op" | "banned") => {
@@ -225,21 +231,35 @@ export async function listListed(ctx: Server): Promise<ListedPlayer[]> {
  * writing it back), so a player whose data was deleted and who is on no list
  * is gone for good.
  */
-export async function listRoster(ctx: Server): Promise<RosterEntry[]> {
-    const [listed, stats] = await Promise.all([listListed(ctx), listPlayerStats(ctx)]);
+export async function listRoster(ctx: Server): Promise<Roster> {
+    const identities = await resolvePlayerIdentities(ctx);
+    const [listed, stats] = await Promise.all([
+        listListed(ctx, identities),
+        // a stats file the server left half-written takes the stats away, not the lists
+        listPlayerStats(ctx, identities).then(
+            (read) => ({ read, error: null }),
+            (err) => ({ read: [], error: errorMessage(err) }),
+        ),
+    ]);
     const rows = new Map<string, RosterEntry>(listed.map((player) => [player.uuid, { ...player, key: player.uuid, stats: null }]));
-    for (const { uuid, name, ...numbers } of stats) {
+    for (const { uuid, name, ...numbers } of stats.read) {
         const row = rows.get(uuid);
         if (row) row.stats = numbers;
         else rows.set(uuid, { key: uuid, uuid, name, whitelisted: false, op: false, banned: false, banReason: null, stats: numbers });
     }
+    // usercache.json has a player from their first join, so their row keeps
+    // its uuid key when their first session is saved or they're listed
+    const uuidOf = new Map([...identities].map(([uuid, name]) => [name.toLowerCase(), uuid]));
     const named = new Set([...rows.values()].map((row) => row.name.toLowerCase()));
     for (const name of [...ctx.state.onlinePlayers, ...ctx.state.seenPlayers]) {
-        if (named.has(name)) continue;
-        named.add(name);
-        rows.set(name, { key: name, uuid: null, name, whitelisted: false, op: false, banned: false, banReason: null, stats: null });
+        const lower = name.toLowerCase();
+        if (named.has(lower)) continue;
+        named.add(lower);
+        const uuid = uuidOf.get(lower) ?? null;
+        if (uuid && rows.has(uuid)) continue;
+        rows.set(uuid ?? lower, { key: uuid ?? lower, uuid, name, whitelisted: false, op: false, banned: false, banReason: null, stats: null });
     }
-    return [...rows.values()];
+    return { players: [...rows.values()], statsError: stats.error };
 }
 
 /**

@@ -485,18 +485,21 @@ const minecraftCalls = {
     queryOnlinePlayers: { output: done },
     queryPlayerPositions: { output: done },
     listRoster: {
-        output: shape.list(
-            shape.object({
-                key: shape.text(),
-                uuid: shape.nullable(shape.text()),
-                name: shape.text(),
-                whitelisted: shape.boolean(),
-                op: shape.boolean(),
-                banned: shape.boolean(),
-                banReason: shape.nullable(shape.text()),
-                stats: shape.nullable(shape.object(PLAYER_STAT_NUMBERS)),
-            }),
-        ),
+        output: shape.object({
+            players: shape.list(
+                shape.object({
+                    key: shape.text(),
+                    uuid: shape.nullable(shape.text()),
+                    name: shape.text(),
+                    whitelisted: shape.boolean(),
+                    op: shape.boolean(),
+                    banned: shape.boolean(),
+                    banReason: shape.nullable(shape.text()),
+                    stats: shape.nullable(shape.object(PLAYER_STAT_NUMBERS)),
+                }),
+            ),
+            statsError: shape.nullable(shape.text()),
+        }),
     },
     currentPlayerNames: { input: shape.object({ uuids: texts }), output: shape.record(shape.text()) },
     readBedrockNaming: { output: shape.nullable(shape.object({ prefix: shape.text(), replaceSpaces: shape.boolean() })) },

@@ -21,7 +21,7 @@ export function createPlayers() {
     // rows are matched by key across reads, so a player's row and head stay
     // while the rest of the roster updates
     const roster = createRead(() => calls.listRoster(), { key: "key", message: errorMessage });
-    const all = () => roster.value() ?? [];
+    const all = () => roster.value()?.players ?? [];
     createPolling(() => roster.reload(), ROSTER_POLL_MS);
     // someone joining or leaving shows at once, not on the next poll
     createEffect(on(onlinePlayerNames, () => void roster.reload(), { defer: true }));
@@ -47,10 +47,13 @@ export function createPlayers() {
     // the names players have now: the service asks Mojang once per uuid per
     // visit and keeps the answers for an hour, so the roster read after it
     // shows a renamed player by their new name
+    // tracks the roster's uuids, not its rows: the reload a lookup ends in
+    // changes names, which must not ask again
     const asked = new Set<string>();
+    const uuids = createMemo(() => all().flatMap((row) => (row.uuid ? [row.uuid] : [])).join(" "));
     createEffect(
-        on(roster.value, (rows) => {
-            const wanted = (rows ?? []).flatMap((row) => (row.uuid && !asked.has(row.uuid) ? [row.uuid] : []));
+        on(uuids, (list) => {
+            const wanted = list.split(" ").filter((uuid) => uuid && !asked.has(uuid));
             if (wanted.length === 0) return;
             for (const uuid of wanted) asked.add(uuid);
             calls
@@ -86,11 +89,13 @@ export function createPlayers() {
 
     /** a row's flag as it will be stored, adding a player who was on no list */
     const markFlag = (name: string, field: PlayerFlagField, value: boolean) =>
-        roster.set((rows) => {
+        roster.set((read) => {
             const lower = name.toLowerCase();
-            const list = rows ?? [];
-            if (list.some((p) => p.name.toLowerCase() === lower)) return list.map((p) => (p.name.toLowerCase() === lower ? { ...p, [field]: value } : p));
-            return [...list, { key: lower, uuid: null, name, whitelisted: false, op: false, banned: false, banReason: null, stats: null, [field]: value }];
+            const list = read?.players ?? [];
+            const players = list.some((p) => p.name.toLowerCase() === lower)
+                ? list.map((p) => (p.name.toLowerCase() === lower ? { ...p, [field]: value } : p))
+                : [...list, { key: lower, uuid: null, name, whitelisted: false, op: false, banned: false, banReason: null, stats: null, [field]: value }];
+            return { players, statsError: read?.statsError ?? null };
         });
 
     /** ops or whitelists a player, or takes it back; a failure is a toast */
@@ -146,6 +151,8 @@ export function createPlayers() {
         error: roster.error,
         loading: roster.loading,
         reload: roster.reload,
+        /** why the world's stats couldn't be read, while the lists could; null when they could */
+        statsError: () => roster.value()?.statsError ?? null,
         /** why who is online couldn't be asked, until it is asked again */
         onlineError,
         askOnline,

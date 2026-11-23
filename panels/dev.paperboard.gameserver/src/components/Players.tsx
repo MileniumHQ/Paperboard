@@ -102,6 +102,9 @@ export default function Players() {
             <Show when={roster.error()}>
                 {(err) => <PaperError title="Couldn't load the players" error={err()} action={{ label: "Try again", disabled: roster.loading(), onClick: () => void roster.reload() }} />}
             </Show>
+            <Show when={roster.statsError()}>
+                {(err) => <PaperError title="Couldn't read the players' stats" error={err()} action={{ label: "Try again", disabled: roster.loading(), onClick: () => void roster.reload() }} />}
+            </Show>
             <Show when={roster.onlineError()}>
                 {(err) => <PaperError title="Couldn't read who is online" error={err()} action={{ label: "Try again", onClick: () => void roster.askOnline() }} />}
             </Show>
