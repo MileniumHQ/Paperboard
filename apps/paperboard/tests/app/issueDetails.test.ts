@@ -53,6 +53,38 @@ test("scrub replaces what identifies the person, the computer or a network, and 
     expect(scrub("listening on 127.0.0.1:38419", WHO)).toBe("listening on 127.0.0.1:38419");
 });
 
+// Inventory: Security — IPv6 addresses go whatever their form, and a timestamp or a sentence's colon isn't mistaken for one.
+test("scrub replaces compressed, bracketed and zoned IPv6 addresses", () => {
+    const out = scrub(
+        [
+            "peer 2001:db8:85a3::8a2e:370:7334 up",
+            "listening on [2a02:1810:4d02:5c00::1]:45464",
+            "link fe80::1c2b:3cff:fe4d:5e6f%en0 down",
+            "dialing fe80::1: refused",
+            "mapped ::ffff:192.168.1.9 seen",
+            "loopback ::1 and [::1]:3000",
+        ].join("\n"),
+        WHO,
+    );
+    expect(out).toBe(
+        [
+            "peer <ip> up",
+            "listening on [<ip>]:45464",
+            "link <ip> down",
+            "dialing <ip>: refused",
+            "mapped <ip> seen",
+            "loopback ::1 and [::1]:3000",
+        ].join("\n"),
+    );
+    // not addresses
+    expect(scrub("2026-11-23T10:00:01.000Z at 10:00:01 ratio 3:2 Foo::bar", WHO)).toContain("2026-11-23T10:00:01.000Z at 10:00:01 ratio 3:2");
+});
+
+test("scrub replaces the home folder only where it is the folder", () => {
+    const who = { ...WHO, home: "/home/bob", username: "bob" };
+    expect(scrub("/home/bob/notes.txt /home/bobby/notes.txt /home/bob. at /home/bob", who)).toBe("~/notes.txt /home/bobby/notes.txt ~. at ~");
+});
+
 const line = (time: string, level: string, text: string) => `2026-11-23T${time}.000Z [${level}] [paperboard] ${text}`;
 
 test("the log keeps recent warnings and errors with their stacks, then the latest entries", () => {
@@ -84,7 +116,10 @@ test("diagnostics over the service's limit lose their oldest log lines, never th
     const details = buildDetails({ computer: { kind: "paired", os: "Windows", osVersion: "11", connected: false }, pairedCount: 1, panels: { error: "not connected" }, log }, WHO);
     expect(details.length).toBeLessThanOrEqual(MAX_DETAILS_LENGTH);
     expect(details.startsWith("Looking at: a paired computer (Windows 11), not connected\nPaired computers: 1\nPanels: couldn't be read: not connected")).toBe(true);
-    expect(details).toContain("…(older lines cut)");
+    // both sections stay, headers and newest entries included, and say older ones were cut
+    expect(details).toMatch(/Recent warnings and errors \(\d+, oldest first, older cut\):\n.*\n/);
+    expect(details).toMatch(/\n\nLatest log entries \(\d+, older cut\):\n/);
+    expect(details).toContain("199 xxx");
     expect(details.trimEnd().endsWith("x".repeat(100))).toBe(true);
 });
 

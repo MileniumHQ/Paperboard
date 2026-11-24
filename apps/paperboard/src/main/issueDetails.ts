@@ -5,6 +5,7 @@
 // a network, or hold a secret, is replaced before the person even sees it.
 // The person sees exactly this text before sending, and can leave it out.
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { MAX_DETAILS_LENGTH } from "issues/shared";
@@ -46,12 +47,23 @@ const NAMED_SECRET =
 const DISCOVERED = /(Paperboard Server (?:online|offline): )[^(\n]+?( \()/g;
 const MDNS_HOST = /\b[\w-]+\.local\b/gi;
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-const IPV6 = /\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/gi;
+// a run of hex digits, colons and dots holding a colon, checked as an address below: compressed (::) and bracketed forms included, timestamps not
+const IPV6_CANDIDATE = /(?<![\w:.])([0-9a-f:.]*:[0-9a-f:.]*)(?:%[\w.-]+)?/gi;
 const EMAIL = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
 const URL_USERINFO = /(\b[a-z][\w+.-]*:\/\/)[^/\s:@]+(?::[^/\s@]*)?@/gi;
 // terminal colour codes some tools print, which aren't text
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 const OTHER_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+function scrubIPv6(text: string): string {
+    return text.replace(IPV6_CANDIDATE, (token, body: string) => {
+        // trailing colons and dots belong to the sentence ("fe80::1: refused"), not the address
+        const address = net.isIPv6(body) ? body : body.replace(/[:.]+$/, "");
+        if (!net.isIPv6(address) || address === "::1" || address === "::") return token;
+        // a zone ("%en0") goes with the address
+        return `<ip>${body.slice(address.length)}`;
+    });
+}
 
 /** The text with everything that could identify the person or hold a secret replaced by a placeholder. */
 export function scrub(text: string, who: Scrubber): string {
@@ -64,11 +76,13 @@ export function scrub(text: string, who: Scrubber): string {
     // the home folder, as it's written on this system and with the other slash
     if (who.home.length > 1) {
         for (const home of new Set([who.home, who.home.replace(/\\/g, "/"), who.home.replace(/\//g, "\\")])) {
-            out = out.replace(new RegExp(escape(home), "gi"), "~");
+            // only the folder itself: /home/bobby isn't /home/bob's
+            out = out.replace(new RegExp(`${escape(home)}(?=[\\\\/]|$|[^\\w.-]|\\.(?:\\s|$))`, "gi"), "~");
         }
     }
+    // IPv6 first: an address can end in a dotted IPv4
+    out = scrubIPv6(out);
     out = out.replace(IPV4, (ip) => (ip === "127.0.0.1" || ip === "0.0.0.0" ? ip : "<ip>"));
-    out = out.replace(IPV6, "<ip>");
     const names = [...who.computerNames, who.username]
         .flatMap((name) => [name, name.split(".")[0] ?? ""])
         .map((name) => name.trim())
@@ -101,15 +115,18 @@ export function logEntries(text: string): string[] {
     });
 }
 
-/** The recent warnings and errors, then the latest entries of any level. */
-export function logSections(entries: string[]): string {
-    const problems = entries.filter((entry) => PROBLEM.test(entry)).slice(-PROBLEM_ENTRIES);
-    const recent = entries.slice(-RECENT_ENTRIES);
+/** The recent warnings and errors, then the latest entries of any level: the newest of each, in time order. */
+export function logLists(entries: string[]): { problems: string[]; recent: string[] } {
+    return { problems: entries.filter((entry) => PROBLEM.test(entry)).slice(-PROBLEM_ENTRIES), recent: entries.slice(-RECENT_ENTRIES) };
+}
+
+function renderLog({ problems, recent }: { problems: string[]; recent: string[] }, cut: boolean): string {
+    const note = cut ? ", older cut" : "";
     return [
-        `Recent warnings and errors (${problems.length}, oldest first):`,
+        `Recent warnings and errors (${problems.length}, oldest first${note}):`,
         problems.length ? problems.join("\n") : "(none)",
         "",
-        `Latest log entries (${recent.length}):`,
+        `Latest log entries (${recent.length}${note}):`,
         recent.length ? recent.join("\n") : "(none)",
     ].join("\n");
 }
@@ -175,16 +192,21 @@ export function buildDetails(input: DetailsInput, who: Scrubber): string {
         "From this computer's Paperboard log:",
         "",
     ].join("\n");
-    const log = logSections(logEntries(input.log));
-    let details = scrub(`${head}${log}`, who);
-    // over the limit, the oldest log lines go first: the head and the newest lines matter most
-    if (details.length > MAX_DETAILS_LENGTH) {
-        const marker = "\n…(older lines cut)\n";
-        const headLength = scrub(head, who).length;
-        const keep = MAX_DETAILS_LENGTH - headLength - marker.length;
-        details = details.slice(0, headLength) + marker + details.slice(details.length - keep);
+    // each entry is scrubbed whole, so a cut never leaves half a secret
+    const scrubbed = logLists(logEntries(input.log).map((entry) => scrub(entry, who)));
+    const headText = scrub(head, who);
+    const lists = { problems: [...scrubbed.problems], recent: [...scrubbed.recent] };
+    // over the limit, each section loses its oldest entries first, whichever is longer:
+    // the head and the newest lines matter most, and neither section is cut away whole
+    let cut = false;
+    for (;;) {
+        const details = `${headText}${renderLog(lists, cut)}`;
+        if (details.length <= MAX_DETAILS_LENGTH) return details;
+        const longer = lists.problems.join("\n").length >= lists.recent.join("\n").length ? lists.problems : lists.recent;
+        if (!longer.length) throw new Error("The diagnostics are over the issues service's limit even without log lines.");
+        longer.shift();
+        cut = true;
     }
-    return details;
 }
 
 /** This computer's identifying names, for scrub(). */
