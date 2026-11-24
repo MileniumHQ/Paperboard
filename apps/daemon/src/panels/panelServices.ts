@@ -117,6 +117,8 @@ export class PanelServicesManager {
     private failures = new Map<string, string>();
     /** panels whose service may not start while this daemon runs, and why */
     private readonly heldBack = new Map<string, string>();
+    /** why no panel's service may start while this daemon runs, when none may */
+    private allHeldBack: string | null = null;
     // each panel's open pages: the connection each says it is open on, until it closes
     private pages = new Map<string, Set<PageConnection>>();
     constructor(private baseDir = getPaperboardDir()) {}
@@ -175,9 +177,13 @@ export class PanelServicesManager {
     public holdBack(panelId: string, why: string): void {
         this.heldBack.set(requirePanelId(panelId), why);
     }
+    /** Keeps every panel's service from starting while this daemon runs, for `why`: which panel's files can't be trusted is not known. */
+    public holdBackAll(why: string): void {
+        this.allHeldBack = why;
+    }
     public startService(panelId: string, crashCount = 0): boolean {
         const id = requirePanelId(panelId);
-        const held = this.heldBack.get(id);
+        const held = this.allHeldBack ?? this.heldBack.get(id);
         if (held) throw new Error(held);
         const existing = this.services.get(id);
         if (existing && !existing.stopped && existing.state !== "failed") return true;

@@ -421,21 +421,23 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
 
             // a restore a crash interrupted is rolled back before any panel reads its
             // files; a panel whose files could not be put back says so, and its
-            // service stays stopped rather than run on them half swapped
+            // service stays stopped rather than run on them half swapped. When which
+            // panel is not known, no service starts.
+            const keptUntilNextStart = "and its service stays stopped until Paperboard starts again and tries once more.";
             try {
                 for (const failed of backupServiceFor(engine).recoverAtStartup()) {
-                    const message = `${failed.error}. Its original files are kept at ${failed.kept}, and its service stays stopped until Paperboard starts again and tries once more.`;
+                    const message = `${failed.error}. Its original files are kept at ${failed.kept}, ${keptUntilNextStart}`;
                     if (failed.panelId === null) {
-                        // quiet: a journal no one can read names no panel to tell; the log is all there is
                         logger.error(`[Paperboard Server] an interrupted restore could not be read or undone: ${message}`);
+                        panelServices.holdBackAll(`An interrupted restore of an unknown panel couldn't be undone: ${failed.error}. Its files are kept at ${failed.kept}; no panel's service starts until Paperboard starts again and tries once more.`);
                         continue;
                     }
                     problemsFor(engine).report(failed.panelId, { key: "paperboard:interrupted-restore", title: "An interrupted restore couldn't be undone", message: clipProblemReport({ title: "", message }).message });
                     panelServices.holdBack(failed.panelId, `An interrupted restore couldn't be undone: ${message}`);
                 }
             } catch (err) {
-                // quiet: no panel is running yet to show it; any interrupted restore stays in backups/.work for the next start
-                logger.error("[Paperboard Server] interrupted restores could not be looked for; any stay in backups/.work:", err);
+                logger.error("[Paperboard Server] interrupted restores could not be looked for in backups/.work:", err);
+                panelServices.holdBackAll(`Paperboard couldn't look for interrupted restores (${errorMessage(err)}), so no panel's service starts on files a restore may have left half swapped until Paperboard starts again and tries once more.`);
             }
 
             // Start background services for installed panels

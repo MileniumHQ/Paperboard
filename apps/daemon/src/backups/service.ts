@@ -283,7 +283,18 @@ export class BackupService {
                         }
                         return failed(why);
                     }
-                    await swap.commit();
+                    try {
+                        swap.commit();
+                    } catch (err) {
+                        // the panel took the files, but they can't be kept: it hears they went back
+                        try {
+                            swap.rollback();
+                        } catch (rollbackErr) {
+                            throw new Error(`${errorMessage(err)}; ${errorMessage(rollbackErr)}`, { cause: err });
+                        }
+                        return failed(err);
+                    }
+                    await swap.clear();
                 });
                 return record;
             } finally {

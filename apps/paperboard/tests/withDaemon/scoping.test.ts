@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { TEST_TIMEOUT_MS } from "testkit/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
@@ -12,7 +12,7 @@ import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLoc
 import { CraneTransport } from "@mileniumhq/paperapi/ws";
 import { dataDir, listTree, restoreEnv } from "testkit/fs";
 import { startDaemon, stopDaemon, type InProcessDaemon } from "testkit/inproc";
-import { installPanelFiles } from "testkit/panels";
+import { installPanelFiles, serviceCall, serviceSource } from "testkit/panels";
 import type { Rpc } from "testkit/rpc";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
@@ -235,6 +235,33 @@ describe("unreadable state is quarantined", () => {
 		expect(fs.readFileSync(path.join(dir, "files", "test.interrupted", "world", "world.dat"), "utf8")).toBe("the user's world");
 		expect(fs.readdirSync(path.join(dir, "backups", ".work"))).toEqual([]);
 		expect(listTree(dir).filter((f) => /\.replaced-/.test(f))).toEqual([]);
+	});
+
+	test("a panel whose interrupted restore can't be undone says so, and its service stays stopped", async () => {
+		const dir = dataDir();
+		await installPanelFiles(dir, { id: "test.halfswapped", service: serviceSource({ calls: "{ ping: async () => 'pong' }" }) });
+		await installPanelFiles(dir, { id: "test.bystander", service: serviceSource({ calls: "{ ping: async () => 'pong' }" }) });
+		// the original can't go back: where it belongs, the storage holds a file
+		const swap = path.join(dir, "backups", ".work", "restore-1");
+		fs.mkdirSync(path.join(swap, "parked", "world", "region"), { recursive: true });
+		fs.writeFileSync(path.join(swap, "parked", "world", "region", "r.0.0.mca"), "the user's world");
+		fs.writeFileSync(path.join(swap, "journal.json"), JSON.stringify({ panelId: "test.halfswapped", units: [{ path: "world/region", existed: true }], exclude: [] }));
+		fs.mkdirSync(path.join(dir, "files", "test.halfswapped"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "files", "test.halfswapped", "world"), "in the way");
+
+		await withDaemon(async (daemon) => {
+			const host = await daemon.rpc();
+			const { problems } = await host.ok("problems:list", { panelId: "test.halfswapped" });
+			expect(problems).toEqual([expect.objectContaining({ key: "paperboard:interrupted-restore", title: "An interrupted restore couldn't be undone" })]);
+			const listed = await host.ok("panel:list");
+			const byId = new Map(listed.panels.map((p: { id: string; serviceError?: string }) => [p.id, p.serviceError]));
+			expect(byId.get("test.halfswapped")).toContain("An interrupted restore couldn't be undone");
+			expect((await host.call("blocks:call", serviceCall("test.halfswapped", "ping"))).error).toBeDefined();
+			// the other panels start as usual
+			await waitFor("the bystander's service", async () => !(await host.call("blocks:call", serviceCall("test.bystander", "ping"))).error);
+			await host.close();
+		}, dir);
+		expect(fs.readFileSync(path.join(swap, "parked", "world", "region", "r.0.0.mca"), "utf8")).toBe("the user's world");
 	});
 });
 

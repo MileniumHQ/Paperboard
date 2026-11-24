@@ -66,7 +66,8 @@ export type BackupCopied = { target: string | null } & ({ ok: true } | { ok: fal
 
 /** How a restore ended, as afterRestore hears it. On ok the files are the
  * backup's and data is what beforeBackup handed over (null when none); on
- * failure they are back as they were. */
+ * failure they are back as they were, even after an ok the panel took:
+ * then it undoes what it applied. */
 export type RestoreEnded = { target: string | null; backup: BackupRecord } & ({ ok: true; data: unknown } | { ok: false; error: string });
 
 export interface BackupLocation {

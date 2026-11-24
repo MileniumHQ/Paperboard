@@ -310,15 +310,10 @@ describe("backup archives and restores never reach past the panel's files", () =
 		fs.writeFileSync(path.join(staged, "world", "level.dat"), "backup");
 
 		const swap = swapIn(work, "test.commit", storage, staged, { paths: ["world"], exclude: [] });
-		const cleaned = swap.commit();
-		// the journal is gone before commit returns: a crash from here keeps the backup's files
-		const ended = fs.readdirSync(work);
-		expect(ended).toEqual([expect.stringMatching(/^ended-/)]);
-		await cleaned;
-		expect(fs.readdirSync(work)).toEqual([]);
-		// a daemon that died before the cleanup leaves the ended swap, with the originals parked in it
-		fs.mkdirSync(path.join(work, ended[0]!, "parked", "world"), { recursive: true });
-		fs.writeFileSync(path.join(work, ended[0]!, "parked", "world", "level.dat"), "live");
+		swap.commit();
+		// the daemon died here, before the parked originals were cleared
+		const [ended] = fs.readdirSync(work);
+		expect(fs.readFileSync(path.join(work, ended!, "parked", "world", "level.dat"), "utf8")).toBe("live");
 		expect(recoverRestores(work, () => storage)).toEqual([]);
 		expect(fs.readFileSync(path.join(storage, "world", "level.dat"), "utf8")).toBe("backup");
 		expect(fs.readdirSync(work)).toEqual([]);
@@ -343,6 +338,42 @@ describe("backup archives and restores never reach past the panel's files", () =
 		expect(fs.readFileSync(path.join(storage, "servers", "other", "world.dat"), "utf8")).toBe("running sibling");
 	});
 
+	test("what a backup left out never comes from its archive, even where the storage had nothing", async () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.mkdirSync(path.join(storage, "servers", "x"), { recursive: true });
+		fs.writeFileSync(path.join(storage, "servers", "x", "world.dat"), "live");
+		const staged = tempDir();
+		fs.mkdirSync(path.join(staged, "servers", "x", "install"), { recursive: true });
+		fs.writeFileSync(path.join(staged, "servers", "x", "world.dat"), "backup");
+		fs.writeFileSync(path.join(staged, "servers", "x", "install", "planted.bin"), "not from this storage");
+
+		const swap = swapIn(work, "test.planted", storage, staged, { paths: ["servers/x"], exclude: ["servers/x/install"] });
+		expect(fs.readFileSync(path.join(storage, "servers", "x", "world.dat"), "utf8")).toBe("backup");
+		expect(fs.existsSync(path.join(storage, "servers", "x", "install"))).toBe(false);
+		swap.commit();
+		await swap.clear();
+		expect(fs.readdirSync(work)).toEqual([]);
+	});
+
+	test("a restore that can't be committed still stands, to be rolled back", () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.writeFileSync(path.join(storage, "a.txt"), "live");
+		const staged = tempDir();
+		fs.writeFileSync(path.join(staged, "a.txt"), "backup");
+		const swap = swapIn(work, "test.stuck", storage, staged, { paths: ["a.txt"], exclude: [] });
+		const [dir] = fs.readdirSync(work);
+		fs.chmodSync(path.join(work, dir!), 0o555);
+		try {
+			expect(() => swap.commit()).toThrow("journal couldn't be deleted");
+		} finally {
+			fs.chmodSync(path.join(work, dir!), 0o755);
+		}
+		swap.rollback();
+		expect(fs.readFileSync(path.join(storage, "a.txt"), "utf8")).toBe("live");
+	});
+
 	test("each interrupted restore is recovered on its own, and one that can't be is named, not thrown", async () => {
 		const work = tempDir();
 		const good = tempDir();
@@ -356,13 +387,22 @@ describe("backup archives and restores never reach past the panel's files", () =
 		fs.writeFileSync(path.join(work, "restore-broken", "journal.json"), JSON.stringify({ panelId: "test.broken", units: [{ path: "b.txt", existed: true }], exclude: [] }));
 		fs.mkdirSync(path.join(work, "restore-unreadable"));
 		fs.writeFileSync(path.join(work, "restore-unreadable", "journal.json"), "{damaged");
+		// a journal that can't be read at all is named the same way
+		fs.mkdirSync(path.join(work, "restore-locked", "journal.json"), { recursive: true });
+		// a leftover that can't be deleted doesn't stop the swaps after it
+		const stuck = path.join(work, "aaa-leftover");
+		fs.mkdirSync(path.join(stuck, "inner"), { recursive: true });
+		fs.writeFileSync(path.join(stuck, "inner", "x"), "x");
+		fs.chmodSync(stuck, 0o555);
 
 		const failed = recoverRestores(work, (panelId) => {
 			if (panelId === "test.broken") throw new Error("no storage for test.broken");
 			return good;
 		});
+		fs.chmodSync(stuck, 0o755);
 		expect(failed.map((f) => [f.panelId, f.error])).toEqual(expect.arrayContaining([["test.broken", "no storage for test.broken"], [null, expect.any(String)]]));
-		expect(failed).toHaveLength(2);
+		expect(failed).toHaveLength(3);
+		expect(failed.filter((f) => f.panelId === null)).toHaveLength(2);
 		expect(fs.readFileSync(path.join(good, "a.txt"), "utf8")).toBe("live");
 		// what could not be undone is kept where the problem says
 		expect(fs.readFileSync(path.join(work, "restore-broken", "parked", "b.txt"), "utf8")).toBe("original");
