@@ -228,17 +228,15 @@ export default function TroubleshootingDoc() {
 
             <PaperText preset="subheader" as="h2" id="report-an-issue">Report an issue</PaperText>
             <PaperText preset="body" as="p">
-                In <b>App Settings</b>, under <b>Help</b>, select <b>Report an Issue</b>. Say what went wrong and pick a coding agent installed on this computer, such as Claude Code or Codex.
-                The agent reads the code of the Paperboard version you run, finds the likely cause, and writes the issue. You can tell it more while it works, or stop it.
+                In <b>App Settings</b>, under <b>Help</b>, select <b>Report an Issue</b>. Say what went wrong and what you expected, then select <b>Send</b>.
+                It goes straight to Paperboard's maintainer.
             </PaperText>
             <PaperTextList>
-                <li>The agent only reads. Paperboard refuses every tool that would change your computer or reach the internet.</li>
-                <li>What you write goes to the agent you picked, and on to its provider, as any task you give it does.</li>
-                <li>The issue goes nowhere until you send it: to GitHub with the GitHub CLI (<PaperCode>gh</PaperCode>) signed in, copied to your clipboard for Discord, by email, or copied directly.</li>
+                <li>Paperboard sends what you typed, its version, your operating system and its version, and whether you used the app or a browser. Nothing else from your computer is sent.</li>
                 <li>
-                    No agent listed? Install a coding agent such as Claude Code, Codex, Cursor, Grok, OpenCode, or Antigravity—or any other{" "}
-                    <PaperLink href="https://github.com/pxlkt/trissue#agents">ACP coding agent supported by trissue</PaperLink>—then select <b>Check again</b>.
-                    In a browser or on a phone, report from the desktop app.
+                    Nothing comes back through the app. To follow up, open an issue on{" "}
+                    <PaperLink href="https://github.com/MileniumHQ/Paperboard/issues">GitHub</PaperLink> or ask in the{" "}
+                    <PaperLink href="https://discord.gg/DdnpP3pPfT">Discord</PaperLink>.
                 </li>
             </PaperTextList>
         </PaperFlex>
