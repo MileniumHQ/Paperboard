@@ -78,6 +78,12 @@ export function useShellNavigation(options: ShellNavigationOptions) {
         }
     };
 
+    /** a computer just paired: listed, then opened as a pick on the rail would */
+    const openAddedComputer = (added: { id: string }) => {
+        // a list that fails to load says so itself (computersLoadFailed)
+        void options.computers.refreshComputers().then(() => selectRail(added.id));
+    };
+
     /** shows a tab of a computer: a widget's "open panel", or the computer's info page */
     const openComputerTab = (compId: string, tab: string) => {
         setRailMode("computer");
@@ -116,6 +122,7 @@ export function useShellNavigation(options: ShellNavigationOptions) {
         setMobileSettingsOpen,
         openMobilePage,
         selectRail,
+        openAddedComputer,
         openComputerTab,
         mayClosePanels,
     };

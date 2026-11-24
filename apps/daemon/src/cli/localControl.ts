@@ -10,7 +10,9 @@ import { WebSocket } from "ws";
 import { DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, craneHandshakePath, verifyDaemonProof } from "../security/handshake";
 import { PROTOCOL_VERSION } from "../core/protocol";
 import type { RpcAction, RpcParams, RpcResult } from "@mileniumhq/paperapi/protocol";
-import { getPaperboardDir } from "../core/paths";
+import { getLocalDir, getPaperboardDir } from "../core/paths";
+import { readTlsCert } from "../security/tlsIdentity";
+import { certFingerprint } from "../security/pinnedTls";
 import { formatListenAddress } from "./tui";
 import { getDisplayHost } from "../core/util";
 import { isLoopbackHost } from "../system/discovery";
@@ -213,13 +215,44 @@ export async function runStatus(json: boolean): Promise<number> {
     return EXIT.OK;
 }
 
-// Opens pairing, prints the code and waits for a computer to pair. Ctrl+C
-// closes pairing again so no code is left open behind the user's back.
-export async function runPair(): Promise<number> {
+function printPairingHelp(code: string, listen: { host: string; port: number } | undefined): void {
+    console.log(`Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`);
+    console.log("");
+    // a daemon on loopback serves plain HTTP: Paperboard pairs only a daemon it reaches encrypted
+    if (listen && isLoopbackHost(listen.host)) {
+        console.log(`This daemon only listens on ${listen.host}, without encryption, so Paperboard can't pair with it.`);
+        console.log("Start it with --host 0.0.0.0 to pair it from Paperboard over your network.");
+    } else {
+        const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
+        console.log("In Paperboard on the other computer, press Add Computer and pick this computer,");
+        console.log(`${address ? `or choose Custom IP and type ${address}. Then ` : "then "}enter the code.`);
+        console.log("Pair only on a network you trust; once paired, the connection is encrypted.");
+    }
+    console.log("");
+}
+
+/**
+ * Opens pairing, prints the code and waits for a computer to pair. Ctrl+C
+ * (or, with json, stdin ending) closes pairing again, so no code is left
+ * open behind the user's back. With json, the first line is {code, listen,
+ * fingerprint} and the last {paired}: Paperboard setting a computer up over
+ * SSH pins that fingerprint before it sends the code.
+ */
+export async function runPair(json = false): Promise<number> {
     const daemon = await connectLocalDaemon();
     if (!daemon.handshake.token) {
         daemon.close();
         throw new Error("This daemon runs with --no-auth, so there is nothing to pair.");
+    }
+    const listen = daemon.handshake.listen;
+    if (json && (!listen || isLoopbackHost(listen.host))) {
+        daemon.close();
+        throw new Error(`This daemon only listens on ${listen?.host ?? "this computer"}, without encryption, so Paperboard can't pair with it. Start it with --host 0.0.0.0.`);
+    }
+    const cert = json ? readTlsCert(getLocalDir()) : null;
+    if (json && !cert) {
+        daemon.close();
+        throw new Error("This daemon has no TLS certificate yet, so Paperboard can't pair with it.");
     }
     let interrupted = false;
     let wake: (() => void) | null = null;
@@ -229,25 +262,20 @@ export async function runPair(): Promise<number> {
     };
     process.once("SIGINT", onInterrupt);
     process.once("SIGTERM", onInterrupt);
+    // whoever reads the JSON holds stdin open: its end (an SSH channel
+    // closing, or the connection dropping) closes pairing as Ctrl+C would,
+    // since sshd without a terminal sends no signal
+    if (json) {
+        process.stdin.once("end", onInterrupt);
+        process.stdin.resume();
+    }
     try {
         const before = await daemon.call("system:pairing-status");
         const known = new Set(before.computers.map((c) => `${c.name}\n${c.pairedAt}`));
         const { code } = await daemon.call("system:pairing-start");
-        const listen = daemon.handshake.listen;
-        console.log(`Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`);
-        console.log("");
-        // a daemon on loopback serves plain HTTP: Paperboard pairs only a daemon it reaches encrypted
-        if (listen && isLoopbackHost(listen.host)) {
-            console.log(`This daemon only listens on ${listen.host}, without encryption, so Paperboard can't pair with it.`);
-            console.log("Start it with --host 0.0.0.0 to pair it from Paperboard over your network.");
-        } else {
-            const address = listen ? `${getDisplayHost(listen.host)}:${listen.port}` : null;
-            console.log("In Paperboard on the other computer, press Add Computer and pick this computer,");
-            console.log(`${address ? `or choose Custom IP and type ${address}. Then ` : "then "}enter the code.`);
-            console.log("Pair only on a network you trust; once paired, the connection is encrypted.");
-        }
-        console.log("");
-        console.log("Waiting for a computer to pair... (Ctrl+C cancels)");
+        if (json) console.log(JSON.stringify({ code, listen: { host: listen!.host, port: listen!.port }, fingerprint: certFingerprint(cert!) }));
+        else printPairingHelp(code, listen);
+        if (!json) console.log("Waiting for a computer to pair... (Ctrl+C cancels)");
         for (;;) {
             await new Promise<void>((resolve) => {
                 wake = resolve;
@@ -256,14 +284,15 @@ export async function runPair(): Promise<number> {
             wake = null;
             if (interrupted) {
                 await daemon.call("system:pairing-cancel");
-                console.log("Pairing cancelled.");
+                // with json, no one may be reading any more
+                if (!json) console.log("Pairing cancelled.");
                 return EXIT.INTERRUPTED;
             }
             const status = await daemon.call("system:pairing-status");
             if (status.active) continue;
             const paired = status.computers.find((c) => !known.has(`${c.name}\n${c.pairedAt}`));
             if (paired) {
-                console.log(`Paired with ${paired.name || "a computer"}.`);
+                console.log(json ? JSON.stringify({ paired: paired.name }) : `Paired with ${paired.name || "a computer"}.`);
                 return EXIT.OK;
             }
             console.error("Pairing ended without a computer pairing (cancelled on the daemon, or too many wrong codes). Run papercrane pair again for a new code.");
@@ -272,6 +301,10 @@ export async function runPair(): Promise<number> {
     } finally {
         process.off("SIGINT", onInterrupt);
         process.off("SIGTERM", onInterrupt);
+        if (json) {
+            process.stdin.off("end", onInterrupt);
+            process.stdin.pause();
+        }
         daemon.close();
     }
 }

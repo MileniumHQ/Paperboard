@@ -77,6 +77,31 @@ export interface ComputerReachResult {
     error?: string;
 }
 
+export type SetupStepId = "connect" | "signIn" | "check" | "install" | "pair";
+
+/** one step of setting a computer up over SSH, as its loader shows it */
+export interface SetupStep {
+    id: SetupStepId;
+    status: "waiting" | "loading" | "success" | "error";
+    label: string;
+    // how far a step that can tell is (a download); one without is under way, no more
+    percent?: number;
+}
+
+/** a setup over SSH, pushed whole on every change */
+export interface ComputerSetupState {
+    jobId: string;
+    // counts up with every change: pushes and the start answer travel apart, and the higher one is newer
+    revision: number;
+    host: string;
+    steps: SetupStep[];
+    // keys and the agent didn't sign in: the account and password are asked
+    signIn: { username: string; error?: string } | null;
+    // paired (the computer's id, and what to know about it now: "stops when
+    // you sign out"), the pairing code is the way left (why), or what stopped it
+    result: { paired: { id: string; notice?: string } } | { useCode: string } | { failed: string } | null;
+}
+
 /** A Paperboard server found nearby over mDNS. */
 export interface DiscoveredComputer {
     /** stable service identity: the dedupe key */
@@ -127,6 +152,10 @@ export const SHELL_CALLS = {
     "computer-switch": { browser: true },
     "computer-reorder": { browser: true },
     "discovery-list": { browser: true },
+    "computer-ssh-check": { browser: true },
+    "computer-setup-start": { browser: true },
+    "computer-setup-sign-in": { browser: true },
+    "computer-setup-cancel": { browser: true },
     "open-panel-folder": { browser: true },
     "panel-listing-file": { browser: true },
     "app-version": { browser: true },
@@ -168,6 +197,7 @@ export const SHELL_PUSHES = {
     "update-queue": true,
     "computers-changed": true,
     "discovery-changed": true,
+    "computer-setup-changed": true,
     "graphics-changed": true,
     "panel-permission-ask": true,
     "panel-screen-pick": true,
@@ -209,6 +239,15 @@ export interface ShellCallContract {
     "computer-switch": { args: { id: string }; answer: boolean };
     "computer-reorder": { args: { ids: string[] }; answer: void };
     "discovery-list": { args: void; answer: DiscoveredComputer[] };
+    // whether an SSH server answers for host (an address or ~/.ssh/config alias)
+    "computer-ssh-check": { args: { host: string }; answer: { ssh: boolean } };
+    // sets the computer up over SSH; progress comes as computer-setup-changed.
+    // A new setup cancels the one before it.
+    // answers with the setup as it stands, so what it pushed before the answer isn't missed
+    "computer-setup-start": { args: { host: string; name?: string }; answer: ComputerSetupState };
+    // the password is used for this setup alone, and never stored
+    "computer-setup-sign-in": { args: { jobId: string; username: string; password: string }; answer: void };
+    "computer-setup-cancel": { args: { jobId: string }; answer: void };
     "open-panel-folder": { args: { computerId: string; panelId?: string }; answer: { opened: boolean; error?: string } };
     // one file of an installed panel's manifest or store listing, in base64
     "panel-listing-file": { args: { computerId: string; panelId: string; path: string }; answer: string };
@@ -263,6 +302,7 @@ export interface ShellPushContract {
     "update-queue": UpdateQueueState;
     "computers-changed": ComputerListResult;
     "discovery-changed": DiscoveredComputer[];
+    "computer-setup-changed": ComputerSetupState;
     "graphics-changed": Graphics;
     "panel-permission-ask": PermissionAsk;
     "panel-screen-pick": ScreenPick;

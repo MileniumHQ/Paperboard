@@ -40,6 +40,8 @@ export interface PaperWizardStepProps extends JSX.HTMLAttributes<HTMLDivElement>
     /** no Back button on this step, for one that can't be undone (a download that is done) */
     hideBack?: boolean;
     onStepActive?: () => void;
+    /** Next pressed on this step; return false to stay on it, as a step that does its own work first (signing in) does */
+    onNext?: () => boolean | void;
 }
 
 export interface WizardContextType {
@@ -55,6 +57,10 @@ export interface WizardContextType {
     setOptionsShown: (show: boolean) => void;
     setCanProceed: (canProceed: boolean) => void;
     setBackHidden: (hidden: boolean) => void;
+    /** what the current step does when Next is pressed */
+    setNextHandler: (handler: () => boolean | void) => void;
+    /** takes the handler back out, unless another step has set its own since */
+    clearNextHandler: (handler: () => boolean | void) => void;
     isLastStep: () => boolean;
     isFirstStep: () => boolean;
     /** a step mounting at `index`; returns what it calls when it unmounts */
@@ -92,6 +98,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     const [optionsShown, setOptionsShown] = createSignal(true);
     const [canProceedCurrent, setCanProceedCurrent] = createSignal(true);
     const [backHiddenCurrent, setBackHiddenCurrent] = createSignal(false);
+    let nextHandler: (() => boolean | void) | undefined;
 
     const [wizardData, setWizardData] = createSignal<Record<string, any>>({
         ...(local.initialData || {}),
@@ -130,6 +137,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
 
     const nextStep = () => {
         if (!canProceedCurrent()) return;
+        if (nextHandler?.() === false) return;
 
         if (isLastStep()) {
             const finalData = wizardData();
@@ -189,6 +197,12 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
         setOptionsShown,
         setCanProceed: setCanProceedCurrent,
         setBackHidden: setBackHiddenCurrent,
+        setNextHandler: (handler) => {
+            nextHandler = handler;
+        },
+        clearNextHandler: (handler) => {
+            if (nextHandler === handler) nextHandler = undefined;
+        },
         isLastStep,
         isFirstStep,
         registerStep,
@@ -294,6 +308,7 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
         "canProceed",
         "hideBack",
         "onStepActive",
+        "onNext",
         "ref",
         "class",
         "classList",
@@ -337,6 +352,17 @@ export function PaperWizardStep(props: ParentProps<PaperWizardStepProps>) {
             if (!active || !wizard) return;
             wizard.setBackHidden(hideBack ?? false);
             wizard.setCanProceed(canProceed ?? true);
+        }),
+    );
+
+    // Next goes through this step's handler while it is current
+    createEffect(
+        on(isActive, (active) => {
+            if (!active || !wizard) return;
+            const handler = () => local.onNext?.();
+            wizard.setNextHandler(handler);
+            // the step arriving may have set its own already
+            onCleanup(() => wizard.clearNextHandler(handler));
         }),
     );
 

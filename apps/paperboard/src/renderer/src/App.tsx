@@ -356,7 +356,7 @@ const App: Component<AppProps> = (props) => {
                         <Show when={setupShown()} keyed>
                             <ComputerSetupWizard
                                 onClose={() => setIsSetupOpen(false)}
-                                onComplete={selection.addComputer}
+                                onComplete={nav.openAddedComputer}
                             />
                         </Show>
                     </PaperModal>
