@@ -63,9 +63,10 @@ export class DiscoveryService extends EventEmitter {
             for (const event of ["srv-update", "txt-update"]) {
                 this.browser.on(event, (service: any, previous: any) => {
                     try {
-                        // one change: the old record goes without a list of its own
-                        this.handleDown(previous, false);
-                        this.handleUp(service);
+                        // one change: the old record goes without a list of its
+                        // own, unless the new one is unusable and sends none
+                        const gone = this.handleDown(previous, false);
+                        if (!this.handleUp(service) && gone) this.emitChange();
                     } catch (err) {
                         logger.warn(`[Discovery] failed to process mDNS '${event}':`, err);
                     }
@@ -120,7 +121,8 @@ export class DiscoveryService extends EventEmitter {
         );
     }
 
-    private handleUp(service: any): void {
+    // whether the service was listed (and the change sent)
+    private handleUp(service: any): boolean {
         const key = this.serviceKey(service);
         const host = this.resolveHost(service);
         const port = Number(service?.port) || 0;
@@ -128,7 +130,7 @@ export class DiscoveryService extends EventEmitter {
             logger.debug(
                 "[Discovery] ignoring malformed mDNS service announcement",
             );
-            return;
+            return false;
         }
         this.confirming?.seen.add(key);
         const entry: DiscoveredEntry = {
@@ -163,11 +165,13 @@ export class DiscoveryService extends EventEmitter {
             `[Discovery] Paperboard Server online: ${entry.name} (${entry.host}:${entry.port})`,
         );
         this.emitChange();
+        return true;
     }
 
-    private handleDown(service: any, announce = true): void {
+    // whether a listed service was removed
+    private handleDown(service: any, announce = true): boolean {
         const key = this.serviceKey(service);
-        if (!key) return;
+        if (!key) return false;
         // match by fqdn too — goodbye can arrive with a partial record
         let removedKey: string | null = null;
         if (this.services.has(key)) {
@@ -183,13 +187,14 @@ export class DiscoveryService extends EventEmitter {
                 }
             }
         }
-        if (!removedKey) return;
+        if (!removedKey) return false;
         const removed = this.services.get(removedKey)!;
         this.services.delete(removedKey);
         logger.debug(
             `[Discovery] Paperboard Server offline: ${removed.name} (${removed.host}:${removed.port})`,
         );
         if (announce) this.emitChange();
+        return true;
     }
 
     private emitChange() {
