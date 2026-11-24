@@ -34,6 +34,7 @@ export interface ServeOptions {
     noAuth?: boolean;
     headless?: boolean;
     startPairing?: boolean;
+    exitWithParent?: boolean;
 }
 
 export type ServiceScope = "user" | "system";
@@ -89,7 +90,12 @@ function parseServiceName(value: string): string {
 }
 
 function parseUserName(value: string): string {
-    if (!/^[a-z_][a-z0-9_.-]{0,31}\$?$/i.test(value)) throw new InvalidArgumentError(`--run-as must be a user name, not "${value}".`);
+    // Windows names an account as Windows allows (spaces, an optional
+    // DOMAIN\, or user@domain); elsewhere a POSIX user name
+    const valid = process.platform === "win32"
+        ? (/^([A-Za-z0-9._-]{1,15}\\)?[^"/\\[\]:;|=,+*?<>@]{1,20}$/.test(value) || /^[^"/\\[\]:;|=,+*?<>@\s]{1,64}@[A-Za-z0-9.-]{1,255}$/.test(value)) && value.trim() === value
+        : /^[a-z_][a-z0-9_.-]{0,31}\$?$/i.test(value);
+    if (!valid) throw new InvalidArgumentError(`--run-as must be a user name, not "${value}".`);
     return value;
 }
 
@@ -107,7 +113,7 @@ function addListenOptions(cmd: Command, { env }: { env: boolean }): Command {
 
 function addServiceTargetOptions(cmd: Command): Command {
     return cmd
-        .option("--system", "a system service that starts at boot (needs root); the default is a service for your user")
+        .option("--system", "a system service that starts at boot (needs root, or an administrator on Windows); the default is a service for your user")
         .addOption(new Option("--name <name>", "service name, to run more than one daemon").default(DEFAULT_SERVICE_NAME).argParser(parseServiceName))
         .option("--dry-run", "print what would be written and run, and change nothing");
 }
@@ -140,6 +146,7 @@ function serveOptions(opts: Record<string, unknown>, env: NodeJS.ProcessEnv): Se
     if (opts.auth === false) options.noAuth = true;
     if (opts.headless) options.headless = true;
     if (opts.startPairing) options.startPairing = true;
+    if (opts.exitWithParent) options.exitWithParent = true;
     if (typeof opts.port === "number") options.port = opts.port;
     else if (env.PAPERCRANE_PORT !== undefined) options.port = parsePort(env.PAPERCRANE_PORT, "PAPERCRANE_PORT");
     if (typeof opts.host === "string") options.host = opts.host;
@@ -214,6 +221,8 @@ function buildProgram(env: NodeJS.ProcessEnv, run: (command: CliCommand) => void
         .option("--no-auth", "turn off authentication, for development on a trusted single-user computer (127.0.0.1 only)")
         .addOption(new Option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL in a production build").hideHelp())
         .addOption(new Option("--panel-service <module>").hideHelp())
+        // how a Windows user task's daemon stops with the conhost it runs under
+        .addOption(new Option("--exit-with-parent").hideHelp())
         .action(guarded((opts: Record<string, unknown>, cmd: Command) => {
             if (cmd.args.length > 0) {
                 throw new InvalidArgumentError(`unknown command '${cmd.args[0]}'.`);
@@ -264,10 +273,10 @@ ${ENVIRONMENT_HELP}`);
         program
             .command("install-service")
             .summary("run the daemon in the background, starting with the computer")
-            .description("Install the daemon as a service (systemd on Linux, launchd on macOS), enable it and start it. It runs with --headless, and stopping or restarting it leaves game servers and other workloads running for the next daemon to adopt. Running it again updates the service. Its data directory is --data-dir, else PAPERBOARD_DIR, else ~/.paperboard of the account it runs as."),
+            .description("Install the daemon as a service (systemd on Linux, launchd on macOS, Task Scheduler on Windows), enable it and start it. It runs with --headless, and stopping or restarting it leaves game servers and other workloads running for the next daemon to adopt. Running it again updates the service. Its data directory is --data-dir, else PAPERBOARD_DIR, else ~/.paperboard of the account it runs as."),
         { env: false },
     ))
-        .addOption(new Option("--run-as <user>", "with --system: the account the daemon runs as (default: the user who ran sudo)").argParser(parseUserName))
+        .addOption(new Option("--run-as <user>", "with --system: the account the daemon runs as (default: the user who ran sudo, or on Windows you)").argParser(parseUserName))
         .action(guarded((opts: Record<string, unknown>) => {
             if (opts.runAs !== undefined && !opts.system) throw new InvalidArgumentError("--run-as only applies to --system services.");
             run({
@@ -285,6 +294,7 @@ ${ENVIRONMENT_HELP}`);
 Examples:
   papercrane install-service                      for your user
   sudo papercrane install-service --system        at boot, as the user running sudo
+                                                  (on Windows, from a terminal opened as administrator)
   papercrane install-service --port 45465 --name papercrane-test --data-dir ~/pb-test`);
 
     addServiceTargetOptions(

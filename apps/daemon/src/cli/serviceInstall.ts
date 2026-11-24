@@ -5,10 +5,12 @@
 //   Linux    systemd unit, per user (~/.config/systemd/user) or system-wide
 //            (/etc/systemd/system, as an unprivileged account)
 //   macOS    launchd job, a LaunchAgent (per user) or a LaunchDaemon
-//   Windows  not automated; prints how to do it by hand
+//   Windows  Task Scheduler task, at sign-in (per user) or at startup
+//            without anyone signed in (--system, as an administrator)
 //
 // Every service runs with --headless and is told to stop only the daemon
-// process (systemd KillMode=process, launchd AbandonProcessGroup): game
+// process (systemd KillMode=process, launchd AbandonProcessGroup; a Windows
+// supervisor is its own detached process): game
 // servers and other workloads run in detached supervisors that must outlive
 // a daemon restart, and the next daemon adopts them (see onSignal in
 // index.ts). Uninstalling stops and removes the service, never the data.
@@ -17,7 +19,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { EXIT, type ServiceTarget } from "./cli";
-import { errorMessage } from "@mileniumhq/paperapi/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface InstallRequest {
     target: ServiceTarget;
@@ -36,12 +38,16 @@ interface Plan {
     unit: string;
     file: string;
     contents: string;
+    // Task Scheduler reads its XML as UTF-16
+    encoding?: "utf16le";
     // run in order after the file is written
     commands: string[][];
     dataDir: string;
     logs: string[];
     // how to read the PID the manager started, for the readiness check
     mainPid: () => number | null;
+    // the file whose last lines a failed start shows
+    logFile?: string;
     notes: string[];
 }
 
@@ -110,6 +116,12 @@ function systemAccount(runAs: string | undefined): Account {
 
 function requireScopeRights(target: ServiceTarget): void {
     if (target.dryRun) return;
+    if (process.platform === "win32") {
+        if (target.scope === "system" && !isWindowsAdmin()) {
+            throw new Error("A --system service needs an administrator. Run it again from a terminal opened with Run as administrator.");
+        }
+        return;
+    }
     if (target.scope === "system" && !isRoot()) {
         throw new Error("A --system service needs root. Run it again with sudo.");
     }
@@ -267,6 +279,7 @@ function launchdPlan(request: InstallRequest, execStart: (dataDir?: string) => s
         commands: [["launchctl", "bootstrap", domain, file]],
         dataDir,
         logs: [`tail -f ${logFile}`, `launchctl print ${domain}/${label}`],
+        logFile,
         mainPid: () => {
             const printed = tryRun(["launchctl", "print", `${domain}/${label}`]);
             const pid = Number(/^\s*pid = (\d+)/m.exec(printed.stdout)?.[1]);
@@ -284,17 +297,294 @@ function launchdLoaded(domain: string, label: string): boolean {
 
 // ── Windows ─────────────────────────────────────────────────────────────
 
-function windowsInstructions(): string {
-    const exe = process.execPath;
+// Task Scheduler stands in for a service manager: a Windows service must be
+// a program that answers the service control manager, which papercrane is
+// not. A user task runs while that user is signed in (like a LaunchAgent); a
+// --system task starts at boot with nobody signed in, as an account whose
+// password is never stored (S4U). Every question to Task Scheduler goes
+// through its COM interface, whose answers don't depend on the language
+// Windows is in (schtasks /Query prints a translated status).
+
+/** a PowerShell string literal */
+function psString(text: string): string {
+    return `'${text.replace(/'/g, "''")}'`;
+}
+
+function powershell(script: string, what: string): string {
+    const result = tryRun(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference = 'Stop'; ${script}`]);
+    if (result.status !== 0) throw new Error(`Could not ${what}: ${`${result.stderr}${result.stdout}`.trim() || `PowerShell exited with ${result.status}`}`);
+    return result.stdout.trim();
+}
+
+function isWindowsAdmin(): boolean {
+    // the token itself, which no service (like the Server service `net session` needs) can hide
+    return powershell(
+        "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)",
+        "check whether this terminal runs as an administrator",
+    ) === "True";
+}
+
+interface WindowsTaskState {
+    exists: boolean;
+    running: boolean;
+    // the daemon the running task started, once it is up
+    pid: number | null;
+}
+
+/**
+ * Whether a task exists and runs, and the PID of the daemon it runs: the
+ * task's running instance names the process it started, which is the daemon
+ * (a system task) or the conhost the daemon runs under (a user task). Found
+ * from the task, never by program path: an update may run from another one.
+ */
+function windowsTaskState(task: string): WindowsTaskState {
+    const cut = task.lastIndexOf("\\");
+    const folder = cut > 0 ? task.slice(0, cut) : "\\";
+    const name = task.slice(cut + 1);
+    const answer = powershell([
+        "$service = New-Object -ComObject Schedule.Service; $service.Connect()",
+        // a missing task or folder (0x80070002, 0x80070003) is an answer; any other failure is not
+        `try { $task = $service.GetFolder(${psString(folder)}).GetTask(${psString(name)}) } catch { $e = if ($_.Exception.InnerException) { $_.Exception.InnerException } else { $_.Exception }; if ($e.HResult -in -2147024894, -2147024893) { '{"exists":false,"running":false,"pid":null}'; exit 0 }; throw }`,
+        "$running = @($task.GetInstances(0))",
+        "if ($running.Count -eq 0) { '{\"exists\":true,\"running\":false,\"pid\":null}'; exit 0 }",
+        "$engine = [int]$running[0].EnginePID",
+        // a system task's process is the daemon; a user task's is conhost, whose child is the daemon
+        "$top = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $engine)",
+        "$daemon = if ($top -and $top.Name -ieq 'conhost.exe') { Get-CimInstance Win32_Process -Filter ('ParentProcessId = ' + $engine) | Where-Object { $_.Name -ine 'conhost.exe' } | Select-Object -First 1 } else { $top }",
+        // ($pid is PowerShell's own, read-only)
+        "$daemonPid = if ($daemon) { [string]$daemon.ProcessId } else { 'null' }",
+        "'{\"exists\":true,\"running\":true,\"pid\":' + $daemonPid + '}'",
+    ].join("; "), `ask Task Scheduler about ${task}`);
+    return JSON.parse(answer) as WindowsTaskState;
+}
+
+/** an account as Task Scheduler names it: DOMAIN\user */
+function windowsAccount(runAs: string | undefined): string {
+    // DOMAIN\user and user@domain are whole already
+    if (runAs) return /[\\@]/.test(runAs) ? runAs : `${process.env.USERDOMAIN || os.hostname()}\\${runAs}`;
+    return `${process.env.USERDOMAIN || os.hostname()}\\${os.userInfo().username}`;
+}
+
+/** one argument as the program's command line carries it (CommandLineToArgvW's rules) */
+function windowsArg(arg: string): string {
+    if (arg !== "" && !/[\s"]/.test(arg)) return arg;
+    // backslashes double only before a quote, including the closing one
+    return `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+}
+
+function taskSchedulerXml(options: {
+    scope: "user" | "system";
+    account: string;
+    command: string;
+    args: string[];
+    dataDir: string;
+}): string {
+    const trigger = options.scope === "user"
+        ? [`    <LogonTrigger>`, `      <Enabled>true</Enabled>`, `      <UserId>${xml(options.account)}</UserId>`, `    </LogonTrigger>`]
+        : [`    <BootTrigger>`, `      <Enabled>true</Enabled>`, `    </BootTrigger>`];
+    // Task Scheduler never restarts a program that crashed once it started
+    // (RestartOnFailure only covers a failed launch). This trigger starts the
+    // task every minute; while the daemon runs, IgnoreNew skips it. The daemon
+    // never exits cleanly on Windows, so a stopped task is a crashed one, and
+    // stopping it on purpose disables the task first.
+    const watchdog = [
+        `    <TimeTrigger>`,
+        `      <Repetition>`,
+        `        <Interval>PT1M</Interval>`,
+        `        <StopAtDurationEnd>false</StopAtDurationEnd>`,
+        `      </Repetition>`,
+        `      <StartBoundary>2000-01-01T00:00:00</StartBoundary>`,
+        `      <Enabled>true</Enabled>`,
+        `    </TimeTrigger>`,
+    ];
     return [
-        "install-service cannot set up a Windows service yet. To start the daemon when you sign in, run this in a terminal opened with Run as administrator:",
-        "",
-        `  schtasks /Create /TN "Paperboard server daemon" /SC ONLOGON /RL LIMITED /TR "\\"${exe}\\" --headless"`,
-        "",
-        "Remove it with:",
-        "",
-        `  schtasks /Delete /TN "Paperboard server daemon"`,
-    ].join("\n");
+        `<?xml version="1.0" encoding="UTF-16"?>`,
+        `<!-- Written by papercrane install-service. Remove it with papercrane uninstall-service. -->`,
+        // uninstall-service reads the data directory back from here; a comment
+        // can't hold "--", so such a path is left out (uninstall then can't name it)
+        ...(options.dataDir.includes("--") ? [] : [`<!-- Paperboard data: ${xml(options.dataDir)} -->`]),
+        `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
+        `  <RegistrationInfo>`,
+        `    <Description>Paperboard server daemon</Description>`,
+        `    <Documentation>https://paperboard.dev</Documentation>`,
+        `  </RegistrationInfo>`,
+        `  <Triggers>`,
+        ...trigger,
+        ...watchdog,
+        `  </Triggers>`,
+        `  <Principals>`,
+        `    <Principal id="Author">`,
+        `      <UserId>${xml(options.account)}</UserId>`,
+        // S4U: runs with nobody signed in, and no password is kept
+        `      <LogonType>${options.scope === "user" ? "InteractiveToken" : "S4U"}</LogonType>`,
+        `      <RunLevel>LeastPrivilege</RunLevel>`,
+        `    </Principal>`,
+        `  </Principals>`,
+        `  <Settings>`,
+        `    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>`,
+        `    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>`,
+        `    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>`,
+        `    <StartWhenAvailable>true</StartWhenAvailable>`,
+        `    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>`,
+        `    <IdleSettings>`,
+        `      <StopOnIdleEnd>false</StopOnIdleEnd>`,
+        `      <RestartOnIdle>false</RestartOnIdle>`,
+        `    </IdleSettings>`,
+        `    <AllowStartOnDemand>true</AllowStartOnDemand>`,
+        `    <Enabled>true</Enabled>`,
+        `    <RunOnlyIfIdle>false</RunOnlyIfIdle>`,
+        // the default limit stops a task after 72 hours; the daemon runs for good
+        `    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>`,
+        // the default (7) runs below normal, and workloads would inherit it
+        `    <Priority>5</Priority>`,
+        `  </Settings>`,
+        `  <Actions Context="Author">`,
+        `    <Exec>`,
+        `      <Command>${xml(options.command)}</Command>`,
+        `      <Arguments>${xml(options.args.map(windowsArg).join(" "))}</Arguments>`,
+        `    </Exec>`,
+        `  </Actions>`,
+        `</Task>`,
+        ``,
+    ].join("\r\n");
+}
+
+/**
+ * The task's path in Task Scheduler, whose names are one namespace for the
+ * whole computer: a system task is \\Paperboard\\<name>, and each account's
+ * user task has a folder of its own, so no two installs replace each other.
+ */
+function windowsTaskName(scope: "user" | "system", name: string): string {
+    if (scope === "system") return `\\Paperboard\\${name}`;
+    const account = os.userInfo().username.replace(/[\\/:*?"<>|]/g, "_");
+    return `\\Paperboard\\${account}\\${name}`;
+}
+
+function windowsTaskFile(scope: "user" | "system", name: string): string {
+    const base = scope === "user"
+        ? process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local")
+        : process.env.ProgramData || "C:\\ProgramData";
+    return path.join(base, "Paperboard", "services", `${name}.xml`);
+}
+
+function windowsFirewallRule(name: string): string {
+    return `Paperboard server daemon (${name})`;
+}
+
+function windowsFirewallRuleExists(rule: string): boolean {
+    return tryRun(["netsh", "advfirewall", "firewall", "show", "rule", `name=${rule}`]).status === 0;
+}
+
+type WindowsStep = { command: string[]; when: "the task exists" | "it is running" | "the rule exists" };
+
+/**
+ * What ends a task's daemon (and, on uninstall, the task): disabled first so
+ * the every-minute trigger can't start it again, then ended. The firewall
+ * rule goes too, since a new install writes its own for its program.
+ */
+function windowsStopSteps(task: string, firewallRule: string | null, removeTask: boolean): WindowsStep[] {
+    return [
+        { command: ["schtasks", "/Change", "/TN", task, "/DISABLE"], when: "the task exists" },
+        { command: ["schtasks", "/End", "/TN", task], when: "it is running" },
+        ...(removeTask ? [{ command: ["schtasks", "/Delete", "/TN", task, "/F"], when: "the task exists" } as WindowsStep] : []),
+        ...(firewallRule ? [{ command: ["netsh", "advfirewall", "firewall", "delete", "rule", `name=${firewallRule}`], when: "the rule exists" } as WindowsStep] : []),
+    ];
+}
+
+function printWindowsSteps(steps: WindowsStep[]): void {
+    for (const step of steps) console.log(`    ${step.command.join(" ")}   (only if ${step.when})`);
+}
+
+/**
+ * Runs the steps that apply now, then waits for the daemon the task ran to
+ * exit: a user task's daemon leaves a moment after its conhost does.
+ */
+async function runWindowsStopSteps(task: string, firewallRule: string | null, steps: WindowsStep[]): Promise<string[][]> {
+    const exists = windowsTaskState(task).exists;
+    const rule = firewallRule !== null && windowsFirewallRuleExists(firewallRule);
+    // whether it runs is read once it is disabled: until then the
+    // every-minute trigger could start it after the look
+    let state: WindowsTaskState = { exists, running: false, pid: null };
+    const ran: string[][] = [];
+    for (const step of steps) {
+        if (step.when === "it is running") state = windowsTaskState(task);
+        const applies = step.when === "the task exists" ? exists : step.when === "it is running" ? state.running : rule;
+        if (!applies) continue;
+        run(step.command);
+        ran.push(step.command);
+    }
+    if (state.pid !== null) await waitForExit(state.pid);
+    return ran;
+}
+
+async function waitForExit(pid: number): Promise<void> {
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+        try {
+            process.kill(pid, 0);
+        } catch (err) {
+            // EPERM: it runs, as another account
+            if (errorCode(err) !== "EPERM") return;
+        }
+        if (Date.now() > deadline) throw new Error(`The daemon (PID ${pid}) did not stop within 15 seconds of its task ending. End it in Task Manager, then run this again.`);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+}
+
+function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => string[]): Plan & { task: string; firewallRule: string | null } {
+    const { target } = request;
+    const account = windowsAccount(target.scope === "system" ? request.runAs : undefined);
+    const otherAccount = target.scope === "system" && request.runAs !== undefined && account.toLowerCase() !== windowsAccount(undefined).toLowerCase();
+    if (otherAccount && !request.serve.dataDir) {
+        throw new Error(`Say where ${request.runAs}'s Paperboard data goes with --data-dir.`);
+    }
+    const dataDir = request.serve.dataDir ?? path.join(os.homedir(), ".paperboard");
+    const [command, ...args] = execStart(target.scope === "system" ? dataDir : request.serve.dataDir);
+    const task = windowsTaskName(target.scope, target.name);
+    // the other scope's task of this name would run a second daemon
+    const other = windowsTaskName(target.scope === "user" ? "system" : "user", target.name);
+    if (!target.dryRun && windowsTaskState(other).exists) {
+        throw new Error(target.scope === "user"
+            ? `A system service named ${target.name} is installed. Remove it first: from a terminal opened with Run as administrator, run papercrane uninstall-service --system${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`
+            : `You have a user service named ${target.name}. Remove it first: papercrane uninstall-service${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`);
+    }
+    // A user task's console program would open a window on the desktop,
+    // which stops the daemon when closed: conhost --headless gives it a
+    // console with no window. Ending the task ends only conhost, so the
+    // daemon follows it out. A system task runs where no window shows, and
+    // runs the daemon itself.
+    const conhost = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "conhost.exe");
+    const action = target.scope === "user"
+        ? { command: conhost, args: ["--headless", command!, ...args, "--exit-with-parent"] }
+        : { command: command!, args };
+    const firewallRule = target.scope === "system" ? windowsFirewallRule(target.name) : null;
+    const notes = target.scope === "user"
+        ? [
+            "A user task starts when you sign in and stops when you sign out.",
+            "To run it with nobody signed in, install it from a terminal opened with Run as administrator: papercrane install-service --system",
+            "The first time it listens on your network, Windows may ask whether to allow it through the firewall.",
+        ]
+        : [];
+    return {
+        unit: task,
+        task,
+        firewallRule,
+        file: windowsTaskFile(target.scope, target.name),
+        encoding: "utf16le",
+        contents: taskSchedulerXml({ scope: target.scope, account, ...action, dataDir }),
+        commands: [
+            ["schtasks", "/Create", "/TN", task, "/XML", windowsTaskFile(target.scope, target.name), "/F"],
+            ...(firewallRule
+                ? [["netsh", "advfirewall", "firewall", "add", "rule", `name=${firewallRule}`, "dir=in", "action=allow", `program=${command}`, "enable=yes", "profile=any"]]
+                : []),
+            ["schtasks", "/Run", "/TN", task],
+        ],
+        dataDir,
+        logs: [path.join(dataDir, "logs", "paperboard.log"), `schtasks /Query /TN ${task} /V /FO LIST`],
+        logFile: path.join(dataDir, "logs", "paperboard.log"),
+        mainPid: () => windowsTaskState(task).pid,
+        notes,
+    };
 }
 
 // ── readiness ───────────────────────────────────────────────────────────
@@ -339,7 +629,7 @@ function recentLogs(plan: Plan, request: { target: ServiceTarget }): string {
         const out = tryRun(journal);
         return `${out.stdout}${out.stderr}`.trim();
     }
-    const log = /tail -f (.*)$/.exec(plan.logs[0])?.[1];
+    const log = plan.logFile;
     if (log && fs.existsSync(log)) return fs.readFileSync(log, "utf8").split("\n").slice(-20).join("\n").trim();
     return "";
 }
@@ -371,14 +661,11 @@ function planFor(request: InstallRequest): Plan {
     ];
     if (process.platform === "linux") return systemdPlan(request, execStart);
     if (process.platform === "darwin") return launchdPlan(request, execStart);
+    if (process.platform === "win32") return windowsPlan(request, execStart);
     throw new Error(`install-service does not support ${process.platform}.`);
 }
 
 export async function installService(request: InstallRequest): Promise<number> {
-    if (process.platform === "win32") {
-        console.error(windowsInstructions());
-        return EXIT.FAILURE;
-    }
     requireScopeRights(request.target);
     const plan = planFor(request);
     const scopeWord = request.target.scope === "user" ? "user" : "system";
@@ -387,6 +674,10 @@ export async function installService(request: InstallRequest): Promise<number> {
         console.log(plan.contents.replace(/^/gm, "    "));
         console.log("Would run:");
         if (process.platform === "darwin") console.log(`    launchctl bootout ${(plan as ReturnType<typeof launchdPlan>).domain}/${plan.unit}   (only if it is already loaded)`);
+        if (process.platform === "win32") {
+            const win = plan as ReturnType<typeof windowsPlan>;
+            printWindowsSteps(windowsStopSteps(win.task, win.firewallRule, false));
+        }
         for (const command of plan.commands) console.log(`    ${command.join(" ")}`);
         return EXIT.OK;
     }
@@ -404,8 +695,20 @@ export async function installService(request: InstallRequest): Promise<number> {
             ran.push(bootout);
         }
     }
+    if (process.platform === "win32") {
+        const win = plan as ReturnType<typeof windowsPlan>;
+        // an update replaces the running daemon: /Create under a running
+        // instance would leave the old one running with its old options, and
+        // a rule from an earlier install may name an older program. /Create
+        // enables the task again.
+        ran.push(...await runWindowsStopSteps(win.task, win.firewallRule, windowsStopSteps(win.task, win.firewallRule, false)));
+    }
     fs.mkdirSync(path.dirname(plan.file), { recursive: true });
-    fs.writeFileSync(plan.file, plan.contents, { mode: 0o644 });
+    fs.writeFileSync(
+        plan.file,
+        plan.encoding === "utf16le" ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(plan.contents, "utf16le")]) : plan.contents,
+        { mode: 0o644 },
+    );
     for (const command of plan.commands) {
         run(command);
         ran.push(command);
@@ -438,12 +741,14 @@ export async function installService(request: InstallRequest): Promise<number> {
     return EXIT.OK;
 }
 
+// a service file as text: Task Scheduler's XML is UTF-16
+function readServiceFile(file: string): string {
+    const bytes = fs.readFileSync(file);
+    return bytes[0] === 0xff && bytes[1] === 0xfe ? bytes.subarray(2).toString("utf16le") : bytes.toString("utf8");
+}
+
 export async function uninstallService(target: ServiceTarget): Promise<number> {
-    if (process.platform === "win32") {
-        console.error(windowsInstructions());
-        return EXIT.FAILURE;
-    }
-    if (process.platform !== "linux" && process.platform !== "darwin") {
+    if (process.platform !== "linux" && process.platform !== "darwin" && process.platform !== "win32") {
         throw new Error(`uninstall-service does not support ${process.platform}.`);
     }
     requireScopeRights(target);
@@ -451,6 +756,7 @@ export async function uninstallService(target: ServiceTarget): Promise<number> {
     let file: string;
     let stop: string[][];
     let after: string[][] = [];
+    let windows: { task: string; rule: string | null; steps: WindowsStep[] } | null = null;
     if (process.platform === "linux") {
         const unit = `${target.name}.service`;
         const ctl = target.scope === "user" ? ["systemctl", "--user"] : ["systemctl"];
@@ -459,6 +765,14 @@ export async function uninstallService(target: ServiceTarget): Promise<number> {
             : path.join("/etc/systemd/system", unit);
         stop = [[...ctl, "disable", "--now", unit]];
         after = [[...ctl, "daemon-reload"]];
+    } else if (process.platform === "win32") {
+        const task = windowsTaskName(target.scope, target.name);
+        file = windowsTaskFile(target.scope, target.name);
+        // the task and its firewall rule go before the file that marks the
+        // install, so a failed step can be run again
+        const rule = target.scope === "system" ? windowsFirewallRule(target.name) : null;
+        windows = { task, rule, steps: windowsStopSteps(task, rule, true) };
+        stop = [];
     } else {
         const label = launchdLabel(target.name);
         const domain = target.scope === "user" ? `gui/${account.uid}` : "system";
@@ -469,18 +783,21 @@ export async function uninstallService(target: ServiceTarget): Promise<number> {
     }
     if (!fs.existsSync(file)) {
         const flags = `${target.scope === "system" ? " --system" : ""}${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`;
-        console.error(`No ${target.name} ${target.scope} service is installed (there is no ${file}).${target.scope === "user" ? ` If you installed a system service, run sudo papercrane uninstall-service --system${flags.replace(" --system", "")}.` : ""}`);
+        const elevated = process.platform === "win32" ? "from a terminal opened with Run as administrator, run papercrane" : "run sudo papercrane";
+        console.error(`No ${target.name} ${target.scope} service is installed (there is no ${file}).${target.scope === "user" ? ` If you installed a system service, ${elevated} uninstall-service --system${flags.replace(" --system", "")}.` : ""}`);
         return EXIT.FAILURE;
     }
-    const dataDir = /Paperboard data: (.*?)( -->)?$/m.exec(fs.readFileSync(file, "utf8"))?.[1] ?? null;
+    const dataDir = /Paperboard data: (.*?)( -->)?$/m.exec(readServiceFile(file))?.[1] ?? null;
     if (target.dryRun) {
         console.log("Would run:");
+        if (windows) printWindowsSteps(windows.steps);
         for (const command of [...stop, ["rm", file], ...after]) console.log(`    ${command.join(" ")}`);
         console.log(`\nYour data${dataDir ? ` in ${dataDir}` : ""} would be kept.`);
         return EXIT.OK;
     }
     // the daemon stops before its service file goes
     for (const command of stop) run(command);
+    if (windows) stop = await runWindowsStopSteps(windows.task, windows.rule, windows.steps);
     fs.unlinkSync(file);
     for (const command of after) run(command);
     console.log(`Removed the ${target.name} service.\n`);

@@ -13,7 +13,7 @@ export default function RunAsServiceDoc() {
             <PaperText preset="header" as="h1">Run the daemon as a service</PaperText>
             <PaperText preset="body" as="p">
                 Install the Paperboard server daemon as a service so it runs in the background, starts with the computer, and comes back after a crash.
-                One command sets it up on Linux and macOS. On Windows it prints the Task Scheduler commands to run instead.
+                One command sets it up on Linux, macOS and Windows.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
@@ -55,7 +55,7 @@ It is running (PID 48211) on https://192.168.1.50:45464.
 
             <PaperText preset="subheader" as="h2" id="user-or-system">A user service or a system service</PaperText>
             <PaperText preset="body" as="p">
-                By default the service belongs to your account. Add <PaperCode>--system</PaperCode> for a service that starts when the computer boots, with nobody signed in. It needs <PaperCode>sudo</PaperCode>:
+                By default the service belongs to your account. Add <PaperCode>--system</PaperCode> for a service that starts when the computer boots, with nobody signed in. It needs <PaperCode>sudo</PaperCode>, or on Windows a terminal opened with <b>Run as administrator</b>:
             </PaperText>
             <PaperCode block language="sh">
 {`sudo papercrane install-service --system`}
@@ -77,11 +77,17 @@ It is running (PID 48211) on https://192.168.1.50:45464.
                     <tr><td>Linux, system</td><td><PaperCode>/etc/systemd/system/papercrane.service</PaperCode></td></tr>
                     <tr><td>macOS, user</td><td><PaperCode>~/Library/LaunchAgents/dev.paperboard.papercrane.plist</PaperCode></td></tr>
                     <tr><td>macOS, system</td><td><PaperCode>/Library/LaunchDaemons/dev.paperboard.papercrane.plist</PaperCode></td></tr>
+                    <tr><td>Windows, user</td><td><PaperCode>%LOCALAPPDATA%\Paperboard\services\papercrane.xml</PaperCode>, as the task <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode></td></tr>
+                    <tr><td>Windows, system</td><td><PaperCode>%ProgramData%\Paperboard\services\papercrane.xml</PaperCode>, as the task <PaperCode>\Paperboard\papercrane</PaperCode></td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
                 A system service starts at boot. On Linux it waits for the network first.
-                A macOS user service runs while you are signed in to the Mac.
+                A macOS or Windows user service runs while you are signed in.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                On Windows, a system service runs as your account (or <PaperCode>--run-as</PaperCode>&apos;s) without storing its password, and <PaperCode>install-service</PaperCode> lets it through Windows Firewall.
+                A user service has no firewall rule: Windows asks the first time the daemon listens on your network.
             </PaperText>
             <PaperText preset="body" as="p">
                 On Linux, a user service stops when your last session ends, which on a headless server is when you close SSH.{" "}
@@ -145,6 +151,28 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.paperboard.papercran
             <PaperText preset="body" as="p">
                 To restart on macOS, stop it, then start it.
             </PaperText>
+            <PaperText preset="title" as="h3" id="manage-windows">Windows</PaperText>
+            <PaperCode block language="text">
+{`schtasks /Query /TN \\Paperboard\\papercrane /V /FO LIST   (check it)`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                While the task is on, Task Scheduler starts the daemon again within a minute of it stopping, so a crash doesn&apos;t keep it down. To stop it, turn the task off first:
+            </PaperText>
+            <PaperCode block language="text">
+{`schtasks /Change /TN \\Paperboard\\papercrane /DISABLE
+schtasks /End /TN \\Paperboard\\papercrane`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                To start it again:
+            </PaperText>
+            <PaperCode block language="text">
+{`schtasks /Change /TN \\Paperboard\\papercrane /ENABLE
+schtasks /Run /TN \\Paperboard\\papercrane`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                These name the system task. A user task sits in a folder named after your account: <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode>.
+                Task Scheduler keeps no log of the daemon's output. Read <PaperCode>logs\paperboard.log</PaperCode> in its data directory.
+            </PaperText>
             <PaperText preset="body" as="p">
                 For a Linux system service, drop <PaperCode>--user</PaperCode> and put <PaperCode>sudo</PaperCode> in front of <PaperCode>systemctl</PaperCode>.
                 For a macOS system service, use <PaperCode>sudo launchctl</PaperCode> with <PaperCode>system</PaperCode> in place of <PaperCode>gui/$(id -u)</PaperCode>, the file in <PaperCode>/Library/LaunchDaemons</PaperCode>, and the log <PaperCode>/Library/Logs/Paperboard/papercrane.log</PaperCode>.
@@ -170,29 +198,15 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.paperboard.papercran
                 The new version runs from the next start: restart the service.
             </PaperText>
             <PaperText preset="body" as="p">
-                A daemon on Windows does not update itself. Download the new zip and replace the files.
+                A daemon on Windows does not update itself. Stop the service, replace the files with the ones from the new zip, then start it.
             </PaperText>
-
-            <PaperText preset="subheader" as="h2" id="windows">Windows</PaperText>
-            <PaperText preset="body" as="p">
-                On Windows, <PaperCode>install-service</PaperCode> changes nothing. It prints the commands that start the daemon when you sign in, with your program's path in them:
-            </PaperText>
-            <PaperCode block language="text">
-{`schtasks /Create /TN "Paperboard server daemon" /SC ONLOGON /RL LIMITED /TR "\\"C:\\Paperboard\\papercrane-windows-x64.exe\\" --headless"`}
-            </PaperCode>
-            <PaperText preset="body" as="p">
-                Run that in a terminal opened with <b>Run as administrator</b>. Remove the task with:
-            </PaperText>
-            <PaperCode block language="text">
-{`schtasks /Delete /TN "Paperboard server daemon"`}
-            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="remove">Remove the service</PaperText>
             <PaperCode block language="sh">
 {`papercrane uninstall-service`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                It stops the daemon, then removes the service file. Add <PaperCode>--system</PaperCode> (with <PaperCode>sudo</PaperCode>) or <PaperCode>--name</PaperCode> to match how you installed it.
+                It stops the daemon, then removes the service file, and on Windows the task and its firewall rule. Add <PaperCode>--system</PaperCode> (with <PaperCode>sudo</PaperCode>, or as administrator on Windows) or <PaperCode>--name</PaperCode> to match how you installed it.
                 Your data directory stays as it is, and game servers that were running keep running until a daemon starts again and takes them over.
             </PaperText>
 
