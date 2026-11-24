@@ -263,6 +263,24 @@ describe("unreadable state is quarantined", () => {
 		}, dir);
 		expect(fs.readFileSync(path.join(swap, "parked", "world", "region", "r.0.0.mca"), "utf8")).toBe("the user's world");
 	});
+
+	test("an interrupted restore whose panel can't be told keeps every panel's service stopped, saying why", async () => {
+		const dir = dataDir();
+		for (const id of ["test.first", "test.second"]) await installPanelFiles(dir, { id, service: serviceSource({ calls: "{ ping: async () => 'pong' }" }) });
+		// a journal that can't be read names no panel: any of them may be half swapped
+		fs.mkdirSync(path.join(dir, "backups", ".work", "restore-x", "journal.json"), { recursive: true });
+
+		await withDaemon(async (daemon) => {
+			const host = await daemon.rpc();
+			const listed = await host.ok("panel:list");
+			for (const id of ["test.first", "test.second"]) {
+				const panel = listed.panels.find((p: { id: string }) => p.id === id) as { serviceError?: string };
+				expect({ id, why: panel.serviceError }).toEqual({ id, why: expect.stringContaining("An interrupted restore of an unknown panel couldn't be undone") });
+				expect((await host.call("blocks:call", serviceCall(id, "ping"))).error).toBeDefined();
+			}
+			await host.close();
+		}, dir);
+	});
 });
 
 // Vault behaviour.

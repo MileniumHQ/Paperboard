@@ -314,18 +314,6 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         if (target !== null) throw new Error(`Blocks backs up as a whole, so it has no "${target}" to back up`);
     };
 
-    // whether this restore's files were taken: one that then couldn't be kept puts the projects back too
-    let tookRestore = false;
-    /** the files changed under the projects: read again from them, the flows run from those */
-    const reread = async (): Promise<void> => {
-        if (!store.paused) await store.pause();
-        // the read is done before any held change runs, so none meets the old projects over the new files
-        await store.resume(true);
-        for (const run of runs.keys()) run.abort();
-        setState({ projects: store.list(), projectsError: null, loaded: true });
-        publishProjects();
-    };
-
     const backup = {
         beforeBackup: async (target: string | null): Promise<BackupContents> => {
             noTarget(target);
@@ -337,20 +325,19 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
             noTarget(target);
             if ((await read) !== null) throw new Error("The projects couldn't be read, so they can't be replaced by a backup");
             await store.pause();
-            tookRestore = false;
         },
         paused: () => store.paused,
-        /** the copy is made, or a restore did not happen: the held changes go on, over the projects as they were */
+        /** the copy is made, or a restore did not happen: the held changes go on */
         resume: async (): Promise<void> => {
-            if (tookRestore) {
-                tookRestore = false;
-                await reread();
-            } else if (store.paused) await store.resume(false);
+            if (store.paused) await store.resume(false);
         },
         /** the files are the backup's: the projects are read again from them and the flows run from those */
         restored: async (): Promise<void> => {
-            await reread();
-            tookRestore = true;
+            // the read is done before any held change runs, so none meets the old projects over the new files
+            await store.resume(true);
+            for (const run of runs.keys()) run.abort();
+            setState({ projects: store.list(), projectsError: null, loaded: true });
+            publishProjects();
         },
     };
 

@@ -28,6 +28,8 @@ import { BACKUP_ID_RE, MAX_BACKUP_PATHS, backupPathsProblem, newBackupId, type B
 import { isBackupPath } from "@mileniumhq/paperapi/backups";
 import { BACKUP_LABEL_MAX } from "@mileniumhq/paperapi/protocol";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
+import { clipProblemReport } from "@mileniumhq/paperapi/problemShape";
+import { problemsFor } from "../rpc/problems";
 import type { BackupLocation } from "@mileniumhq/paperapi/backups";
 
 /** byte counts reach listeners at most this often; a new step at once */
@@ -283,16 +285,18 @@ export class BackupService {
                         }
                         return failed(why);
                     }
+                    // the panel carries on over the restored files: they are never touched again
                     try {
                         swap.commit();
                     } catch (err) {
-                        // the panel took the files, but they can't be kept: it hears they went back
-                        try {
-                            swap.rollback();
-                        } catch (rollbackErr) {
-                            throw new Error(`${errorMessage(err)}; ${errorMessage(rollbackErr)}`, { cause: err });
-                        }
-                        return failed(err);
+                        // quiet: the restore went through; what is left is shown as a standing problem
+                        logger.error(`[backups] ${panelId}'s restore went through, but couldn't be marked finished:`, err);
+                        problemsFor(this.engine).report(panelId, {
+                            key: "paperboard:unfinished-restore",
+                            title: "A restore couldn't be marked finished",
+                            message: clipProblemReport({ title: "", message: `The backup's files are in place, but ${errorMessage(err)}. Delete it before Paperboard starts again, or that start puts back the files from before the restore.` }).message,
+                        });
+                        return;
                     }
                     await swap.clear();
                 });

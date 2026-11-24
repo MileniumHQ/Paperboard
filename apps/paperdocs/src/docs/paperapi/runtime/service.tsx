@@ -152,7 +152,7 @@ type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Ev
                         <td><PaperCode>afterRestore</PaperCode></td>
                         <td><PaperCode>(ctx, ended: {"{ target, backup, ok: true, data } | { target, backup, ok: false, error }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
                         <td>No default (a panel without it can't restore its backups)</td>
-                        <td>Called when the restore ended. On <PaperCode>ok</PaperCode> the files are the backup's and <PaperCode>data</PaperCode> is what <PaperCode>beforeBackup</PaperCode> handed over: apply it, pick up from the files and resume. When it throws, the original files are put back and it is called again with <PaperCode>ok: false</PaperCode>, where the files are as they were: resume. That call also comes, rarely, after an <PaperCode>ok</PaperCode> it took, when the restore couldn't be finished: undo what it applied and pick up from the files again.</td>
+                        <td>Called when the restore ended. On <PaperCode>ok</PaperCode> the files are the backup's and <PaperCode>data</PaperCode> is what <PaperCode>beforeBackup</PaperCode> handed over: apply it, pick up from the files and resume. When it throws, the original files are put back and it is called again with <PaperCode>ok: false</PaperCode>, where the files are as they were: resume.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>beforeUpdate</PaperCode></td>

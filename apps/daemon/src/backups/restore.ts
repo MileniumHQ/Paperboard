@@ -75,14 +75,21 @@ function undo(storageDir: string, dir: string, journal: Journal): void {
         fs.rmSync(live, { recursive: true, force: true });
         move(original, live);
     }
-    fs.rmSync(dir, { recursive: true, force: true });
+    // every file is back: the journal goes, so no later start undoes it again
+    fs.unlinkSync(path.join(dir, JOURNAL));
+    try {
+        fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+        // quiet: the files are whole; the empty swap folder is swept as a leftover at the next start
+        logger.warn(`[backups] couldn't delete ${dir} after putting its files back:`, err);
+    }
 }
 
 export interface RestoreSwap {
     /**
      * Keeps the backup's files: deletes the journal, so a crash from here on
-     * keeps them. Throws when it can't, and the swap still stands then, to be
-     * rolled back.
+     * keeps them. Throws when it can't: the files stay the backup's, and the
+     * journal would have the next start put the originals back.
      */
     commit(): void;
     /** after commit, deletes the parked originals; never rejects, as the next start sweeps what is left */
@@ -139,7 +146,7 @@ export function swapIn(workDir: string, panelId: string, storageDir: string, sta
             try {
                 fs.unlinkSync(path.join(dir, JOURNAL));
             } catch (err) {
-                throw new Error(`The restore couldn't be finished, as its journal couldn't be deleted: ${errorMessage(err)}`, { cause: err });
+                throw new Error(`Its journal, ${path.join(dir, JOURNAL)}, couldn't be deleted (${errorMessage(err)})`, { cause: err });
             }
         },
         clear: () =>

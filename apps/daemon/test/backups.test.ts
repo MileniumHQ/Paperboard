@@ -356,7 +356,7 @@ describe("backup archives and restores never reach past the panel's files", () =
 		expect(fs.readdirSync(work)).toEqual([]);
 	});
 
-	test("a restore that can't be committed still stands, to be rolled back", () => {
+	test("a restore whose journal can't be deleted keeps the backup's files and names the journal", () => {
 		const storage = tempDir();
 		const work = tempDir();
 		fs.writeFileSync(path.join(storage, "a.txt"), "live");
@@ -366,12 +366,36 @@ describe("backup archives and restores never reach past the panel's files", () =
 		const [dir] = fs.readdirSync(work);
 		fs.chmodSync(path.join(work, dir!), 0o555);
 		try {
-			expect(() => swap.commit()).toThrow("journal couldn't be deleted");
+			expect(() => swap.commit()).toThrow(path.join(work, dir!, "journal.json"));
 		} finally {
 			fs.chmodSync(path.join(work, dir!), 0o755);
 		}
-		swap.rollback();
-		expect(fs.readFileSync(path.join(storage, "a.txt"), "utf8")).toBe("live");
+		expect(fs.readFileSync(path.join(storage, "a.txt"), "utf8")).toBe("backup");
+	});
+
+	test("a rollback whose swap folder can't be deleted still puts the files back, and no later start undoes it again", () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.writeFileSync(path.join(storage, "a.txt"), "live");
+		const staged = tempDir();
+		fs.writeFileSync(path.join(staged, "a.txt"), "backup");
+		const swap = swapIn(work, "test.busy", storage, staged, { paths: ["a.txt"], exclude: [] });
+		const [dir] = fs.readdirSync(work);
+		// something in the swap folder that won't go, as an open file on Windows wouldn't
+		const busy = path.join(work, dir!, "busy");
+		fs.mkdirSync(path.join(busy, "inner"), { recursive: true });
+		fs.writeFileSync(path.join(busy, "inner", "x"), "x");
+		fs.chmodSync(busy, 0o555);
+		try {
+			swap.rollback();
+			expect(fs.readFileSync(path.join(storage, "a.txt"), "utf8")).toBe("live");
+			expect(fs.existsSync(path.join(work, dir!, "journal.json"))).toBe(false);
+			fs.writeFileSync(path.join(storage, "a.txt"), "changed after");
+			expect(recoverRestores(work, () => storage)).toEqual([]);
+			expect(fs.readFileSync(path.join(storage, "a.txt"), "utf8")).toBe("changed after");
+		} finally {
+			fs.chmodSync(busy, 0o755);
+		}
 	});
 
 	test("each interrupted restore is recovered on its own, and one that can't be is named, not thrown", async () => {

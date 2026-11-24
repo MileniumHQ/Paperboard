@@ -16,8 +16,8 @@ definePanelService({
     },
     // the note is all the panel keeps, and only its page writes it
     beforeBackup: () => ({ paths: [NOTE] }),
-    // either way the note is read again: a restore that ends badly after the service took it puts the old note back
-    afterRestore: async (ctx) => {
+    afterRestore: async (ctx, ended) => {
+        if (!ended.ok) return;
         ctx.setState({ noteAtStart: (await fileApi.read(NOTE, PANEL_ID)) ?? "" });
     },
 });
