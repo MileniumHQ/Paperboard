@@ -63,6 +63,8 @@ test("scrub replaces compressed, bracketed and zoned IPv6 addresses", () => {
             "dialing fe80::1: refused",
             "mapped ::ffff:192.168.1.9 seen",
             "loopback ::1 and [::1]:3000",
+            "ip:2001:db8:85a3::8a2e:370:7334 and host:fe80::1c2b:3cff:fe4d:5e6f%en0",
+            "at time:10:00:01 ratio:3:2",
         ].join("\n"),
         WHO,
     );
@@ -74,10 +76,27 @@ test("scrub replaces compressed, bracketed and zoned IPv6 addresses", () => {
             "dialing <ip>: refused",
             "mapped <ip> seen",
             "loopback ::1 and [::1]:3000",
+            "ip:<ip> and host:<ip>",
+            "at time:10:00:01 ratio:3:2",
         ].join("\n"),
     );
     // not addresses
     expect(scrub("2026-11-23T10:00:01.000Z at 10:00:01 ratio 3:2 Foo::bar", WHO)).toContain("2026-11-23T10:00:01.000Z at 10:00:01 ratio 3:2");
+});
+
+// Inventory: Core contracts — an address among the computer names doesn't turn its first number into a placeholder everywhere.
+test("scrub keeps the numbers of an address that is also a computer's name", () => {
+    const who = { ...WHO, computerNames: ["192.168.1.20", "127.0.0.1", "fe80::1", "Workshop"] };
+    expect(scrub("pid 127 port 192 uptime 168 on 192.168.1.20, Workshop up", who)).toBe("pid 127 port 192 uptime 168 on <ip>, <computer> up");
+});
+
+// Inventory: Security — a secret over the entry cap is scrubbed before it's cut, not left half-cut and unrecognised.
+test("an entry is scrubbed before it is cut", () => {
+    const secret = "sk-ant-abcdefghijklmnop1234";
+    const log = line("10:00:00", "ERROR", `${"x".repeat(1950)} ${secret} tail`);
+    const details = buildDetails({ computer: { kind: "this", connected: true }, pairedCount: 0, panels: [], log }, WHO);
+    expect(details).not.toContain("sk-ant");
+    expect(details).toContain("<secret>");
 });
 
 test("scrub replaces the home folder only where it is the folder", () => {

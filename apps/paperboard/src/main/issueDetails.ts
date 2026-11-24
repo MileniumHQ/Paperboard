@@ -47,8 +47,9 @@ const NAMED_SECRET =
 const DISCOVERED = /(Paperboard Server (?:online|offline): )[^(\n]+?( \()/g;
 const MDNS_HOST = /\b[\w-]+\.local\b/gi;
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-// a run of hex digits, colons and dots holding a colon, checked as an address below: compressed (::) and bracketed forms included, timestamps not
-const IPV6_CANDIDATE = /(?<![\w:.])([0-9a-f:.]*:[0-9a-f:.]*)(?:%[\w.-]+)?/gi;
+// a run of hex digits, colons and dots holding a colon, checked as an address below: compressed (::) and bracketed forms included, timestamps not.
+// It starts after a non-word character, or right after a "label:" (ip:2001:db8::1, host:fe80::1)
+const IPV6_CANDIDATE = /(?:(?<![\w:.])|(?<=[a-z]:))([0-9a-f:.]*:[0-9a-f:.]*)(?:%[\w.-]+)?/gi;
 const EMAIL = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
 const URL_USERINFO = /(\b[a-z][\w+.-]*:\/\/)[^/\s:@]+(?::[^/\s@]*)?@/gi;
 // terminal colour codes some tools print, which aren't text
@@ -84,6 +85,8 @@ export function scrub(text: string, who: Scrubber): string {
     out = scrubIPv6(out);
     out = out.replace(IPV4, (ip) => (ip === "127.0.0.1" || ip === "0.0.0.0" ? ip : "<ip>"));
     const names = [...who.computerNames, who.username]
+        // an address is replaced above; its first number (127, 192) isn't a name
+        .filter((name) => !net.isIP(name.trim()))
         .flatMap((name) => [name, name.split(".")[0] ?? ""])
         .map((name) => name.trim())
         .filter((name) => name.length >= 3)
@@ -108,12 +111,13 @@ export function logEntries(text: string): string[] {
     }
     // the read may start mid-entry; only whole ones count
     if (entries[0] && !ENTRY_START.test(entries[0])) entries.shift();
-    return entries.map((entry) => {
-        // the app's own logger name says nothing here
-        const tidy = entry.replace(/^(\S+ \[\w+\]) \[paperboard\]/, "$1");
-        return tidy.length > ENTRY_MAX ? `${tidy.slice(0, ENTRY_MAX)} …(cut)` : tidy;
-    });
+    // the app's own logger name says nothing here
+    return entries.map((entry) => entry.replace(/^(\S+ \[\w+\]) \[paperboard\]/, "$1"));
 }
+
+// an entry past ENTRY_MAX is cut after it's scrubbed: cutting first could leave
+// half a secret that no longer matches its shape
+const cutEntry = (entry: string) => (entry.length > ENTRY_MAX ? `${entry.slice(0, ENTRY_MAX)} …(cut)` : entry);
 
 /** The recent warnings and errors, then the latest entries of any level: the newest of each, in time order. */
 export function logLists(entries: string[]): { problems: string[]; recent: string[] } {
@@ -192,8 +196,8 @@ export function buildDetails(input: DetailsInput, who: Scrubber): string {
         "From this computer's Paperboard log:",
         "",
     ].join("\n");
-    // each entry is scrubbed whole, so a cut never leaves half a secret
-    const scrubbed = logLists(logEntries(input.log).map((entry) => scrub(entry, who)));
+    // each entry is scrubbed whole, then cut
+    const scrubbed = logLists(logEntries(input.log).map((entry) => cutEntry(scrub(entry, who))));
     const headText = scrub(head, who);
     const lists = { problems: [...scrubbed.problems], recent: [...scrubbed.recent] };
     // over the limit, each section loses its oldest entries first, whichever is longer:
