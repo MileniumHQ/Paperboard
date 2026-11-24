@@ -4,18 +4,17 @@ import * as path from "node:path";
 import * as tarLib from "tar";
 import { PaperCraneEngine } from "../src/engine/index";
 import { BackupService } from "../src/backups/service";
-import { createPanelArchive, extractPanelArchive } from "../src/backups/archive";
+import { createBackupArchive, extractBackupArchive } from "../src/backups/archive";
+import { recoverRestores, swapIn } from "../src/backups/restore";
 import { LocalBackupStore } from "../src/backups/localStore";
 import { S3BackupStore, signS3Request } from "../src/backups/s3Store";
 import { DriveBackupStore } from "../src/backups/driveStore";
-import { BUSY_RETRY_MS } from "../src/backups/schedules";
 import { newBackupId, type BackupRecord } from "../src/backups/types";
-import { ROUTINE_BACKUP_LABEL } from "@mileniumhq/paperapi/backups";
 import { tarGz } from "testkit/archive";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { killWorkloads, startCrane } from "testkit/crane";
 import { dataDir, listTree, tempDir } from "testkit/fs";
-import { startDaemon, stopDaemon, type InProcessDaemon } from "testkit/inproc";
+import { startDaemon, stopDaemon } from "testkit/inproc";
 import { installPanelFiles, PAPERAPI, serviceCall, serviceSource } from "testkit/panels";
 import type { Rpc } from "testkit/rpc";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
@@ -24,164 +23,150 @@ setDefaultTimeout(TEST_TIMEOUT_MS);
 
 afterEach(stopDaemon);
 
-// A service that writes a line to `log` each time it starts.
-function countedService(log: string, body: { calls?: string; options?: string; extra?: string } = {}) {
-	return serviceSource({
-		...body,
-		extra: `import * as fs from "node:fs";\nfs.appendFileSync(${JSON.stringify(log)}, "start\\n");\n${body.extra ?? ""}`,
-	});
-}
-const starts = (log: string) => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").split("\n").filter(Boolean).length : 0);
-
 async function readyService(rpc: Rpc, panelId: string, call = "ping") {
 	await waitFor(`${panelId}'s service`, async () => !(await rpc.call("blocks:call", serviceCall(panelId, call))).error);
 }
 
 const PING = "{ ping: async () => 'pong' }";
+const lines = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n").filter(Boolean) : []);
 
-// A panel backs up and restores its own data.
-describe("a panel backs up and restores its own data", () => {
-	test("backup needs a location, records the version, restarts the service, and restore puts the data back", async () => {
+// A service that logs each start and each hook it hears to `log`, and
+// backs up what `contents` names. Its afterRestore writes the data it was
+// handed to settings.json, and refuses restored files when `refuse` exists.
+function hookedService(log: string, contents: string, refuse = "/nonexistent") {
+	const note = (what: string) => `fs.appendFileSync(${JSON.stringify(log)}, ${what} + "\\n")`;
+	return serviceSource({
+		calls: PING,
+		extra: `import * as fs from "node:fs";\n${note('"start"')};`,
+		options: `
+			beforeBackup: async (_ctx, { target }) => { ${note('"before-backup " + target')}; return ${contents}; },
+			afterBackup: async (_ctx, copied) => { ${note('"after-backup " + JSON.stringify(copied)')}; },
+			beforeRestore: async (_ctx, { target }) => { ${note('"before-restore " + target')}; },
+			afterRestore: async (ctx, ended) => {
+				${note('"after-restore " + ended.ok')};
+				if (ended.ok && fs.existsSync(${JSON.stringify(refuse)})) throw new Error("the restored files are not usable");
+				if (ended.ok) fs.writeFileSync(${JSON.stringify(path.join(path.dirname(log), "settings.json"))}, JSON.stringify(ended.data));
+			},`,
+	});
+}
+
+async function members(archive: string): Promise<string[]> {
+	const out: string[] = [];
+	await tarLib.t({ file: archive, onReadEntry: (e) => out.push(e.path.replace(/\/$/, "")) });
+	return out.sort();
+}
+
+describe("a panel's service runs its own backups", () => {
+	test("a backup holds what beforeBackup names, nothing restarts, and a restore swaps only those files and hands back the data", async () => {
 		const dir = dataDir();
-		const log = path.join(tempDir(), "starts.log");
-		await installPanelFiles(dir, { id: "test.saver", version: "1.2.3", service: countedService(log, { calls: PING }) });
+		const log = path.join(tempDir(), "hooks.log");
+		const contents = `{ paths: ["world"], exclude: ["world/cache"], skip: ["session.lock"], data: { difficulty: "hard" } }`;
+		await installPanelFiles(dir, { id: "test.saver", version: "1.2.3", service: hookedService(log, contents) });
 		const daemon = await startDaemon({ dataDir: dir });
 		const host = await daemon.rpc();
 		const panel = await daemon.panelRpc("test.saver");
 		await readyService(host, "test.saver");
-		await panel.ok("file:write", { targetPath: "world/level.dat", content: "original" });
-		await panel.ok("config:set", { id: "test.saver", data: { difficulty: "hard" } });
+		const storage = path.join(dir, "files", "test.saver");
+		for (const [name, content] of [["world/level.dat", "original"], ["world/deep/session.lock", "lock"], ["world/cache/big.bin", "cache-1"], ["notes.txt", "notes-1"]]) {
+			await panel.ok("file:write", { targetPath: name!, content: content! });
+		}
 
-		expect((await panel.fail("backup:create", { panelId: "test.saver" })).code).toBe("CONFLICT");
-		await host.ok("backup:panel-destination-set", { panelId: "test.saver", destinationId: "local" });
-		const before = starts(log);
-		const record = await panel.ok("backup:create", { panelId: "test.saver", label: "before change" });
-		expect(record.panelVersion).toBe("1.2.3");
-		expect(starts(log)).toBe(before + 1);
-		await readyService(host, "test.saver");
+		expect((await panel.fail("backup:create", { panelId: "test.saver", target: "w1" })).code).toBe("CONFLICT");
+		await host.ok("backup:panel-location-set", { panelId: "test.saver", locationId: "local" });
+		const record: BackupRecord = await panel.ok("backup:create", { panelId: "test.saver", target: "w1", label: "before change" });
+		expect(record).toMatchObject({ format: 2, panelId: "test.saver", target: "w1", panelVersion: "1.2.3", label: "before change", paths: ["world"], exclude: ["world/cache"] });
+		expect(lines(log)).toEqual(["start", "before-backup w1", 'after-backup {"target":"w1","ok":true}']);
+		const archive = path.join(dir, "backups", "panels", "test.saver", "w1", `${record.id}.pbbackup`);
+		expect(await members(archive)).toEqual(["data.json", "files/world", "files/world/deep", "files/world/level.dat"]);
+		// the panel as a whole and other targets have their own history
+		expect((await panel.ok("backup:list", { panelId: "test.saver", target: "w1" })).backups.map((b: BackupRecord) => b.id)).toEqual([record.id]);
+		expect((await panel.ok("backup:list", { panelId: "test.saver" })).backups).toEqual([]);
 
 		await panel.ok("file:write", { targetPath: "world/level.dat", content: "changed" });
 		await panel.ok("file:write", { targetPath: "world/new.dat", content: "new" });
-		await panel.ok("config:set", { id: "test.saver", data: { difficulty: "easy" } });
-		await panel.ok("backup:restore", { panelId: "test.saver", backupId: record.id });
-		expect(fs.readFileSync(path.join(dir, "files", "test.saver", "world", "level.dat"), "utf8")).toBe("original");
-		expect(fs.existsSync(path.join(dir, "files", "test.saver", "world", "new.dat"))).toBe(false);
-		expect(JSON.parse(fs.readFileSync(path.join(dir, "configs", "test.saver.json"), "utf8"))).toEqual({ difficulty: "hard" });
-		expect(starts(log)).toBe(before + 2);
-		await readyService(host, "test.saver");
-		expect(listTree(dir).filter((f) => f.includes(".restore-parked"))).toEqual([]);
+		await panel.ok("file:write", { targetPath: "world/cache/big.bin", content: "cache-2" });
+		await panel.ok("file:write", { targetPath: "notes.txt", content: "notes-2" });
+		await panel.ok("backup:restore", { panelId: "test.saver", target: "w1", backupId: record.id });
+		expect(fs.readFileSync(path.join(storage, "world", "level.dat"), "utf8")).toBe("original");
+		expect(fs.existsSync(path.join(storage, "world", "new.dat"))).toBe(false);
+		// what the backup left out, and what it never named, stay as they are
+		expect(fs.readFileSync(path.join(storage, "world", "cache", "big.bin"), "utf8")).toBe("cache-2");
+		expect(fs.readFileSync(path.join(storage, "notes.txt"), "utf8")).toBe("notes-2");
+		expect(JSON.parse(fs.readFileSync(path.join(path.dirname(log), "settings.json"), "utf8"))).toEqual({ difficulty: "hard" });
+		expect(lines(log).slice(3)).toEqual(["before-restore w1", "after-restore true"]);
+		expect(lines(log).filter((l) => l === "start")).toHaveLength(1);
+		expect(fs.readdirSync(path.join(dir, "backups", ".work"))).toEqual([]);
 
-		// a backup made by a newer panel version is refused before data moves
+		// a backup made by a newer panel version is refused before files move
 		const manifest = path.join(dir, "panels", "test.saver", "manifest.json");
 		fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest, "utf8")), version: "1.0.0" }));
 		await panel.ok("file:write", { targetPath: "world/level.dat", content: "keep me" });
-		expect((await panel.fail("backup:restore", { panelId: "test.saver", backupId: record.id })).code).toBe("CONFLICT");
-		expect(fs.readFileSync(path.join(dir, "files", "test.saver", "world", "level.dat"), "utf8")).toBe("keep me");
+		expect((await panel.fail("backup:restore", { panelId: "test.saver", target: "w1", backupId: record.id })).code).toBe("CONFLICT");
+		expect(fs.readFileSync(path.join(storage, "world", "level.dat"), "utf8")).toBe("keep me");
 		await panel.close();
 		await host.close();
 	});
 
-	test("a restore whose service never gets ready puts the previous data back and runs on it", async () => {
+	test("restored files the panel can't pick up from are put back, and it hears the failure", async () => {
 		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.fragile", service: serviceSource({ calls: PING }) });
+		const log = path.join(tempDir(), "hooks.log");
+		const refuse = path.join(tempDir(), "refuse");
+		await installPanelFiles(dir, { id: "test.fragile", service: hookedService(log, `{ paths: [""], data: null }`, refuse) });
 		const daemon = await startDaemon({ dataDir: dir });
 		const host = await daemon.rpc();
 		await readyService(host, "test.fragile");
 		await host.ok("file:write", { appId: "test.fragile", targetPath: "state.txt", content: "old" });
-		await host.ok("backup:panel-destination-set", { panelId: "test.fragile", destinationId: "local" });
+		await host.ok("backup:panel-location-set", { panelId: "test.fragile", locationId: "local" });
 		const record = await host.ok("backup:create", { panelId: "test.fragile" });
-		await readyService(host, "test.fragile");
 		await host.ok("file:write", { appId: "test.fragile", targetPath: "state.txt", content: "current" });
+		await host.ok("file:write", { appId: "test.fragile", targetPath: "added.txt", content: "added" });
 
-		// the next service build cannot start on the old data
-		const stateFile = path.join(dir, "files", "test.fragile", "state.txt");
-		await installPanelFiles(dir, {
-			id: "test.fragile",
-			service: serviceSource({ calls: PING, extra: `import * as fs from "node:fs"; if (fs.readFileSync(${JSON.stringify(stateFile)}, "utf8") === "old") process.exit(1);` }),
-		});
-		expect((await host.call("backup:restore", { panelId: "test.fragile", backupId: record.id })).error).toBeTruthy();
-		expect(fs.readFileSync(stateFile, "utf8")).toBe("current");
-		await readyService(host, "test.fragile");
-		expect(listTree(dir).filter((f) => f.includes(".restore-parked"))).toEqual([]);
+		fs.writeFileSync(refuse, "");
+		const failed = await host.call("backup:restore", { panelId: "test.fragile", backupId: record.id });
+		expect(failed.error).toContain("put back");
+		const storage = path.join(dir, "files", "test.fragile");
+		expect(fs.readFileSync(path.join(storage, "state.txt"), "utf8")).toBe("current");
+		expect(fs.readFileSync(path.join(storage, "added.txt"), "utf8")).toBe("added");
+		expect(lines(log).slice(-3)).toEqual(["before-restore null", "after-restore true", "after-restore false"]);
+		expect(fs.readdirSync(path.join(dir, "backups", ".work"))).toEqual([]);
 		await host.close();
 	});
-});
 
-// Named sources and `beforeBackup` prepare only what's backed up.
-describe("named sources and beforeBackup", () => {
-	test("sources are fixed once defined, skip names at every depth, and leave other sources alone on restore", async () => {
+	test("a refused, failed or malformed backup lets the panel carry on, and keeps nothing", async () => {
 		const dir = dataDir();
-		const seen = path.join(tempDir(), "before-backup.log");
-		await installPanelFiles(dir, {
-			id: "test.multi",
-			service: serviceSource({ calls: PING, extra: 'import * as fs from "node:fs";', options: `beforeBackup: async (_ctx, options) => { fs.appendFileSync(${JSON.stringify(seen)}, String(options.sourceId) + "\\n"); },` }),
-		});
-		const daemon = await startDaemon({ dataDir: dir });
-		const panel = await daemon.panelRpc("test.multi");
-		const host = await daemon.rpc();
-		await readyService(host, "test.multi");
-		const source = (id: string, directory: string, extra: Record<string, unknown> = {}) => ({ id, directory, config: ["servers", { id }], processes: [], skip: ["session.lock"], ...extra });
-		await panel.ok("config:set", { id: "test.multi", data: { servers: [{ id: "alpha", motd: "a" }, { id: "beta", motd: "b" }] } });
-		await panel.ok("backup:source-define", { panelId: "test.multi", source: source("alpha", "servers/alpha") });
-		await panel.ok("backup:source-define", { panelId: "test.multi", source: source("beta", "servers/beta") });
-		expect((await panel.call("backup:source-define", { panelId: "test.multi", source: source("alpha", "servers/elsewhere") })).error).toContain("cannot change");
-		expect((await panel.call("backup:source-define", { panelId: "test.multi", source: source("alpha", "servers/alpha", { skip: ["../x"] }) })).error).toBeTruthy();
-		expect((await panel.call("backup:source-define", { panelId: "test.multi", source: source("alpha", "servers/alpha", { skip: ["a/b"] }) })).error).toBeTruthy();
-
-		for (const [name, content] of [["servers/alpha/world.dat", "alpha-1"], ["servers/alpha/session.lock", "lock"], ["servers/alpha/deep/session.lock", "lock"], ["servers/beta/world.dat", "beta-1"]]) {
-			await panel.ok("file:write", { targetPath: name!, content: content! });
+		const cases: Array<[string, string, string]> = [
+			["test.busy", "(() => { throw new Error('world is busy'); })()", "world is busy"],
+			["test.missing", `{ paths: ["nowhere"] }`, "nothing there"],
+			["test.escape", `{ paths: ["../other"] }`, "not a path"],
+			["test.nested", `{ paths: ["a", "a/b"] }`, "inside"],
+			["test.empty", `{ paths: [] }`, "no files"],
+		];
+		const logs = new Map<string, string>();
+		for (const [id, contents] of cases) {
+			const log = path.join(tempDir(), "hooks.log");
+			logs.set(id, log);
+			await installPanelFiles(dir, { id, service: hookedService(log, contents) });
 		}
-		await host.ok("backup:panel-destination-set", { panelId: "test.multi", sourceId: "alpha", destinationId: "local" });
-		const record = await panel.ok("backup:create", { panelId: "test.multi", sourceId: "alpha" });
-		expect(record.sourceId).toBe("alpha");
-		expect(fs.readFileSync(seen, "utf8")).toBe("alpha\n");
-		const archive = listTree(path.join(dir, "backups", "panels")).find((f) => f.endsWith(`${record.id}.pbbackup`))!;
-		const members: string[] = [];
-		await tarLib.t({ file: path.join(dir, "backups", "panels", archive), onReadEntry: (e) => members.push(e.path) });
-		expect(members.some((m) => m.endsWith("session.lock"))).toBe(false);
-		expect(members.some((m) => m.endsWith("world.dat"))).toBe(true);
-
-		await panel.ok("file:write", { targetPath: "servers/alpha/world.dat", content: "alpha-2" });
-		await panel.ok("file:write", { targetPath: "servers/beta/world.dat", content: "beta-2" });
-		await panel.ok("config:set", { id: "test.multi", data: { servers: [{ id: "alpha", motd: "a2" }, { id: "beta", motd: "b2" }] } });
-		await panel.ok("backup:restore", { panelId: "test.multi", sourceId: "alpha", backupId: record.id });
-		expect(fs.readFileSync(path.join(dir, "files", "test.multi", "servers", "alpha", "world.dat"), "utf8")).toBe("alpha-1");
-		expect(fs.readFileSync(path.join(dir, "files", "test.multi", "servers", "beta", "world.dat"), "utf8")).toBe("beta-2");
-		expect((await panel.ok("config:get", { id: "test.multi" })).data.servers).toEqual([{ id: "alpha", motd: "a" }, { id: "beta", motd: "b2" }]);
-		await panel.close();
-		await host.close();
-	});
-
-	test("a beforeBackup error refuses the backup and restarts the service", async () => {
-		const dir = dataDir();
-		const log = path.join(tempDir(), "starts.log");
-		await installPanelFiles(dir, {
-			id: "test.prep",
-			service: countedService(log, {
-				calls: PING,
-				options: "beforeBackup: async () => { throw new Error('world is busy'); },",
-			}),
-		});
+		await installPanelFiles(dir, { id: "test.nohooks", service: serviceSource({ calls: PING }) });
 		const daemon = await startDaemon({ dataDir: dir });
 		const host = await daemon.rpc();
-		const panel = await daemon.panelRpc("test.prep");
-		await readyService(host, "test.prep");
-		await panel.ok("file:write", { targetPath: "x.txt", content: "x" });
-		await host.ok("backup:panel-destination-set", { panelId: "test.prep", destinationId: "local" });
-		const before = starts(log);
-		const refused = await panel.fail("backup:create", { panelId: "test.prep" });
-		expect(refused.code).toBe("CONFLICT");
-		expect(refused.error).toContain("world is busy");
-		expect(starts(log)).toBe(before + 1);
-		await readyService(host, "test.prep");
-		await panel.close();
+		for (const id of [...logs.keys(), "test.nohooks"]) {
+			await readyService(host, id);
+			await host.ok("backup:panel-location-set", { panelId: id, locationId: "local" });
+		}
+		for (const [id, , why] of cases) {
+			expect({ id, error: (await host.call("backup:create", { panelId: id })).error }).toEqual({ id, error: expect.stringContaining(why) });
+			expect((await host.ok("backup:list", { panelId: id })).backups).toEqual([]);
+		}
+		// a copy that failed after the panel got ready is told to it
+		expect(lines(logs.get("test.missing")!).at(-1)).toContain('"ok":false');
+		expect((await host.fail("backup:create", { panelId: "test.nohooks" })).error).toContain("no beforeBackup");
+		expect((await host.fail("backup:restore", { panelId: "test.nohooks", backupId: newBackupId() })).error).toContain("no afterRestore");
+		expect(fs.readdirSync(path.join(dir, "backups", ".work"))).toEqual([]);
 		await host.close();
 	});
-});
 
-// A service backing up its own panel from a block gets the backup as the answer.
-describe("a service that backs up its own panel from a block", () => {
-	test("a block that backs up or restores gets the record as its answer, and a foreign duringCall for a block call is refused", async () => {
+	test("a block in the panel's own service backs it up and restores it while the service keeps answering", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, {
 			id: "test.blocksave",
@@ -191,7 +176,9 @@ describe("a service that backs up its own panel from a block", () => {
 				options: `onInit: () => blocksApi.panel("test.blocksave").register({ commands: [
 					{ id: "save", name: "Save", run: () => backupApi.create("test.blocksave", { label: "from block" }) },
 					{ id: "put-back", name: "Put Back", inputs: { id: { type: "text", name: "Backup ID" } }, run: ({ id }) => backupApi.restore("test.blocksave", id) },
-				] }),`,
+				] }),
+				beforeBackup: async () => ({ paths: [""] }),
+				afterRestore: async () => {},`,
 			}),
 		});
 		const crane = await startCrane({ dataDir: dir });
@@ -199,31 +186,17 @@ describe("a service that backs up its own panel from a block", () => {
 			const host = await crane.rpc();
 			await readyService(host, "test.blocksave");
 			await host.ok("file:write", { appId: "test.blocksave", targetPath: "data.txt", content: "saved" });
-			await host.ok("backup:panel-destination-set", { panelId: "test.blocksave", destinationId: "local" });
+			await host.ok("backup:panel-location-set", { panelId: "test.blocksave", locationId: "local" });
 			const block = (entry: string, inputs: Record<string, unknown> = {}) =>
 				host.ok("blocks:call", { panelId: "test.blocksave", entry, request: { inputs }, timeoutMs: 60_000 }, 70_000);
 
-			const made = (await block("command.save")).result;
-			expect(made).toMatchObject({ panelId: "test.blocksave", label: "from block" });
-			expect((await host.ok("backup:list", { panelId: "test.blocksave" })).backups.map((b: BackupRecord) => b.id)).toEqual([made.id]);
-			await readyService(host, "test.blocksave");
-
+			await block("command.save");
+			const [made] = (await host.ok("backup:list", { panelId: "test.blocksave" })).backups;
+			expect(made).toMatchObject({ panelId: "test.blocksave", target: null, label: "from block" });
 			await host.ok("file:write", { appId: "test.blocksave", targetPath: "data.txt", content: "changed" });
-			expect((await block("command.put-back", { id: made.id })).result).toMatchObject({ id: made.id });
+			await block("command.put-back", { id: made.id });
 			expect(fs.readFileSync(path.join(dir, "files", "test.blocksave", "data.txt"), "utf8")).toBe("saved");
-			await readyService(host, "test.blocksave");
-
-			// a block call that went to another connection cannot be carried by this one
-			const served = await crane.rpc();
-			await served.ok("blocks:register", { panelId: "test.carrier", entry: "command.hold", schema: { kind: "command", name: "Hold" } });
-			const held = host.call("blocks:call", { panelId: "test.carrier", entry: "command.hold", request: { inputs: {} }, timeoutMs: 60_000 }, 70_000);
-			const call = await served.next((f) => f.type === "action_call" && f.registry === "blocks" && f.action === "command.hold");
-			const intruder = await crane.rpc();
-			expect((await intruder.fail("backup:create", { panelId: "test.blocksave", duringCall: call.callId })).code).toBe("FORBIDDEN");
-			served.send({ type: "action_reply", callId: call.callId, result: "done" });
-			expect((await held).result).toEqual({ result: "done" });
-			await intruder.close();
-			await served.close();
+			expect((await host.call("blocks:call", serviceCall("test.blocksave", "ping"))).result).toBeTruthy();
 			await host.close();
 		} finally {
 			await crane.stop();
@@ -232,41 +205,77 @@ describe("a service that backs up its own panel from a block", () => {
 	});
 });
 
-// Backup archives hold only this panel's data and release every handle.
-describe("backup archives hold only the panel's data", () => {
-	const entries = { files: "files/test.arch", config: "configs/test.arch.json" };
+describe("backup archives and restores never reach past the panel's files", () => {
 	const archiveOf = (members: Parameters<typeof tarGz>[0]) => {
 		const file = path.join(tempDir(), "backup.pbbackup");
 		fs.writeFileSync(file, tarGz(members));
 		return file;
 	};
 
-	test("another panel's members, symlinks and archives over the entry budget are refused with staging left empty", async () => {
+	test("members outside files/ and data.json, links, and archives over the entry budget are refused with staging left empty", async () => {
+		const data = { name: "data.json", content: "null" };
 		const cases = [
-			[{ name: "files/test.arch/ok.txt", content: "ok" }, { name: "files/test.other/steal.txt", content: "x" }],
-			[{ name: "configs/test.other.json", content: "{}" }],
-			[{ name: "files/test.arch/link", type: "symlink" as const, target: "../../local/secrets.json" }],
-			Array.from({ length: 100_001 }, (_, i) => ({ name: `files/test.arch/f${i}`, content: "" })),
+			[data, { name: "files/ok.txt", content: "ok" }, { name: "configs/test.other.json", content: "{}" }],
+			[data, { name: "../escape.txt", content: "x" }],
+			[data, { name: "files/link", type: "symlink" as const, target: "../../local/secrets.json" }],
+			[data, ...Array.from({ length: 100_001 }, (_, i) => ({ name: `files/f${i}`, content: "" }))],
+			[{ name: "files/ok.txt", content: "no data.json" }],
 		];
 		for (const members of cases) {
 			const staging = tempDir();
-			await expect(extractPanelArchive(archiveOf(members), entries, staging)).rejects.toThrow();
-			expect(listTree(staging)).toEqual([]);
+			await expect(extractBackupArchive(archiveOf(members), staging)).rejects.toThrow();
+			if (members[0] === data) expect(listTree(staging)).toEqual([]);
 		}
+	});
+
+	test("an archive round-trips its files and data, and skips links and named files", async () => {
+		const storage = tempDir();
+		fs.mkdirSync(path.join(storage, "a", "b"), { recursive: true });
+		fs.writeFileSync(path.join(storage, "a", "b", "f.txt"), "f");
+		fs.writeFileSync(path.join(storage, "a", "session.lock"), "lock");
+		fs.symlinkSync(path.join(storage, "a", "b", "f.txt"), path.join(storage, "a", "link"));
+		const file = path.join(tempDir(), "x.pbbackup");
+		await createBackupArchive(storage, { paths: ["a"], exclude: [], skip: ["session.lock"], data: { kept: [1, 2] } }, file);
+		const staging = tempDir();
+		const { filesDir, data } = await extractBackupArchive(file, staging);
+		expect(data).toEqual({ kept: [1, 2] });
+		expect(listTree(filesDir)).toEqual(["a", "a/b", "a/b/f.txt"]);
+	});
+
+	test("a restore a crash interrupted is rolled back at the next start, keeping what the backup left out", async () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.mkdirSync(path.join(storage, "servers", "x", "install"), { recursive: true });
+		fs.writeFileSync(path.join(storage, "servers", "x", "world.dat"), "live");
+		fs.writeFileSync(path.join(storage, "servers", "x", "install", "game.bin"), "game");
+		const staged = tempDir();
+		fs.mkdirSync(path.join(staged, "servers", "x"), { recursive: true });
+		fs.writeFileSync(path.join(staged, "servers", "x", "world.dat"), "backup");
+		fs.writeFileSync(path.join(work, "leftover.pbbackup"), "x");
+
+		swapIn(work, "test.crash", storage, staged, { paths: ["servers/x"], exclude: ["servers/x/install"] });
+		expect(fs.readFileSync(path.join(storage, "servers", "x", "world.dat"), "utf8")).toBe("backup");
+		expect(fs.readFileSync(path.join(storage, "servers", "x", "install", "game.bin"), "utf8")).toBe("game");
+		// the daemon died here, before afterRestore and the commit
+		recoverRestores(work, () => storage);
+		expect(fs.readFileSync(path.join(storage, "servers", "x", "world.dat"), "utf8")).toBe("live");
+		expect(fs.readFileSync(path.join(storage, "servers", "x", "install", "game.bin"), "utf8")).toBe("game");
+		expect(fs.readdirSync(work)).toEqual([]);
 	});
 });
 
-async function archiveRecord(panelId: string): Promise<{ record: BackupRecord; file: string }> {
-	const dir = dataDir();
-	fs.mkdirSync(path.join(dir, "files", panelId), { recursive: true });
-	fs.writeFileSync(path.join(dir, "files", panelId, "data.bin"), Buffer.from(Array.from({ length: 4096 }, (_, i) => i % 251)));
+async function archiveRecord(panelId: string, target: string | null = null): Promise<{ record: BackupRecord; file: string }> {
+	const storage = tempDir();
+	fs.writeFileSync(path.join(storage, "data.bin"), Buffer.from(Array.from({ length: 4096 }, (_, i) => i % 251)));
 	const file = path.join(tempDir(), "archive.pbbackup");
-	const made = await createPanelArchive(dir, { files: `files/${panelId}`, config: `configs/${panelId}.json` }, file);
-	return { file, record: { format: 1, id: newBackupId(), panelId, createdAt: new Date().toISOString(), size: made.size, sha256: made.sha256, panelVersion: "1.0.0", label: null } };
+	const made = await createBackupArchive(storage, { paths: [""], exclude: [], skip: [], data: null }, file);
+	return {
+		file,
+		record: { format: 2, id: newBackupId(), panelId, target, createdAt: new Date().toISOString(), size: made.size, sha256: made.sha256, panelVersion: "1.0.0", label: null, paths: [""], exclude: [] },
+	};
 }
 
-// S3 and Google Drive stores round-trip and reconnect without loss.
-describe("cloud stores round-trip", () => {
+describe("backup stores", () => {
 	const s3 = fakeS3("bucket");
 	const drive = fakeDrive();
 	drive.accounts.set("refresh-alice", "alice");
@@ -310,7 +319,7 @@ describe("cloud stores round-trip", () => {
 		);
 	});
 
-	test("local, S3 and Drive stores check, put, list, count usage, get byte-identical and remove", async () => {
+	test("local, S3 and Drive stores check, put, list by target, count usage, get byte-identical and remove", async () => {
 		const driveStore = new DriveBackupStore("d-alice", { clientId: "client", folderId: "" }, { clientSecret: "secret", refreshToken: "refresh-alice" }, drive.endpoints);
 		const folderId = await driveStore.createFolder();
 		const stores = {
@@ -319,41 +328,55 @@ describe("cloud stores round-trip", () => {
 			drive: new DriveBackupStore("d-alice", { clientId: "client", folderId }, { clientSecret: "secret", refreshToken: "refresh-alice" }, drive.endpoints),
 		};
 		for (const [kind, store] of Object.entries(stores)) {
-			const { record, file } = await archiveRecord("test.cloud");
+			const { record, file } = await archiveRecord("test.cloud", "alpha");
+			const other = await archiveRecord("test.cloud", null);
 			await store.check();
 			await store.put(record, file);
-			expect({ kind, ids: (await store.list("test.cloud")).map((r) => r.id) }).toEqual({ kind, ids: [record.id] });
-			expect((await store.usage()).used).toBe(record.size);
+			await store.put(other.record, other.file);
+			expect({ kind, alpha: (await store.list("test.cloud", "alpha")).map((r) => r.id), panel: (await store.list("test.cloud", null)).map((r) => r.id) })
+				.toEqual({ kind, alpha: [record.id], panel: [other.record.id] });
+			expect((await store.usage()).used).toBe(record.size + other.record.size);
 			const back = path.join(tempDir(), "back.pbbackup");
 			await store.get(record, back);
 			expect(fs.readFileSync(back).equals(fs.readFileSync(file))).toBe(true);
 			await store.remove(record);
-			expect(await store.list("test.cloud")).toEqual([]);
+			await store.remove(other.record);
+			expect(await store.list("test.cloud", "alpha")).toEqual([]);
 		}
 		expect(s3.requests.every((r) => r.authorization?.startsWith("AWS4-HMAC-SHA256 Credential=AKID/"))).toBe(true);
+	});
+
+	test("backups in the old format are not listed and stay where they are", async () => {
+		const root = path.join(tempDir(), "panels");
+		const id = newBackupId();
+		const old = path.join(root, "test.old");
+		fs.mkdirSync(old, { recursive: true });
+		fs.writeFileSync(path.join(old, `${id}.json`), JSON.stringify({ format: 1, id, panelId: "test.old", createdAt: new Date().toISOString(), size: 1, sha256: "a".repeat(64), panelVersion: null, label: null }));
+		fs.writeFileSync(path.join(old, `${id}.pbbackup`), "x");
+		expect(await new LocalBackupStore(root).list("test.old", null)).toEqual([]);
+		expect(fs.readdirSync(old).sort()).toEqual([`${id}.json`, `${id}.pbbackup`]);
 	});
 
 	test("reconnecting Drive keeps the location, folder and backups, and a different account is refused", async () => {
 		const dir = dataDir();
 		await installPanelFiles(dir, { id: "test.cloud" });
 		const engine = new PaperCraneEngine(dir);
-		const service = new BackupService(engine, drive.endpoints);
-		const location = await service.addDestination({ kind: "gdrive", label: "Drive", clientId: "client", clientSecret: "secret", refreshToken: "refresh-alice" });
-		await service.setPanelDestination("test.cloud", location.id);
-		await engine.writeFile("data.txt", "keep", "test.cloud");
-		const record = await service.create("test.cloud", null);
+		const locations = new BackupService(engine, drive.endpoints).locations;
+		const location = await locations.add({ kind: "gdrive", label: "Drive", clientId: "client", clientSecret: "secret", refreshToken: "refresh-alice" });
+		await locations.setForPanel("test.cloud", location.id);
+		const { record, file } = await archiveRecord("test.cloud");
+		await locations.storeFor("test.cloud").put(record, file);
 		const vaulted = () => engine.getSecret(`${location.id}.refresh-token`, "shell-backups").value;
 
 		drive.accounts.set("refresh-alice-2", "alice");
-		const again = await service.reconnectDestination(location.id, { clientId: "client", clientSecret: "secret", refreshToken: "refresh-alice-2" });
+		const again = await locations.reconnect(location.id, { clientId: "client", clientSecret: "secret", refreshToken: "refresh-alice-2" });
 		expect(again.id).toBe(location.id);
 		expect(vaulted()).toBe("refresh-alice-2");
-		expect((await service.list("test.cloud")).map((r) => r.id)).toEqual([record.id]);
+		expect((await locations.storeFor("test.cloud").list("test.cloud", null)).map((r) => r.id)).toEqual([record.id]);
 
-		await expect(service.reconnectDestination(location.id, { clientId: "client", clientSecret: "secret", refreshToken: "refresh-bob" })).rejects.toThrow();
+		await expect(locations.reconnect(location.id, { clientId: "client", clientSecret: "secret", refreshToken: "refresh-bob" })).rejects.toThrow();
 		expect(vaulted()).toBe("refresh-alice-2");
-		expect(service.listDestinations().filter((d) => d.kind === "gdrive").map((d) => d.id)).toEqual([location.id]);
-		service.dispose();
+		expect(locations.list().filter((l) => l.kind === "gdrive").map((l) => l.id)).toEqual([location.id]);
 	});
 });
 
@@ -366,22 +389,22 @@ describe("unreadable backup metadata", () => {
 		try {
 			const id = newBackupId();
 			const root = path.join(tempDir(), "panels");
-			fs.mkdirSync(path.join(root, "test.bad"), { recursive: true });
-			fs.writeFileSync(path.join(root, "test.bad", `${id}.json`), "{not a record");
-			fs.writeFileSync(path.join(root, "test.bad", `${id}.pbbackup`), "x");
-			await expect(new LocalBackupStore(root).list("test.bad")).rejects.toThrow("could not be read");
+			fs.mkdirSync(path.join(root, "test.bad", "_panel"), { recursive: true });
+			fs.writeFileSync(path.join(root, "test.bad", "_panel", `${id}.json`), "{not a record");
+			fs.writeFileSync(path.join(root, "test.bad", "_panel", `${id}.pbbackup`), "x");
+			await expect(new LocalBackupStore(root).list("test.bad", null)).rejects.toThrow("could not be read");
 
-			s3.objects.set(`test.bad/${id}.pbbackup`, Buffer.from("x"));
-			s3.objects.set(`test.bad/${id}.json`, Buffer.from("{not a record"));
+			s3.objects.set(`test.bad/_panel/${id}.pbbackup`, Buffer.from("x"));
+			s3.objects.set(`test.bad/_panel/${id}.json`, Buffer.from("{not a record"));
 			const s3Store = new S3BackupStore({ endpoint: s3.url, region: "us-east-1", bucket: "bucket", prefix: "", accessKeyId: "AKID", pathStyle: true }, { secretAccessKey: "k" });
-			await expect(s3Store.list("test.bad")).rejects.toThrow("could not be read");
+			await expect(s3Store.list("test.bad", null)).rejects.toThrow("could not be read");
 
 			const store = new DriveBackupStore("d-bad", { clientId: "c", folderId: "" }, { clientSecret: "s", refreshToken: "refresh" }, drive.endpoints);
 			const folderId = await store.createFolder();
 			const { panelKey } = await import("../src/backups/driveStore");
-			drive.files.set("broken", { id: "broken", account: "alice", name: "x.pbbackup", mimeType: "application/gzip", parents: [folderId], description: "{not a record", appProperties: { pbPanel: panelKey("test.bad") }, trashed: false });
+			drive.files.set("broken", { id: "broken", account: "alice", name: "x.pbbackup", mimeType: "application/gzip", parents: [folderId], description: "{not a record", appProperties: { pbFormat: "2", pbPanel: panelKey("test.bad"), pbTarget: "_panel" }, trashed: false });
 			const listed = new DriveBackupStore("d-bad", { clientId: "c", folderId }, { clientSecret: "s", refreshToken: "refresh" }, drive.endpoints);
-			await expect(listed.list("test.bad")).rejects.toThrow("could not be read");
+			await expect(listed.list("test.bad", null)).rejects.toThrow("could not be read");
 		} finally {
 			await s3.close();
 			await drive.close();
@@ -396,91 +419,13 @@ describe("unreadable backup metadata", () => {
 		const file = path.join(dir, "backups", "destinations.json");
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.writeFileSync(file, "{damaged");
-		expect((await host.call("backup:destinations")).error).toBeTruthy();
-		expect((await host.call("backup:panel-destination-set", { panelId: "test.meta", destinationId: "local" })).error).toBeTruthy();
+		expect((await host.call("backup:locations")).error).toBeTruthy();
+		expect((await host.call("backup:panel-location-set", { panelId: "test.meta", locationId: "local" })).error).toBeTruthy();
 		expect(fs.readFileSync(file, "utf8")).toBe("{damaged");
-		expect((await host.ok("backup:destinations-problem")).problem).toBeTruthy();
-		const { keptAs } = await host.ok("backup:destinations-recover");
+		expect((await host.ok("backup:locations-problem")).problem).toBeTruthy();
+		const { keptAs } = await host.ok("backup:locations-recover");
 		expect(fs.readFileSync(path.join(path.dirname(file), keptAs), "utf8")).toBe("{damaged");
-		expect((await host.ok("backup:destinations")).destinations.map((d: any) => d.id)).toEqual(["local"]);
-
-		await host.ok("backup:panel-destination-set", { panelId: "test.meta", destinationId: "local" });
-		const schedules = path.join(dir, "backups", "schedules.json");
-		fs.writeFileSync(schedules, "{damaged");
-		expect((await host.call("backup:schedule-set", { panelId: "test.meta", schedule: { everyHours: 24, keep: 3 } })).error).toBeTruthy();
-		expect(fs.readFileSync(schedules, "utf8")).toBe("{damaged");
+		expect((await host.ok("backup:locations")).locations.map((l: { id: string }) => l.id)).toEqual(["local"]);
 		await host.close();
-	});
-});
-
-// Routine backups run, prune only routine copies, and retry.
-describe("routine backups", () => {
-	test("a schedule call that leaves the schedule out is refused and the routine stays; null removes it", async () => {
-		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.keepschedule" });
-		const daemon = await startDaemon({ dataDir: dir });
-		const host = await daemon.rpc();
-		await host.ok("backup:panel-destination-set", { panelId: "test.keepschedule", destinationId: "local" });
-		await host.ok("backup:schedule-set", { panelId: "test.keepschedule", schedule: { everyHours: 24, keep: 3 } });
-		expect((await host.fail("backup:schedule-set", { panelId: "test.keepschedule" })).code).toBe("INVALID_PARAMS");
-		expect((await host.ok("backup:status", { panelId: "test.keepschedule" })).schedule).toMatchObject({ everyHours: 24, keep: 3 });
-		expect((await host.ok("backup:schedule-set", { panelId: "test.keepschedule", schedule: null })).schedule).toBeNull();
-		await host.close();
-	});
-
-	test("a due schedule runs from the timer, prunes only routine backups, survives code-only uninstall, and a failure retries in 15 minutes", async () => {
-		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.routine" });
-		const engine = new PaperCraneEngine(dir);
-		let now = Date.now();
-		const service = new BackupService(engine, undefined, { now: () => now });
-		await engine.writeFile("data.txt", "d", "test.routine");
-		await expect(service.setSchedule("test.routine", { everyHours: 1, keep: 1 })).rejects.toThrow("Choose where");
-		await service.setPanelDestination("test.routine", "local");
-		const manual = await service.create("test.routine", "keep me");
-		await service.setSchedule("test.routine", { everyHours: 1, keep: 1 });
-		const schedulesFile = path.join(dir, "backups", "schedules.json");
-		const schedule = () => JSON.parse(fs.readFileSync(schedulesFile, "utf8")).panels["test.routine"];
-
-		service.startScheduler();
-		for (let run = 1; run <= 2; run++) {
-			now += 61 * 60 * 1000;
-			const before = schedule().last?.at;
-			await service.runDue();
-			await waitFor(`routine run ${run} to be recorded`, () => schedule().last?.at !== before && schedule().last);
-			expect(schedule().last.ok).toBe(true);
-		}
-		const listed = await service.list("test.routine");
-		expect(listed.filter((r) => r.label === ROUTINE_BACKUP_LABEL)).toHaveLength(1);
-		expect(listed.map((r) => r.id)).toContain(manual.id);
-
-		await engine.uninstallPanel("test.routine");
-		expect(schedule()).toBeTruthy();
-
-		// a failing run is recorded and comes back in 15 minutes
-		await installPanelFiles(dir, { id: "test.routine" });
-		fs.rmSync(path.join(dir, "files", "test.routine"), { recursive: true });
-		now = Date.parse(schedule().nextRunAt) + 1;
-		await service.runDue();
-		expect(schedule().last.ok).toBe(false);
-		expect(Date.parse(schedule().nextRunAt)).toBe(now + BUSY_RETRY_MS);
-		service.dispose();
-	});
-
-	test("the daemon's own timer runs a due schedule", async () => {
-		const dir = dataDir();
-		await installPanelFiles(dir, { id: "test.timer" });
-		fs.mkdirSync(path.join(dir, "files", "test.timer"), { recursive: true });
-		fs.writeFileSync(path.join(dir, "files", "test.timer", "a.txt"), "a");
-		fs.mkdirSync(path.join(dir, "backups"), { recursive: true });
-		fs.writeFileSync(path.join(dir, "backups", "destinations.json"), JSON.stringify({ version: 1, destinations: [], panels: { "test.timer": "local" } }));
-		const due = new Date(Date.now() - 1000).toISOString();
-		fs.writeFileSync(path.join(dir, "backups", "schedules.json"), JSON.stringify({ version: 1, panels: { "test.timer": { everyHours: 24, keep: 2, nextRunAt: due, last: null } } }));
-		const daemon: InProcessDaemon = await startDaemon({ dataDir: dir });
-		await waitFor("the daemon's timer to run the routine backup", () => {
-			const last = JSON.parse(fs.readFileSync(path.join(dir, "backups", "schedules.json"), "utf8")).panels["test.timer"].last;
-			return last?.ok === true;
-		});
-		await daemon.stop();
 	});
 });

@@ -167,10 +167,13 @@ export class BackupService {
             try {
                 const made = await this.engine.withPanelOperation(panelId, async () => {
                     const panelVersion = this.engine.installedPanelVersion(panelId);
-                    const contents = backupContents(await this.engine.askBackupHook(panelId, "before-backup", { target }));
+                    const answer = await this.engine.askBackupHook(panelId, "before-backup", { target });
+                    // from here the panel is ready for a copy: it hears how the copy went, whatever happens
+                    let contents: ArchiveContents | null = null;
                     let packed: { size: number; sha256: string } | null = null;
                     let failure: unknown = null;
                     try {
+                        contents = backupContents(answer);
                         report("packing");
                         packed = await createBackupArchive(this.engine.resolveAppFilesDir(panelId), contents, archive, (done, total) => report("packing", done, total));
                     } catch (err) {
@@ -186,7 +189,7 @@ export class BackupService {
                         }
                     }
                     if (failure !== null) throw failure;
-                    return { ...packed!, panelVersion, contents };
+                    return { ...packed!, panelVersion, contents: contents! };
                 });
                 const record: BackupRecord = {
                     format: 2,

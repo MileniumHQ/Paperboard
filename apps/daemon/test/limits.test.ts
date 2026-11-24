@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { DriveBackupStore } from "../src/backups/driveStore";
 import { S3BackupStore } from "../src/backups/s3Store";
-import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId } from "../src/backups/types";
+import { BACKUP_ARCHIVE_MAX_BYTES, newBackupId, type BackupRecord } from "../src/backups/types";
 import { CONFIG_MAX_BYTES, FILE_READ_MAX_BYTES } from "../src/engine/index";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { tempDir } from "testkit/fs";
@@ -70,12 +70,12 @@ describe("resource limits", () => {
 		try {
 			const archive = path.join(tempDir(), "archive.pbbackup");
 			fs.writeFileSync(archive, "x");
-			const record = { format: 1, id: newBackupId(), panelId: "test.huge", createdAt: new Date().toISOString(), size: BACKUP_ARCHIVE_MAX_BYTES + 1, sha256: "a".repeat(64), panelVersion: "1.0.0", label: null };
+			const record: BackupRecord = { format: 2, id: newBackupId(), panelId: "test.huge", target: null, createdAt: new Date().toISOString(), size: BACKUP_ARCHIVE_MAX_BYTES + 1, sha256: "a".repeat(64), panelVersion: "1.0.0", label: null, paths: [""], exclude: [] };
 			const s3Store = new S3BackupStore({ endpoint: s3.url, region: "us-east-1", bucket: "bucket", prefix: "", accessKeyId: "AKID", pathStyle: true }, { secretAccessKey: "k" });
-			await expect(s3Store.put(record as never, archive)).rejects.toThrow();
+			await expect(s3Store.put(record, archive)).rejects.toThrow();
 			expect(s3.requests).toEqual([]);
 			const driveStore = new DriveBackupStore("d", { clientId: "c", folderId: "folder" }, { clientSecret: "s", refreshToken: "refresh" }, drive.endpoints);
-			await expect(driveStore.put(record as never, archive)).rejects.toThrow();
+			await expect(driveStore.put(record, archive)).rejects.toThrow();
 			expect(drive.requests).toEqual([]);
 		} finally {
 			await s3.close();
