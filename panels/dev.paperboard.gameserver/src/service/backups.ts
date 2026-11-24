@@ -78,17 +78,20 @@ async function letGo(server: Server, what: string): Promise<void> {
     await resumeIfMarked(server, what);
 }
 
+/** a start already under way launches, or sees the hold and doesn't; either way it is over */
+async function startSettled(server: Server): Promise<void> {
+    // quiet: the start reports its own failure to its caller and the console
+    await server.lifecycle.starting?.catch(() => {});
+}
+
 export function backupHooks(host: BackupsHost) {
-    // each restore's settings from before it took the backup's, by server, until the next restore begins
-    const replaced = new Map<string, Settings>();
     return {
         async beforeBackup(target: string | null): Promise<BackupContents> {
             const server = serverFor(host, target);
             // held from here, with no await before it, so no start lands in the preparation
             server.backupHold = "backup";
             try {
-                // a start already preparing launches, or sees the hold and doesn't
-                await server.lifecycle.preparing;
+                await startSettled(server);
                 // the last run's cleanup puts back files the copy would catch half written
                 await server.lifecycle.released;
                 const contents = contentsOf(host, server);
@@ -108,10 +111,8 @@ export function backupHooks(host: BackupsHost) {
             const server = serverFor(host, target);
             // held from here, with no await before it, so no start lands between the stop and the swap
             server.backupHold = "restore";
-            replaced.delete(server.id);
             try {
-                // a start already preparing launches, or sees the hold and doesn't
-                await server.lifecycle.preparing;
+                await startSettled(server);
                 if (server.game.backup.mode === "offline") await server.game.backup.before();
                 else if (await server.process.exists(server.game.primaryProcessId)) {
                     // the marker is what says it ran: it starts again at the end, or once a service that died meanwhile is back
@@ -131,10 +132,6 @@ export function backupHooks(host: BackupsHost) {
             if (!ended.ok) {
                 // the files are as they were; a try that failed part way read the backup's
                 try {
-                    // a restore that couldn't be kept after this took it: its settings go back too
-                    const previous = replaced.get(server.id);
-                    replaced.delete(server.id);
-                    if (previous) await host.replaceSettings(server, previous);
                     await host.reload(server);
                 } finally {
                     server.backupHold = null;
@@ -153,7 +150,6 @@ export function backupHooks(host: BackupsHost) {
                 await host.replaceSettings(server, previous);
                 throw err;
             }
-            replaced.set(server.id, previous);
             server.backupHold = null;
             await resumeIfMarked(server, "the restore");
         },

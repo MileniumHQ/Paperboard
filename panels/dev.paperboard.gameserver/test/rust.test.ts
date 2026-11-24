@@ -287,6 +287,8 @@ describe("Rust", () => {
 
         const starting = startServerInstance(server.server).then(() => null, (err: Error) => err.message);
         await inPreparation;
+        // a second start meanwhile is the same start, and fails with it
+        const again = startServerInstance(server.server).then(() => null, (err: Error) => err.message);
         expect(server.server.state.serverStatus).toBe("offline");
         let restoring = false;
         const before = hooks.beforeRestore(server.server.id).then(() => (restoring = true));
@@ -297,6 +299,7 @@ describe("Rust", () => {
 
         go();
         expect(await starting).toContain("being restored");
+        expect(await again).toContain("being restored");
         await before;
         expect(server.server.state.serverStatus).toBe("offline");
         expect(await server.server.process.exists(game.primaryProcessId)).toBe(false);
@@ -305,16 +308,6 @@ describe("Rust", () => {
         expect(server.server.backupHold).toBeNull();
         expect(server.server.state.serverStatus).toBe("offline");
 
-        // a restore it took that then couldn't be kept puts its settings back with the files
-        const hostname = server.server.settings.hostname;
-        await hooks.beforeRestore(server.server.id);
-        await hooks.afterRestore({ target: server.server.id, backup: record, ok: true, data: { ...server.server.settings, hostname: "Taken" } });
-        expect(server.server.settings.hostname).toBe("Taken");
-        await hooks.beforeRestore(server.server.id);
-        await hooks.afterRestore({ target: server.server.id, backup: record, ok: true, data: { ...server.server.settings, hostname: "Taken again" } });
-        await hooks.afterRestore({ target: server.server.id, backup: record, ok: false, error: "the restore couldn't be finished" });
-        expect(server.server.settings.hostname).toBe("Taken");
-        expect(hostname).not.toBe("Taken");
     });
 
     test("the remote console never names its address in an error, tells an unknown command from a lost connection, and fails what is waiting when the server goes", async () => {

@@ -148,12 +148,12 @@ export async function startServerInstance(
     ctx: Server,
     carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
-    // a start already preparing is this one: it ends with it
-    if (ctx.lifecycle.preparing) return ctx.lifecycle.preparing;
+    // a start already under way is this one: it ends, or fails, with it
+    if (ctx.lifecycle.starting) return ctx.lifecycle.starting;
     if (ctx.state.serverStatus !== "offline") return;
     // the last run's cleanup puts back files this start reads
     await ctx.lifecycle.released;
-    if (ctx.lifecycle.preparing) return ctx.lifecycle.preparing;
+    if (ctx.lifecycle.starting) return ctx.lifecycle.starting;
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller, and said in the console for the restarts that
     // have none: a half-settled server folder is not a launch failure
@@ -163,8 +163,16 @@ export async function startServerInstance(
     }
     catch (err) { report(ctx, "The server was not started", err); throw err; }
     // from here, with no await before it, a backup or restore waits for this start
-    let prepared!: () => void;
-    ctx.lifecycle.preparing = new Promise<void>((resolve) => (prepared = resolve));
+    const starting = launchServer(ctx, carry);
+    ctx.lifecycle.starting = starting;
+    try {
+        await starting;
+    } finally {
+        if (ctx.lifecycle.starting === starting) ctx.lifecycle.starting = null;
+    }
+}
+
+async function launchServer(ctx: Server, carry: GameServerState["serverEntries"]): Promise<void> {
     try {
         ctx.setState({ activeIssue: null });
         await loadServerOptions(ctx);
@@ -242,9 +250,6 @@ export async function startServerInstance(
             }),
         });
         throw err;
-    } finally {
-        ctx.lifecycle.preparing = null;
-        prepared();
     }
 }
 
