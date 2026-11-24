@@ -103,9 +103,16 @@ export interface BlockCallOptions {
 
 /** What the handlers need of the registry the blocks live in: the daemon, or memory in a test. */
 interface Backend {
-    register(panelId: string, entry: string, handler: (request: any) => Promise<unknown>, schema: BlockSchema): Promise<void>;
+    /** one registration pass: every block in it, in one go */
+    register(panelId: string, blocks: BackendBlock[]): Promise<void>;
     unregister(panelId: string, entry: string): Promise<void>;
     emit(panelId: string, entry: string, payload: Record<string, unknown> | null): Promise<void>;
+}
+
+interface BackendBlock {
+    entry: string;
+    handler: (request: any) => Promise<unknown>;
+    schema: BlockSchema;
 }
 
 /** What one registry's panels registered, so payloads and results are checked against their own types. */
@@ -127,10 +134,10 @@ const newRegistered = (): Registered => ({ types: new Map(), events: new Map(), 
 const processRegistered = newRegistered();
 
 const daemon: Backend = {
-    register: async (panelId, entry, handler, schema) => {
+    register: async (panelId, blocks) => {
         const transport = getTransport();
         await transport.ensureConnected();
-        await transport.registerBlock(panelId, entry, handler, schema);
+        await transport.registerBlocks(panelId, blocks);
     },
     unregister: (panelId, entry) => getTransport().unregisterBlock(panelId, entry),
     emit: async (panelId, entry, payload) => {
@@ -236,10 +243,11 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
             return icon ? ({ ...schema, categoryIcon: icon } as BlockSchema) : schema;
         };
 
+        const blocks: BackendBlock[] = [];
         for (const type of set.types ?? []) {
             const schema = blockSchema("type", type, panelId);
             registered.types.set(`${panelId}:${type.id}`, type);
-            await backend.register(panelId, blockEntry("type", type.id), async (request: { field?: unknown; value?: unknown; project?: unknown; choices?: unknown }) => {
+            blocks.push({ entry: blockEntry("type", type.id), schema, handler: async (request: { field?: unknown; value?: unknown; project?: unknown; choices?: unknown }) => {
                 if (request?.choices !== undefined) return typeChoicesOf(type, request.project, panelId, registered);
                 const field = typeof request?.field === "string" ? type.fields?.[request.field] : undefined;
                 if (!field) throw new Error(`${type.name} has no field "${String(request?.field)}"`);
@@ -254,39 +262,40 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
                 if (field.optional && absent(result)) return null;
                 check(valueProblem(qualifyTypeRef(field.type, panelId), result, lookup), `${field.name} of ${type.name}`);
                 return result;
-            }, schema);
+            } });
         }
         for (const command of set.commands ?? []) {
             const schema = schemaOf("command", command);
             const inputs = (schema as { inputs?: Record<string, BlockInputSchema> }).inputs;
-            await backend.register(panelId, blockEntry("command", command.id, project), async (request: { inputs?: unknown; choices?: unknown }) => {
+            blocks.push({ entry: blockEntry("command", command.id, project), schema, handler: async (request: { inputs?: unknown; choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(command.inputs, request.choices, ctx, command.name);
                 const given = await checkedInputs(request?.inputs, command.inputs, inputs, lookup, ctx, command.name);
                 const result = await command.run(given, ctx);
                 if (command.output === undefined) return null;
                 check(valueProblem(qualifyTypeRef(command.output, panelId), result, lookup), `${command.name} returned`);
                 return result;
-            }, schema);
+            } });
         }
         for (const value of set.values ?? []) {
             const schema = schemaOf("value", value);
             const inputs = (schema as { inputs?: Record<string, BlockInputSchema> }).inputs;
             registered.values.set(own("value", value.id), value);
-            await backend.register(panelId, blockEntry("value", value.id, project), async (request: { inputs?: unknown; choices?: unknown }) => {
+            blocks.push({ entry: blockEntry("value", value.id, project), schema, handler: async (request: { inputs?: unknown; choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(value.inputs, request.choices, ctx, value.name);
                 const given = await checkedInputs(request?.inputs, value.inputs, inputs, lookup, ctx, value.name);
                 const result = await value.read(given, ctx);
                 check(valueProblem(qualifyTypeRef(value.type, panelId), result, lookup), value.name);
                 return result;
-            }, schema);
+            } });
         }
         for (const event of set.events ?? []) {
             registered.events.set(own("event", event.id), event);
-            await backend.register(panelId, blockEntry("event", event.id, project), async (request: { choices?: unknown }) => {
+            blocks.push({ entry: blockEntry("event", event.id, project), schema: schemaOf("event", event), handler: async (request: { choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(event.inputs, request.choices, ctx, event.name);
                 throw new Error(`${event.name} is an event: it fires, it is not run`);
-            }, schemaOf("event", event));
+            } });
         }
+        if (blocks.length) await backend.register(panelId, blocks);
     };
 
     return {
@@ -482,8 +491,8 @@ export function memoryBlocks(panelId: string, listeners: MemoryBlocksListeners =
     const registered = newRegistered();
     const entries = new Map<string, { handler: (request: any) => Promise<unknown>; schema: BlockSchema }>();
     const backend: Backend = {
-        register: async (_panel, entry, handler, schema) => {
-            entries.set(entry, { handler, schema: overTheWire(schema) });
+        register: async (_panel, blocks) => {
+            for (const { entry, handler, schema } of blocks) entries.set(entry, { handler, schema: overTheWire(schema) });
         },
         unregister: async (_panel, entry) => {
             if (!entries.delete(entry)) throw new Error(`"${entry}" is not registered`);

@@ -17,6 +17,8 @@ export interface RegistryChangeEvent {
     type: string;
     panelId?: string;
     entry?: string;
+    /** what one registration pass added, on "blocks:registered" */
+    entries?: string[];
     project?: unknown;
 }
 

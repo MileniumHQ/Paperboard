@@ -144,7 +144,7 @@ const callTimeout = (): Shape<number | null> => {
 
 // a definition as the registry lists it; the Blocks panel reads it, the daemon only keeps it
 const blockSchema = (): Shape<BlockSchema> => ({
-    check: (v, at) => (v && typeof v === "object" ? null : `blocks:register requires a "${at}" object`),
+    check: (v, at) => (v && typeof v === "object" ? null : `a block needs a "${at}" object`),
 });
 
 const destinationId = (): Shape<string> => ({
@@ -329,6 +329,8 @@ export const RPC = {
     "pages:open": { params: object({ panelId: panelId() }) },
 
     // Blocks
+    "blocks:register-set": { params: object({ panelId: panelId(), entries: list(object({ entry: entry(), schema: blockSchema() })) }) },
+    // one block at a time, as panels built before blocks:register-set ask; goes at the next protocol version
     "blocks:register": { params: object({ panelId: panelId(), entry: entry(), schema: blockSchema() }) },
     "blocks:unregister": { params: object({ panelId: panelId(), entry: entry() }) },
     "blocks:project-define": {
@@ -439,6 +441,7 @@ export interface RpcResults {
 
     "pages:open": Ack;
 
+    "blocks:register-set": Ack;
     "blocks:register": Ack;
     "blocks:unregister": Ack;
     "blocks:project-define": Ack;

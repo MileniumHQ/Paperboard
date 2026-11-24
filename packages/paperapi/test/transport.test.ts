@@ -64,8 +64,8 @@ describe("handlers are owned by the panel that registers them", () => {
     const pingSchema = { kind: "command", id: "ping", name: "Ping" } as const;
     test("the same block name under two panels dispatches by panelId:entry and removing one leaves the other", async () => {
         const t = transport({ panelId: "dev.ambient" });
-        await t.registerBlock("dev.a", "command.ping", () => "from a", pingSchema);
-        await t.registerBlock("dev.b", "command.ping", () => "from b", pingSchema);
+        await t.registerBlocks("dev.a", [{ entry: "command.ping", handler: () => "from a", schema: pingSchema }]);
+        await t.registerBlocks("dev.b", [{ entry: "command.ping", handler: () => "from b", schema: pingSchema }]);
         const reply = async (callId: string, panelId: string | undefined, action: string) => {
             server.sendRaw({ type: "action_call", registry: "blocks", callId, panelId, action, args: [] });
             return (await server.next(`the reply to ${callId}`, (f) => f.msg?.type === "action_reply" && f.msg.callId === callId)).msg;
@@ -85,15 +85,25 @@ describe("handlers are owned by the panel that registers them", () => {
         const t = transport({ panelId: "dev.ambient" });
         const entered = { ok: deferred(), fail: deferred() };
         const finish = { ok: deferred<string>(), fail: deferred<void>() };
-        await t.registerBlock("dev.a", "command.slow", () => {
-            entered.ok.resolve(undefined);
-            return finish.ok.promise;
-        }, { kind: "command", id: "slow", name: "Slow" });
-        await t.registerBlock("dev.a", "command.doomed", async () => {
-            entered.fail.resolve(undefined);
-            await finish.fail.promise;
-            throw new Error("boom");
-        }, { kind: "command", id: "doomed", name: "Doomed" });
+        await t.registerBlocks("dev.a", [
+            {
+                entry: "command.slow",
+                handler: () => {
+                    entered.ok.resolve(undefined);
+                    return finish.ok.promise;
+                },
+                schema: { kind: "command", id: "slow", name: "Slow" },
+            },
+            {
+                entry: "command.doomed",
+                handler: async () => {
+                    entered.fail.resolve(undefined);
+                    await finish.fail.promise;
+                    throw new Error("boom");
+                },
+                schema: { kind: "command", id: "doomed", name: "Doomed" },
+            },
+        ]);
         server.sendRaw({ type: "action_call", registry: "blocks", callId: "late-ok", panelId: "dev.a", action: "command.slow", args: [] });
         server.sendRaw({ type: "action_call", registry: "blocks", callId: "late-fail", panelId: "dev.a", action: "command.doomed", args: [] });
         await Promise.all([entered.ok.promise, entered.fail.promise]);
@@ -127,40 +137,105 @@ describe("reconnect replays registrations faithfully", () => {
         const t = transport({ panelId: "dev.ambient" });
         const startSchema = { kind: "command", id: "start", name: "Start", description: "Starts it" } as const;
         const stopSchema = { kind: "command", id: "stop", name: "Stop" } as const;
-        await t.registerBlock("dev.a", "command.start", () => null, startSchema);
-        await t.registerBlock("dev.b", "command.stop", () => null, stopSchema);
+        await t.registerBlocks("dev.a", [{ entry: "command.start", handler: () => null, schema: startSchema }]);
+        await t.registerBlocks("dev.b", [{ entry: "command.stop", handler: () => null, schema: stopSchema }]);
         await t.defineBlocksProject("dev.a", { id: "server1", name: "Server 1" });
         await t.defineBlocksProject("dev.a", { id: "server10", name: "Server 10", icon: "dns" });
-        await t.registerBlock("dev.a", "server1/command.start", () => null, startSchema);
-        await t.registerBlock("dev.a", "server10/command.start", () => null, startSchema);
+        await t.registerBlocks("dev.a", [{ entry: "server1/command.start", handler: () => null, schema: startSchema }]);
+        await t.registerBlocks("dev.a", [{ entry: "server10/command.start", handler: () => null, schema: startSchema }]);
 
         await server.dropConnections();
-        await server.next("the replayed server10/command.start", (f) => f.conn === 1 && f.msg?.action === "blocks:register" && f.msg.params.entry === "server10/command.start");
+        await server.next("the replayed dev.b set", (f) => f.conn === 1 && f.msg?.action === "blocks:register-set" && f.msg.params.panelId === "dev.b");
+        await server.next("the replayed server10 set", (f) => f.conn === 1 && f.msg?.action === "blocks:register-set" && f.msg.params.entries[0].entry === "server10/command.start");
+        await server.next("the replayed server1 set", (f) => f.conn === 1 && f.msg?.action === "blocks:register-set" && f.msg.params.entries[0].entry === "server1/command.start");
         const replay = server.frames.filter(on_(1));
-        const registers = replay.filter(isAction("blocks:register")).map((f) => ({ panelId: f.msg.params.panelId, entry: f.msg.params.entry, schema: f.msg.params.schema }));
-        expect(registers.sort((a, b) => (`${a.panelId} ${a.entry}` < `${b.panelId} ${b.entry}` ? -1 : 1))).toEqual([
-            { panelId: "dev.a", entry: "command.start", schema: startSchema },
-            { panelId: "dev.a", entry: "server1/command.start", schema: startSchema },
-            { panelId: "dev.a", entry: "server10/command.start", schema: startSchema },
-            { panelId: "dev.b", entry: "command.stop", schema: stopSchema },
+        // one set per panel and project, each block once with its own schema
+        const sets = replay.filter(isAction("blocks:register-set")).map((f) => ({ panelId: f.msg.params.panelId, entries: f.msg.params.entries }));
+        expect(sets.sort((a, b) => (a.entries[0].entry < b.entries[0].entry ? -1 : 1))).toEqual([
+            { panelId: "dev.a", entries: [{ entry: "command.start", schema: startSchema }] },
+            { panelId: "dev.b", entries: [{ entry: "command.stop", schema: stopSchema }] },
+            { panelId: "dev.a", entries: [{ entry: "server1/command.start", schema: startSchema }] },
+            { panelId: "dev.a", entries: [{ entry: "server10/command.start", schema: startSchema }] },
         ]);
+        expect(replay.filter(isAction("blocks:register"))).toEqual([]);
         const defines = replay.filter(isAction("blocks:project-define")).map((f) => f.msg.params);
         expect(defines.map((p) => ({ panelId: p.panelId, project: p.project, name: p.name, icon: p.icon }))).toEqual([
             { panelId: "dev.a", project: "server1", name: "Server 1", icon: undefined },
             { panelId: "dev.a", project: "server10", name: "Server 10", icon: "dns" },
         ]);
         const lastDefine = Math.max(...replay.map((f, i) => (f.msg?.action === "blocks:project-define" ? i : -1)));
-        const firstRegister = replay.findIndex((f) => f.msg?.action === "blocks:register");
+        const firstRegister = replay.findIndex((f) => f.msg?.action === "blocks:register-set");
         expect(lastDefine).toBeLessThan(firstRegister);
 
         // removing server1 forgets only its own blocks, never server10's
         await t.removeBlocksProject("dev.a", "server1");
         await server.dropConnections();
-        await server.next("the second replay", (f) => f.conn === 2 && f.msg?.action === "blocks:register" && f.msg.params.entry === "server10/command.start");
-        await server.next("the second replay's dev.b stop", (f) => f.conn === 2 && f.msg?.action === "blocks:register" && f.msg.params.entry === "command.stop");
-        const second = server.frames.filter((f) => f.conn === 2 && f.msg?.action === "blocks:register").map((f) => f.msg.params.entry);
+        await server.next("the second replay's server10 set", (f) => f.conn === 2 && f.msg?.action === "blocks:register-set" && f.msg.params.entries[0].entry === "server10/command.start");
+        await server.next("the second replay's dev.b set", (f) => f.conn === 2 && f.msg?.action === "blocks:register-set" && f.msg.params.panelId === "dev.b");
+        await server.next("the second replay's dev.a set", (f) => f.conn === 2 && f.msg?.action === "blocks:register-set" && f.msg.params.entries[0].entry === "command.start");
+        const second = server.frames.filter((f) => f.conn === 2 && f.msg?.action === "blocks:register-set").flatMap((f) => f.msg.params.entries.map((e: { entry: string }) => e.entry));
         expect(second.sort()).toEqual(["command.start", "command.stop", "server10/command.start"]);
         expect(server.frames.filter((f) => f.conn === 2 && f.msg?.action === "blocks:project-define").map((f) => f.msg.params.project)).toEqual(["server10"]);
+    });
+
+    // a Paperboard Server from before blocks:register-set answers NOT_FOUND
+    const oldServer = () => {
+        server.answer = (action) => {
+            if (action === "blocks:register-set") throw Object.assign(new Error("Unknown action: blocks:register-set"), { code: "NOT_FOUND" });
+            return {};
+        };
+    };
+    const cmd = (id: string) => ({ entry: `command.${id}`, handler: () => id, schema: { kind: "command", id, name: id } as const });
+
+    test("against a server that doesn't know sets, each block registers on its own, now and after a reconnect", async () => {
+        oldServer();
+        const t = transport({ panelId: "dev.ambient" });
+        await t.registerBlocks("dev.a", [cmd("one"), cmd("two")]);
+        expect(server.requests("blocks:register").map((f) => f.msg.params.entry)).toEqual(["command.one", "command.two"]);
+
+        await server.dropConnections();
+        await server.next("the replayed second block", (f) => f.conn === 1 && f.msg?.action === "blocks:register" && f.msg.params.entry === "command.two");
+        expect(server.frames.filter((f) => f.conn === 1 && f.msg?.action === "blocks:register").map((f) => f.msg.params.entry).sort()).toEqual(["command.one", "command.two"]);
+    });
+
+    test("a set the server refuses is rolled back and never replayed, and doesn't take other blocks down", async () => {
+        const t = transport({ panelId: "dev.ambient" });
+        await t.registerBlocks("dev.a", [{ ...cmd("kept"), handler: () => "old" }]);
+        server.answer = (action, params) => {
+            if (action === "blocks:register-set" && params.entries.some((e: { entry: string }) => e.entry === "command.refused")) {
+                throw Object.assign(new Error("conflict"), { code: "CONFLICT" });
+            }
+            return {};
+        };
+        await expect(t.registerBlocks("dev.a", [{ ...cmd("kept"), handler: () => "new" }, cmd("refused")])).rejects.toThrow("conflict");
+
+        // the handler that was there is still the one that answers; the refused block has none
+        const reply = async (callId: string, action: string) => {
+            server.sendRaw({ type: "action_call", registry: "blocks", callId, panelId: "dev.a", action, args: [] });
+            return (await server.next(`the reply to ${callId}`, (f) => f.msg?.type === "action_reply" && f.msg.callId === callId)).msg;
+        };
+        expect((await reply("kept", "command.kept")).result).toBe("old");
+        expect((await reply("refused", "command.refused")).error).toBeDefined();
+
+        await server.dropConnections();
+        await server.next("the replay", (f) => f.conn === 1 && f.msg?.action === "blocks:register-set");
+        const replayed = server.frames.filter((f) => f.conn === 1 && f.msg?.action === "blocks:register-set").map((f) => f.msg.params.entries.map((e: { entry: string }) => e.entry));
+        expect(replayed).toEqual([["command.kept"]]);
+    });
+
+    test("a project's blocks replay as a set of their own, so one refused set leaves the rest", async () => {
+        const t = transport({ panelId: "dev.ambient" });
+        await t.defineBlocksProject("dev.a", { id: "p1", name: "P1" });
+        await t.registerBlocks("dev.a", [cmd("top")]);
+        await t.registerBlocks("dev.a", [{ ...cmd("inner"), entry: "p1/command.inner" }]);
+        server.answer = (action, params) => {
+            if (action === "blocks:register-set" && params.entries[0].entry === "command.top") throw Object.assign(new Error("conflict"), { code: "CONFLICT" });
+            return {};
+        };
+        await server.dropConnections();
+        await server.next("the project's set", (f) => f.conn === 1 && f.msg?.action === "blocks:register-set" && f.msg.params.entries[0].entry === "p1/command.inner");
+        const sets = server.frames.filter((f) => f.conn === 1 && f.msg?.action === "blocks:register-set").map((f) => f.msg.params.entries.map((e: { entry: string }) => e.entry));
+        expect(sets.sort()).toEqual([["command.top"], ["p1/command.inner"]]);
     });
 });
 
