@@ -123,6 +123,28 @@ describe("setting a computer up over SSH", () => {
 		await waitFor("the computer to connect on the new token", () => first.pool.listComputers().find((c) => c.id === id)?.status.connected);
 	});
 
+	// Inventory: Security — a setup that stops after opening pairing leaves no code open on the computer.
+	test("a setup that stops once pairing is open closes pairing on the computer", async () => {
+		const box = computer();
+		fs.symlinkSync(await craneBinary(), path.join(box.bin, "papercrane"));
+		const crane = await startCrane({ dataDir: box.data, host: "0.0.0.0" });
+		cranes.push(crane);
+		const server = await startServer({ env: box.env });
+		const rpc = await crane.rpc();
+		try {
+			const { result } = await run(server, {
+				pair: async () => {
+					expect(((await rpc.ok("system:pairing-status", {})) as { active: boolean }).active).toBe(true);
+					throw new Error("the pairing went wrong");
+				},
+			});
+			expect(result).toEqual({ failed: "the pairing went wrong" });
+			await waitFor("pairing to close on the computer", async () => !((await rpc.ok("system:pairing-status", {})) as { active: boolean }).active);
+		} finally {
+			await rpc.close();
+		}
+	});
+
 	// Inventory: Security — an address answering with a certificate other than the one named over SSH never gets the code.
 	test("a server answering with another certificate than the one named over SSH is refused before the code is sent", async () => {
 		const box = computer();

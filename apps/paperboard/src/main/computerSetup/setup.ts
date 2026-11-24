@@ -49,6 +49,21 @@ interface Remote {
     installPath: string;
 }
 
+interface PairingLine {
+    code: string;
+    listen: { host: string; port: number };
+    fingerprint: string;
+}
+
+// pair --json's first line; anything else stops the setup
+function parsePairingLine(line: string): PairingLine {
+    const parsed = JSON.parse(line) as Partial<PairingLine>;
+    if (typeof parsed.code !== "string" || typeof parsed.fingerprint !== "string" || typeof parsed.listen?.host !== "string" || typeof parsed.listen.port !== "number") {
+        throw new SetupStopped(`papercrane pair answered with something other than a pairing: ${line}`);
+    }
+    return parsed as PairingLine;
+}
+
 // a step that can't go on; the message is what the person reads
 class SetupStopped extends Error {}
 // the computer can't be set up over SSH, but its pairing code still works
@@ -65,7 +80,21 @@ const STEP_LABELS: Record<SetupStepId, { doing: string; done: string }> = {
 
 const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 const ps = (s: string) => `'${s.replace(/'/g, "''")}'`;
-const lastLines = (r: SshExecResult) => `${r.stderr}\n${r.stdout}`.trim().split("\n").slice(-6).join("\n");
+// A script for Windows PowerShell, as base64 UTF-16 so no quoting has to
+// survive the trip. A failing cmdlet stops it, and it exits with the last
+// program's code: -Command alone exits 0 or 1, whatever papercrane said.
+const encodedPowerShell = (script: string) => {
+    const wrapped = `$ErrorActionPreference = 'Stop'\n${script}\nexit $LASTEXITCODE`;
+    return `powershell -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(wrapped, "utf16le").toString("base64")}`;
+};
+// What a command said, for a message: its last line (why it stopped) on
+// the first line, the five before it below, where Details shows them
+const said = (r: SshExecResult): string => {
+    const lines = `${r.stderr}\n${r.stdout}`.split("\n").map((line) => line.trimEnd()).filter((line) => line !== "").slice(-6);
+    const last = lines.pop();
+    if (last === undefined) return `it exited with ${r.code ?? "no code"} and said nothing`;
+    return lines.length > 0 ? `${last}\n${lines.join("\n")}` : last;
+};
 
 /**
  * One setup of one computer. A newer one replaces it (the caller cancels
@@ -79,6 +108,8 @@ export class ComputerSetupJob {
     // kept only while the job runs: sudo on the computer may need it once more
     private password: string | undefined;
     private stopPairing: (() => void) | null = null;
+    // something to know once it's paired, said after the wizard closes
+    private notice: string | undefined;
 
     constructor(
         readonly id: string,
@@ -88,6 +119,7 @@ export class ComputerSetupJob {
     ) {
         this.state = {
             jobId: id,
+            revision: 0,
             host,
             steps: (Object.keys(STEP_LABELS) as SetupStepId[]).map((step) => ({ id: step, status: "waiting", label: STEP_LABELS[step].doing })),
             signIn: null,
@@ -102,7 +134,7 @@ export class ComputerSetupJob {
     async run(): Promise<void> {
         try {
             const id = await this.setUp();
-            this.finish({ paired: { id } });
+            this.finish({ paired: { id, ...(this.notice ? { notice: this.notice } : {}) } });
         } catch (err) {
             if (err instanceof Cancelled || this.cancelled) return;
             this.failRunning();
@@ -137,7 +169,7 @@ export class ComputerSetupJob {
         this.begin("connect");
         this.session = await this.signInStep();
         const session = this.session;
-        this.done("connect", `Connected to ${session.host}`);
+        this.done("connect", `Connected to ${this.host}`);
         this.done("signIn", `Signed in as ${session.username}`);
 
         this.begin("check");
@@ -181,7 +213,8 @@ export class ComputerSetupJob {
             } catch (err) {
                 if (err instanceof SshHostKeyChanged) throw new SetupStopped(err.message);
                 if (!(err instanceof SshSignInNeeded) && !(err instanceof SshPasswordRefused)) throw err;
-                error = err instanceof SshPasswordRefused ? `That password didn't work for ${attempt.username}.` : undefined;
+                // its own words: a server may take no passwords at all
+                error = err instanceof SshPasswordRefused ? err.message : undefined;
             }
             this.done("connect", `Connected to ${this.host}`);
             this.begin("signIn");
@@ -209,9 +242,9 @@ export class ComputerSetupJob {
             };
         }
         const run = (script: string, stdin?: Buffer | string) =>
-            session.exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`, stdin === undefined ? {} : { stdin });
+            session.exec(encodedPowerShell(script), stdin === undefined ? {} : { stdin });
         const windows = await run("$env:PROCESSOR_ARCHITECTURE");
-        if (windows.code !== 0) throw new SetupStopped(`Couldn't tell what system ${session.host} runs: ${lastLines(uname) || "uname and PowerShell both failed"}`);
+        if (windows.code !== 0) throw new SetupStopped(`Couldn't tell what system ${session.host} runs: ${said(uname)}`);
         const arch = windows.stdout.trim().toUpperCase();
         if (arch !== "AMD64" && arch !== "ARM64") throw new SetupStopped(`Paperboard Server doesn't run on Windows for ${arch}.`);
         return { os: "windows", arch: arch === "AMD64" ? "x64" : "arm64", installPath: "$env:LOCALAPPDATA\\Paperboard\\bin\\papercrane.exe", run };
@@ -222,7 +255,7 @@ export class ComputerSetupJob {
         const found = remote.os === "windows"
             ? await remote.run(`$c = Get-Command papercrane -ErrorAction SilentlyContinue; if ($c) { $c.Source } elseif (Test-Path "${remote.installPath}") { "${remote.installPath}" }`)
             : await remote.run(`if command -v papercrane >/dev/null 2>&1; then command -v papercrane; elif [ -x "${remote.installPath}" ]; then echo "${remote.installPath}"; fi`);
-        if (found.code !== 0) throw new SetupStopped(`Couldn't look for Paperboard Server: ${lastLines(found)}`);
+        if (found.code !== 0) throw new SetupStopped(`Couldn't look for Paperboard Server: ${said(found)}`);
         return found.stdout.trim().split("\n")[0]?.trim() || null;
     }
 
@@ -234,7 +267,7 @@ export class ComputerSetupJob {
         const status = await remote.run(this.crane(remote, binary, "status --json"));
         // 3: no daemon runs for its data
         if (status.code === 3) return false;
-        if (status.code !== 0) throw new SetupStopped(`papercrane status failed on ${this.host}: ${lastLines(status)}`);
+        if (status.code !== 0) throw new SetupStopped(`papercrane status failed on ${this.host}: ${said(status)}`);
         return (JSON.parse(status.stdout) as { running: boolean }).running;
     }
 
@@ -263,12 +296,12 @@ export class ComputerSetupJob {
             const copied = remote.os === "windows"
                 ? await remote.run(`$f = "${part}"; New-Item -ItemType Directory -Force (Split-Path $f) | Out-Null; $o = [IO.File]::Create($f); [Console]::OpenStandardInput().CopyTo($o); $o.Close(); (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()`, bytes)
                 : await remote.run(`f="${part}"; mkdir -p "$(dirname "$f")" && cat > "$f" && chmod 755 "$f" && { sha256sum "$f" 2>/dev/null || shasum -a 256 "$f"; } | cut -d' ' -f1`, bytes);
-            if (copied.code !== 0) throw new SetupStopped(`Couldn't copy Paperboard Server to ${this.host}: ${lastLines(copied)}`);
+            if (copied.code !== 0) throw new SetupStopped(`Couldn't copy Paperboard Server to ${this.host}: ${said(copied)}`);
             if (copied.stdout.trim() !== sha256) throw new SetupStopped(`Paperboard Server arrived on ${this.host} changed (its checksum differs), so it wasn't installed.`);
             const placed = remote.os === "windows"
                 ? await remote.run(`Move-Item -Force "${part}" "${remote.installPath}"; "${remote.installPath}"`)
                 : await remote.run(`mv "${part}" "${remote.installPath}" && echo "${remote.installPath}"`);
-            if (placed.code !== 0) throw new SetupStopped(`Couldn't put Paperboard Server in place on ${this.host}: ${lastLines(placed)}`);
+            if (placed.code !== 0) throw new SetupStopped(`Couldn't put Paperboard Server in place on ${this.host}: ${said(placed)}`);
             return placed.stdout.trim();
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
@@ -288,6 +321,12 @@ export class ComputerSetupJob {
                 throw new UseCode(`${username} isn't an administrator on ${this.host}, so Paperboard Server can't be set up to start with it. Install it there, then pair it with its code.`);
             }
             result = await remote.run(this.crane(remote, binary, "install-service --system"));
+        } else if ((await remote.run("id -u")).stdout.trim() === "0") {
+            // root has no session of its own to live in: a system service,
+            // which runs at boot as root, is the one that fits
+            result = await remote.run(this.crane(remote, binary, "install-service --system"));
+            if (result.code !== 0) throw new SetupStopped(`Paperboard Server didn't start on ${this.host}: ${said(result)}`);
+            return;
         } else if (remote.os === "macos" && this.password !== undefined) {
             // a LaunchAgent needs the account signed in at the desktop; with
             // the password, a LaunchDaemon runs it at boot as this account
@@ -295,7 +334,7 @@ export class ComputerSetupJob {
         } else {
             result = await remote.run(this.crane(remote, binary, "install-service"));
         }
-        if (result.code !== 0) throw new SetupStopped(`Paperboard Server didn't start on ${this.host}:\n${lastLines(result)}`);
+        if (result.code !== 0) throw new SetupStopped(`Paperboard Server didn't start on ${this.host}: ${said(result)}`);
         if (remote.os === "linux") await this.keepRunningAfterSignOut(remote, sudo);
     }
 
@@ -309,26 +348,33 @@ export class ComputerSetupJob {
             const elevated = await remote.run(sudo(`loginctl enable-linger "$(id -un)"`), `${this.password}\n`);
             if (elevated.code === 0) return;
         }
-        this.note("install", `Paperboard Server stops when you sign out of ${this.host}. To keep it running, run sudo loginctl enable-linger $USER there.`);
+        this.notice = `Paperboard Server stops when you sign out of ${this.host}. To keep it running, run "sudo loginctl enable-linger $USER" there.`;
     }
 
     private async pairOver(remote: Remote, binary: string, session: SshSession): Promise<string> {
-        let pairing: { code: string; listen: { host: string; port: number }; fingerprint: string } | null = null;
-        const lines: string[] = [];
-        const opened = new Promise<void>((resolve) => {
-            const stream = session.stream(remote.os === "windows" ? `powershell -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(this.crane(remote, binary, "pair --json"), "utf16le").toString("base64")}` : `sh -c ${sh(this.crane(remote, binary, "pair --json"))}`, (line) => {
-                lines.push(line);
-                if (pairing || !line.startsWith("{")) return;
-                pairing = JSON.parse(line);
-                resolve();
-            });
-            this.stopPairing = stream.cancel;
-            void stream.done.then(() => resolve());
+        const command = this.crane(remote, binary, "pair --json");
+        let pairing: PairingLine | null = null;
+        let opened!: (line: PairingLine) => void;
+        const first = new Promise<PairingLine>((resolve) => {
+            opened = resolve;
         });
-        await opened;
+        // its stdin stays open: closing the channel (or losing the
+        // connection) ends it, and pair --json then closes pairing there
+        const stream = session.stream(remote.os === "windows" ? encodedPowerShell(command) : `sh -c ${sh(command)}`, (line) => {
+            if (pairing || !line.startsWith("{")) return;
+            pairing = parsePairingLine(line);
+            opened(pairing);
+        });
+        this.stopPairing = stream.cancel;
+        // ending before its line is an answer too, said in its own words
+        const ended = stream.done.then((result) => {
+            if (pairing) return pairing;
+            throw new SetupStopped(`Pairing didn't open on ${this.host}: ${said(result)}`);
+        });
+        const { code, listen, fingerprint } = await Promise.race([first, ended]);
+        // quiet: once the code is out, the pairing itself says whether it worked
+        ended.catch(() => undefined);
         this.check();
-        if (!pairing) throw new SetupStopped(`papercrane pair didn't open pairing on ${this.host}:\n${lines.slice(-6).join("\n")}`);
-        const { code, listen, fingerprint } = pairing as { code: string; listen: { host: string; port: number }; fingerprint: string };
         // a daemon on every address is reached where SSH reached it
         const host = listen.host === "0.0.0.0" || listen.host === "::" ? session.host : listen.host;
         const paired = await this.deps.pair(host, listen.port, code, this.name, { fingerprint });
@@ -342,7 +388,7 @@ export class ComputerSetupJob {
     }
 
     private set(patch: Partial<ComputerSetupState>): void {
-        this.state = { ...this.state, ...patch };
+        this.state = { ...this.state, ...patch, revision: this.state.revision + 1 };
         if (!this.cancelled) this.deps.changed(this.state);
     }
 
@@ -368,10 +414,6 @@ export class ComputerSetupJob {
         this.step(id, { status: "success", label });
     }
 
-    private note(id: SetupStepId, note: string): void {
-        this.step(id, { note });
-    }
-
     private failRunning(): void {
         this.set({ steps: this.state.steps.map((s) => (s.status === "loading" ? { ...s, status: "error" } : s)) });
     }
@@ -387,12 +429,13 @@ export class ComputerSetups {
 
     constructor(private readonly deps: () => ComputerSetupDeps) {}
 
-    start(host: string, name: string | undefined): { jobId: string } {
+    /** starts a setup, answering with where it stands: it may have pushed already */
+    start(host: string, name: string | undefined): ComputerSetupState {
         this.job?.cancel();
         const job = new ComputerSetupJob(crypto.randomUUID(), host, name, this.deps());
         this.job = job;
         void job.run();
-        return { jobId: job.id };
+        return job.current();
     }
 
     signIn(jobId: string, username: string, password: string): void {

@@ -23,7 +23,7 @@ import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override
-export const REGISTRY_URL = resolveRegistryUrl({
+const REGISTRY_URL = resolveRegistryUrl({
     nodeEnv: is.dev ? "development" : "production",
     env: process.env,
     argv: process.argv,
