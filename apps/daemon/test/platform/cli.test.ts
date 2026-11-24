@@ -71,7 +71,8 @@ describe("the daemon command line works headless", () => {
 		await crane.stop();
 	});
 
-	// how a Windows user task's daemon stops with the conhost it runs under
+	// how a Windows user task's daemon stops with the conhost it runs under.
+	// Detached: on Windows a child in its parent's job would die with it anyway
 	test("--exit-with-parent stops the daemon once the process that started it is gone", async () => {
 		const dir = dataDir();
 		const free = net.createServer();
@@ -79,7 +80,7 @@ describe("the daemon command line works headless", () => {
 		const port = (free.address() as net.AddressInfo).port;
 		await new Promise<void>((resolve) => free.close(() => resolve()));
 		const launch = [await craneBinary(), "--headless", "--host", "127.0.0.1", "--port", String(port), "--exit-with-parent"];
-		const parent = spawnChild(process.execPath, ["-e", `const [bin, ...args] = JSON.parse(process.argv[1]); require("node:child_process").spawn(bin, args, { stdio: "ignore" }); setInterval(() => {}, 1000);`, JSON.stringify(launch)], childEnv(dir));
+		const parent = spawnChild(process.execPath, ["-e", `const [bin, ...args] = JSON.parse(process.argv[1]); require("node:child_process").spawn(bin, args, { stdio: "ignore", detached: true }); setInterval(() => {}, 1000);`, JSON.stringify(launch)], childEnv(dir));
 		let daemon: number | undefined;
 		try {
 			daemon = await waitFor("the daemon to start", () => fs.existsSync(path.join(dir, "local", "crane.json")) && (JSON.parse(fs.readFileSync(path.join(dir, "local", "crane.json"), "utf8")) as { pid: number }).pid, { timeoutMs: 30_000 });
