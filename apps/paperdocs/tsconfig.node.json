@@ -15,6 +15,7 @@
   "include": [
     "vite.site.config.ts",
     "vite.site.client.config.ts",
+    "vite.site.elements.config.ts",
     "vite.site.shared.ts",
     "vite-plugin-docs-search.ts"
   ]

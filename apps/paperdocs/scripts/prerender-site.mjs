@@ -50,10 +50,10 @@ function isDocsPath(path) {
     return path === "/docs/" || path.startsWith("/docs/");
 }
 
-// Marketing pages share the landing document shell. Learn pages load only
-// the shared chrome scripts and the screenshot lightbox; the main landing
-// adds its developer-card reveal and the draggable outro icons. Scroll
-// reveals on both are CSS, and every image is a static file.
+// Marketing pages share the landing document shell. Both load the shared
+// chrome scripts and PaperUI Marketing's elements, which also run the main
+// landing's draggable outro icons; learn pages add the screenshot lightbox.
+// Scroll reveals on both are CSS, and every image is a static file.
 function landingDocument(page, path) {
     return `<!doctype html>
 <html lang="en"${page.accent ? ` style="--paper-site-accent: ${page.accent}"` : ""}>
@@ -68,18 +68,17 @@ function landingDocument(page, path) {
         <link rel="stylesheet" href="/css/style.css" />
         ${page.learn ? '<link rel="stylesheet" href="/css/learn.css" />' : ""}
         <!-- The decorative elements are defined before the body is parsed, so
-             each heading, button, and overlay renders as the parser creates it.
+             each heading and overlay renders as the parser creates it.
              Defined after the content, the page first painted their plain
              fallbacks and then swapped them in, shifting everything below. -->
         <script src="/js/bg-overlay.js"></script>
-        <script src="/js/styled-text.js"></script>
-        <script src="/js/paper-button.js"></script>
+        <script src="/js/marketing-elements.js"></script>
     </head>
     <body>
 ${stripSsrArtifacts(page.html)}
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
-        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : '<script type="module" src="/js/icon-play.js"></script>'}
+        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : ""}
         <script src="/js/footer.js"></script>
     </body>
 </html>
@@ -117,7 +116,7 @@ function documentFor(page, path) {
     <body>
 ${stripSsrArtifacts(page.html)}
         <script type="module" src="/site-client.js"></script>
-        ${isDocsPath(path) ? "" : '<script src="/js/styled-text.js"></script>'}
+        ${isDocsPath(path) ? "" : '<script src="/js/marketing-elements.js"></script>'}
     </body>
 </html>
 `;

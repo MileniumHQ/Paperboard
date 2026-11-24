@@ -5,17 +5,17 @@ html:has(.learn-page) {
     background: color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink));
 }
 .learn-page {
-    --paper-button-face: color-mix(
+    --marketing-button-face: color-mix(
         in srgb,
         var(--paper-site-accent) 62%,
         var(--paper-marketing-ink)
     );
-    --paper-button-deep: color-mix(
+    --marketing-button-deep: color-mix(
         in srgb,
         var(--paper-site-accent) 18%,
         var(--paper-marketing-ink)
     );
-    --paper-button-ink: var(--paper-on-color);
+    --marketing-button-ink: var(--paper-on-color);
     position: relative;
     color: var(--paper-on-color);
     text-align: center;

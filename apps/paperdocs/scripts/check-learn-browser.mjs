@@ -122,28 +122,29 @@ try {
         );
         await page.waitForFunction(() =>
             document
-                .querySelector(".site-topbar__name styled-text")
-                ?.shadowRoot?.querySelector("#mainText"),
+                .querySelector(".site-topbar__name marketing-text")?.shadowRoot?.querySelector("text.face"),
         );
         logoColors.add(
             await page
-                .locator(".site-topbar__name styled-text")
+                .locator(".site-topbar__name marketing-text")
                 .evaluate((element) =>
                     getComputedStyle(
-                        element.shadowRoot.querySelector("#mainText"),
+                        element.shadowRoot.querySelector("text.face"),
                     ).fill,
                 ),
         );
         const wordmarkAccent = await page
             .locator(".site-topbar__name")
             .evaluate((element) => {
-                const style = getComputedStyle(element);
-                return {
-                    accent: style
-                        .getPropertyValue("--paper-site-accent")
-                        .trim(),
-                    primary: style.getPropertyValue("--paper-primary").trim(),
+                const probe = document.createElement("span");
+                element.append(probe);
+                const colorOf = (value) => {
+                    probe.style.color = value;
+                    return getComputedStyle(probe).color;
                 };
+                const colors = { accent: colorOf("var(--marketing-accent)"), primary: colorOf("var(--paper-primary)") };
+                probe.remove();
+                return colors;
             });
         assert.equal(
             wordmarkAccent.accent,
@@ -152,28 +153,19 @@ try {
         );
         await page.waitForFunction(() =>
             document
-                .querySelector(".download-cta paper-button")
-                ?.shadowRoot?.querySelector(".PaperButton"),
+                .querySelector(".download-cta a[data-download-button]"),
         );
         buttonShadows.add(
             await page
-                .locator(".download-cta paper-button")
+                .locator(".download-cta a[data-download-button]")
                 .first()
-                .evaluate(
-                    (element) =>
-                        getComputedStyle(element.shadowRoot.querySelector(".PaperButton"))
-                            .boxShadow,
-                ),
+                .evaluate((element) => getComputedStyle(element).boxShadow),
         );
         const backLayer = await page
-            .locator(".download-cta paper-button")
+            .locator(".download-cta a[data-download-button]")
             .first()
-            .evaluate((element) =>
-                getComputedStyle(
-                    element.shadowRoot.querySelector(".PaperEffect"),
-                    "::before",
-                ).backgroundColor,
-            );
+            // the raised edge is the button wrapper's ::before
+            .evaluate((element) => getComputedStyle(element.parentElement, "::before").backgroundColor);
         const pageField = await page.evaluate(() => {
             const field = document.querySelector(".learn-page");
             const probe = document.createElement("div");
@@ -264,15 +256,14 @@ try {
     await page.goto(`${origin}/`);
     await page.waitForFunction(() =>
         document
-            .querySelector(".site-topbar__name styled-text")
-            ?.shadowRoot?.querySelector("#mainText"),
+            .querySelector(".site-topbar__name marketing-text")?.shadowRoot?.querySelector("text.face"),
     );
     assert.equal(
         await page
-            .locator(".site-topbar__name styled-text")
+            .locator(".site-topbar__name marketing-text")
             .evaluate((element) =>
                 getComputedStyle(
-                    element.shadowRoot.querySelector("#mainText"),
+                    element.shadowRoot.querySelector("text.face"),
                 ).fill,
             ),
         [...logoColors][0],
@@ -294,7 +285,7 @@ try {
     assert.equal(await page.locator("h1").count(), 1);
     assert.equal(await page.locator("canvas").count(), 0, "The landing must not draw with WebGL");
     assert.deepEqual(
-        await page.locator(".panel-row-button paper-button").evaluateAll(links => links.map(link => link.getAttribute("href"))),
+        await page.locator(".panel-row-button a").evaluateAll(links => links.map(link => link.getAttribute("href"))),
         ["/agents/", "/game-server/", "/bot-creator/", "/blocks/"],
         "The landing walks through three panels, then the one that connects them, each linking to its page",
     );
@@ -349,11 +340,11 @@ try {
             await shapePage.goto(`${origin}/`);
             await shapePage.evaluate(() => document.fonts.ready);
             assert.equal(await shapePage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `No horizontal scroll at ${width} × ${height}`);
-            const lineSizes = await shapePage.locator(".hero-section styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
+            const lineSizes = await shapePage.locator(".hero-section marketing-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
             assert.equal(new Set(lineSizes).size, 1, `Hero heading lines share one size at ${width} × ${height}: ${lineSizes}`);
             const hero = await shapePage.locator(".hero-render img").boundingBox();
             assert.ok(hero.x >= 0 && hero.x + hero.width <= width && hero.height <= height * 1.05, `The hero art fits the screen at ${width} × ${height}`);
-            const heroLefts = await shapePage.locator(".hero-copy .marketing-heading-lines, .hero-sub, .hero-copy paper-button").evaluateAll(elements => elements.map(element => Math.round(element.getBoundingClientRect().left)));
+            const heroLefts = await shapePage.locator(".hero-copy .marketing-heading-lines, .hero-sub, .hero-copy a[data-download-button]").evaluateAll(elements => elements.map(element => Math.round(element.getBoundingClientRect().left)));
             assert.ok(Math.max(...heroLefts) - Math.min(...heroLefts) <= 2, `The hero heading, copy and download share one left edge at ${width} × ${height}: ${heroLefts}`);
             if (width > 900) {
                 const copy = await shapePage.locator(".hero-copy").boundingBox();
@@ -375,7 +366,7 @@ try {
                 const sides = rows.map(row => (row.copy.left + row.copy.right) / 2 > (row.shot.left + row.shot.right) / 2 ? "right" : "left");
                 assert.deepEqual(sides, ["right", "left", "right", "left"], `Panel copy trades sides at ${width} × ${height}`);
             }
-            const headlineSizes = await shapePage.locator(".panel-row styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
+            const headlineSizes = await shapePage.locator(".panel-row marketing-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
             assert.equal(new Set(headlineSizes).size, 1, `Panel headlines share one size at ${width} × ${height}: ${headlineSizes}`);
             const devices = await shapePage.locator(".device .marketing-render").evaluateAll(images => images.map(image => image.getBoundingClientRect().toJSON()));
             assert.equal(devices.length, 4);
@@ -390,7 +381,7 @@ try {
             if (still) await shapePage.locator('[data-play-field][data-play-state="still"]').waitFor({ state: "attached" });
             else await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
             const outro = await shapePage.evaluate(() => ({
-                copy: [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
+                copy: [...document.querySelectorAll(".outro-copy .marketing-heading-line, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
                 icons: [...document.querySelectorAll(".play-icon")].map(element => ({ box: element.getBoundingClientRect().toJSON(), transform: element.style.transform })),
                 field: document.querySelector("[data-play-field]").getBoundingClientRect().toJSON(),
             }));
@@ -413,7 +404,7 @@ try {
     await page.evaluate(() => {
         window.__overCopy = [];
         const sample = () => {
-            const copy = [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect());
+            const copy = [...document.querySelectorAll(".outro-copy .marketing-heading-line, .outro-copy .download-cta")].map(element => element.getBoundingClientRect());
             for (const [index, icon] of [...document.querySelectorAll(".play-icon")].entries()) {
                 const box = icon.getBoundingClientRect();
                 if (copy.some(part => box.left < part.right - 1 && part.left < box.right - 1 && box.top < part.bottom - 1 && part.top < box.bottom - 1))
@@ -443,7 +434,7 @@ try {
     // the slow runner the deadline leaves room for.
     await page.locator('[data-play-field][data-play-state="resting"]').waitFor({ state: "attached", timeout: 90_000 });
     assert.deepEqual(await page.evaluate(() => [...new Set(window.__overCopy)]), [], "No frame may show an icon over the copy");
-    const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
+    const outroCopy = await page.evaluate(() => [...document.querySelectorAll(".outro-copy .marketing-heading-line, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()));
     const landed = await icons.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
     assert.ok(landed.every(icon => outroCopy.every(copy => !overlaps(icon, copy))), "An icon dragged onto the heading must end up beside it, not over it");
     console.log("verified dragging pushes icons apart and never leaves one over the copy");
@@ -544,15 +535,15 @@ try {
         for (const width of [320, 390, 460, 500, 700, 900]) {
             await page.setViewportSize({ width, height: 800 });
             await page.goto(`${origin}${path}`);
-            await page.waitForFunction(() => document.querySelector(".site-topbar__download paper-button")?.shadowRoot?.querySelector("a"));
+            await page.waitForFunction(() => document.querySelector(".site-topbar__download a[data-download-button]"));
             const bar = await page.evaluate(() => {
                 const box = (selector) => document.querySelector(selector).getBoundingClientRect();
-                return { bar: box(".site-topbar__bar"), toggle: box(".site-topbar__mobile-toggle"), download: box(".site-topbar__download paper-button") };
+                return { bar: box(".site-topbar__bar"), toggle: box(".site-topbar__mobile-toggle"), download: box(".site-topbar__download a[data-download-button]") };
             });
             assert.ok(bar.toggle.width > 0 && bar.download.width > 0, `Menu toggle and Download both show at ${width}px on ${path}`);
             assert.ok(bar.download.left - bar.toggle.right >= 8, `Download needs space from the menu toggle at ${width}px on ${path} (${bar.download.left - bar.toggle.right}px)`);
             assert.ok(bar.download.right <= bar.bar.right && bar.bar.right <= width, `Download must stay inside the bar at ${width}px on ${path}`);
-            await page.locator(".site-topbar__download paper-button").getByRole("link", { name: "Download" }).waitFor();
+            await page.locator(".site-topbar__download").getByRole("link", { name: "Download" }).waitFor();
         }
     }
     console.log("verified the topbar keeps Download spaced from the menu toggle and inside the bar from 320px to 900px");
@@ -642,7 +633,7 @@ try {
         });
         for (const path of ["/", "/game-server/"]) {
             const templateFetches = [];
-            const onRequest = (request) => { if (/\/html\/|\/css\/(styled-text|paper-button|bg-overlay)\.css/.test(request.url())) templateFetches.push(request.url()); };
+            const onRequest = (request) => { if (/\/html\/|\/css\/bg-overlay\.css/.test(request.url())) templateFetches.push(request.url()); };
             slowPage.on("request", onRequest);
             await slowPage.goto(`${origin}${path}`, { waitUntil: "load" });
             // Sample until every heading has drawn, so the frames cover first

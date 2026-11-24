@@ -1,6 +1,6 @@
 import { For, Show, type ParentProps } from "solid-js";
+import { MarketingButton, MarketingText } from "@mileniumhq/paperui/marketing";
 import { MarketingHeading } from "./MarketingHeading";
-import { styledText } from "./TextEffect";
 import { Icon, Render, Screenshot } from "./Screenshot";
 import { HEADLINE_FIT_LENGTH, LEARN_PANELS, type LearnPanel } from "../learn/panels";
 import { landingRowText, listOf, sentence, trademarkNotice, type TrademarkNotice } from "../trademarks";
@@ -19,10 +19,10 @@ import {
 // device art is rendered ahead of time from the models (scripts/renders/), so
 // the page needs no WebGL and looks the same on every browser and screen.
 //
-// BgOverlay, StyledText, and PaperButton remain custom elements upgraded by
-// those scripts, so their static markup is handed to Solid as innerHTML inside
-// host wrappers (.bg-overlay-host, .styled-text-host, .paper-button-host) that
-// carry the element-level placement the old element selectors held.
+// Lettering and buttons are PaperUI Marketing: buttons are plain markup, and
+// MarketingText's <marketing-text> is defined by /js/marketing-elements.js in
+// the head. BgOverlay is still a custom element, so its markup is handed to
+// Solid as innerHTML inside .bg-overlay-host.
 
 // The panels the landing walks through, one row each, their copy alternating
 // sides, in the site's panel order: three that each do a job, then the one
@@ -85,27 +85,29 @@ function DiscordIcon() {
     );
 }
 
-// --- Custom-element markup ---------------------------------------------------
-
-// The topbar download button and the two hero/outro CTAs share one markup
-// builder so download-button.js sees the same [data-download-button] shape.
-function downloadButton(size?: "large"): string {
+// The topbar download button and the hero/outro calls to action: the downloads
+// page until download-button.js points [data-download-button] at this
+// visitor's build.
+function DownloadButton(props: { size?: "large" }) {
     return (
-        `<paper-button variant="brand"${size ? ` size="${size}"` : ""} data-download-button${size ? "" : ' data-download-label="short"'}>` +
-        `<span class="icon icon-download" aria-hidden="true"></span>` +
-        `<span class="download-label">Download</span>` +
-        `</paper-button>`
+        <MarketingButton
+            href="/downloads"
+            size={props.size}
+            data-download-button=""
+            data-download-label={props.size ? undefined : "short"}
+        >
+            <span class="icon icon-download" aria-hidden="true" />
+            <span class="download-label">Download</span>
+        </MarketingButton>
     );
 }
 
 const bgOverlayHtml = `<bg-overlay opacity="0.4"></bg-overlay>`;
-const docsButtonHtml = `<paper-button variant="brand" href="/docs/"><span>View Docs</span></paper-button>`;
-const githubButtonHtml = `<paper-button variant="black" href="https://github.com/MileniumHQ/Paperboard" target="_blank" rel="noopener noreferrer"><span class="icon icon-github" aria-hidden="true"></span><span>GitHub</span></paper-button>`;
 
 export function DownloadCta() {
     return (
         <div class="download-cta">
-            <div class="paper-button-host" innerHTML={downloadButton("large")} />
+            <DownloadButton size="large" />
             <p class="download-note">
                 <a href="/downloads">Looking for downloads for other OSes?</a>
             </p>
@@ -119,14 +121,7 @@ export function Topbar() {
             <div class="site-topbar__bar">
                 <a class="site-topbar__brand" href="/">
                     <Icon class="site-topbar__logo" src="/paperboard.png" size={36} />
-                    <span class="site-topbar__name paper-wordmark">
-                        <span class="paper-wordmark-label">Paperboard</span>
-                        <span
-                            class="styled-text-host"
-                            aria-hidden="true"
-                            innerHTML={styledText("Paperboard", 20)}
-                        />
-                    </span>
+                    <MarketingText class="site-topbar__name paper-wordmark" text="Paperboard" size={20} />
                 </a>
                 <nav class="site-topbar__nav" aria-label="Primary">
                     <div class="site-topbar__menu" data-topbar-menu>
@@ -165,8 +160,8 @@ export function Topbar() {
                     >
                         <span class="icon icon-menu" aria-hidden="true" />
                     </button>
-                    <span class="paper-button-host site-topbar__download">
-                        <div innerHTML={downloadButton()} />
+                    <span class="site-topbar__download">
+                        <DownloadButton />
                     </span>
                 </div>
             </div>
@@ -183,15 +178,15 @@ export function Footer(props: { notice?: TrademarkNotice }) {
         <footer class="site-footer">
             <div class="site-footer__inner">
                 <nav class="site-footer__column" aria-label="Learn">
-                    <div class="styled-text-host" innerHTML={styledText("Learn", 18)} />
+                    <MarketingText class="site-footer__heading" text="Learn" size={18} />
                     <div class="site-footer__links" innerHTML={footerLearnHtml} />
                 </nav>
                 <nav class="site-footer__column" aria-label="Docs">
-                    <div class="styled-text-host" innerHTML={styledText("Docs", 18)} />
+                    <MarketingText class="site-footer__heading" text="Docs" size={18} />
                     <div class="site-footer__links" innerHTML={footerDocsHtml} />
                 </nav>
                 <nav class="site-footer__column" aria-label="Site">
-                    <div class="styled-text-host" innerHTML={styledText("Site", 18)} />
+                    <MarketingText class="site-footer__heading" text="Site" size={18} />
                     <div class="site-footer__links" innerHTML={footerSiteHtml} />
                 </nav>
             </div>
@@ -269,15 +264,6 @@ export function MarketingChrome(props: ParentProps<{ text: string[] }>) {
     );
 }
 
-// "Learn more", with the panel named for screen readers.
-function learnButtonHtml(panel: LearnPanel): string {
-    return (
-        `<paper-button variant="brand" href="/${panel.slug}/">` +
-        `<span>Learn more</span><span class="sr-only"> about ${panel.name}</span>` +
-        `</paper-button>`
-    );
-}
-
 // A panel's chapter: its real window, large, on a paper card whose offset
 // sheet is the panel's colour, with its copy on an ink card (the topbar's
 // material) floating over the window's lower corner. Chapters trade
@@ -304,7 +290,11 @@ function PanelRow(props: { panel: LearnPanel; flip: boolean }) {
                     size={48}
                 />
                 <p>{props.panel.description}</p>
-                <div class="paper-button-host panel-row-button" innerHTML={learnButtonHtml(props.panel)} />
+                <MarketingButton class="panel-row-button" href={`/${props.panel.slug}/`}>
+                    {/* "Learn more", with the panel named for screen readers */}
+                    <span>Learn more</span>
+                    <span class="sr-only"> about {props.panel.name}</span>
+                </MarketingButton>
             </div>
         </article>
     );
@@ -413,8 +403,11 @@ export function Landing() {
                             and get started with a panel template in seconds.
                         </p>
                         <div class="devs-actions">
-                            <div class="paper-button-host" innerHTML={docsButtonHtml} />
-                            <div class="paper-button-host" innerHTML={githubButtonHtml} />
+                            <MarketingButton href="/docs/">View Docs</MarketingButton>
+                            <MarketingButton variant="black" href="https://github.com/MileniumHQ/Paperboard" target="_blank" rel="noopener noreferrer">
+                                <span class="icon icon-github" aria-hidden="true" />
+                                <span>GitHub</span>
+                            </MarketingButton>
                         </div>
                     </div>
                     <pre class="devs-sheet" aria-label="Commands that make, install and build a new panel">

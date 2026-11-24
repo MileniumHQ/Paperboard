@@ -1,14 +1,18 @@
 import { contactBetween, containsPoint, hullFromAlpha, worldHull, type Point } from "./geometry";
 
-// Paper icons you can fling: ported from paperdocs' landing playground
-// (public/js/icon-play.js). Icons scatter around the copy, tossed ones
-// bounce off the edges and each other by their visible silhouettes, and a
-// tap spins one in place. Everything it starts, stop() ends.
+// Paper icons you can fling, for Paperboard's own pages: the site's outro
+// and the phone's welcome. Icons scatter around the copy, tossed ones bounce
+// off the edges, the copy and each other by their visible silhouettes, and a
+// tap spins one in place. Framework-free, so the prerendered site runs it as
+// it is. Everything it starts, stop() ends.
 
+// The damping constants are per 60 Hz frame; they are scaled by elapsed time
+// so a throw glides the same on any display.
 const DAMPING = 0.996;
 const RESTITUTION = 0.94;
 const STOP_SPEED = 2.5;
 const ANG_DAMPING = 0.993;
+const TILT_SETTLE = 0.08;
 const ANG_STOP = 0.02;
 const MAX_TILT = 0.5;
 const MAX_SPEED = 1800;
@@ -17,11 +21,15 @@ const CANDIDATES = 128;
 const IMPACT_SPEED = 700;
 /** collision silhouettes are sampled at this many px square */
 const SAMPLE = 48;
+/** how far icons keep from the copy */
+const COPY_MARGIN = 12;
+/** how far scattered icons start from the copy */
+const SCATTER_MARGIN = 20;
 
 export interface IconPlayOptions {
     /** px each icon is drawn at */
     size: number;
-    /** what icons are scattered around rather than over */
+    /** the copy: icons are scattered around it and bounce off it, never covering it */
     avoid: () => Element[];
     /** no tossing or spinning: icons stay where they're put */
     reduceMotion: boolean;
@@ -29,6 +37,13 @@ export interface IconPlayOptions {
     onImpact?: () => void;
     /** a tap, not a drag, on an icon */
     onTap?: () => void;
+}
+
+export interface IconPlay {
+    /** Settles once the icons' shapes are read, or rejects if they can't be (the field then says "unavailable"). */
+    ready: Promise<void>;
+    /** Ends the playground and hands the icons back to the page's own styles. */
+    stop: () => void;
 }
 
 interface Item {
@@ -51,6 +66,13 @@ interface Item {
     downY: number;
 }
 
+interface Box {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
 async function silhouette(icon: HTMLImageElement, size: number): Promise<Point[]> {
     await icon.decode();
     const canvas = document.createElement("canvas");
@@ -66,24 +88,48 @@ async function silhouette(icon: HTMLImageElement, size: number): Promise<Point[]
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** Starts the playground; `ready` settles once the icons are placed (or rejects if they can't be). */
-export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], opts: IconPlayOptions): { ready: Promise<void>; stop: () => void } {
+/**
+ * Starts the playground on `field`, which holds the icons. Icons are
+ * scattered the first time the field is on screen (so the copy has its real
+ * size), and the simulation sleeps while it is off screen. The field's
+ * `data-play-state` says what the icons are doing: "moving" or "resting",
+ * or "unavailable" when their shapes couldn't be read and there is no toy.
+ */
+export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], opts: IconPlayOptions): IconPlay {
     const items: Item[] = [];
+    let shapes: Point[][] | null = null;
     let W = 0;
     let H = 0;
+    let obstacle: Box | null = null;
     let running = false;
     let stopped = false;
+    let visible = false;
     let raf = 0;
     let last = 0;
     let resize: ResizeObserver | undefined;
+    let sight: IntersectionObserver | undefined;
+
+    // the copy, in field coordinates
+    const copyBox = (margin: number): Box | null => {
+        const fieldRect = field.getBoundingClientRect();
+        const rects = opts.avoid().map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
+        if (!rects.length) return null;
+        const left = Math.min(...rects.map((r) => r.left)) - fieldRect.left - margin;
+        const top = Math.min(...rects.map((r) => r.top)) - fieldRect.top - margin;
+        const right = Math.max(...rects.map((r) => r.right)) - fieldRect.left + margin;
+        const bottom = Math.max(...rects.map((r) => r.bottom)) - fieldRect.top + margin;
+        return { x: left, y: top, w: right - left, h: bottom - top };
+    };
 
     const measure = () => {
         const rect = field.getBoundingClientRect();
         W = rect.width;
         H = rect.height;
+        obstacle = copyBox(COPY_MARGIN);
     };
 
-    // resting lean follows position: a gentle swirl rather than all one way
+    // resting lean follows position: right of centre leans right, and the
+    // rule flips on the bottom half, so the scatter reads as a gentle swirl
     const tiltFor = (item: Item) => {
         const travel = Math.max(1, W - item.size);
         const nx = (item.x / travel) * 2 - 1;
@@ -98,21 +144,55 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
     const atRest = (item: Item) =>
         !item.dragging && !item.vx && !item.vy && !item.av && Math.abs(item.angle - tiltFor(item)) < 0.002;
 
-    // bands around what icons must clear, inset from the field's edges
-    const bands = () => {
-        const size = opts.size;
-        const inset = Math.min(size * 0.3, W * 0.05, H * 0.05);
-        const fieldRect = field.getBoundingClientRect();
-        const rects = opts.avoid().map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
-        const margin = 16;
-        let ex = { x: W * 0.19, y: H * 0.3, w: W * 0.62, h: H * 0.4 };
-        if (rects.length) {
-            const left = Math.min(...rects.map((r) => r.left)) - fieldRect.left - margin;
-            const top = Math.min(...rects.map((r) => r.top)) - fieldRect.top - margin;
-            const right = Math.max(...rects.map((r) => r.right)) - fieldRect.left + margin;
-            const bottom = Math.max(...rects.map((r) => r.bottom)) - fieldRect.top + margin;
-            ex = { x: Math.max(0, left), y: Math.max(0, top), w: Math.min(W, right) - Math.max(0, left), h: Math.min(H, bottom) - Math.max(0, top) };
+    // Measured on the turned silhouette, not the square: a spinning icon
+    // reaches past its square, over the copy. It leaves by the shortest way
+    // out, bouncing off that face.
+    const keepOffCopy = (item: Item) => {
+        if (!obstacle) return;
+        const hull = worldHull(item);
+        const xs = hull.map((p) => p.x);
+        const ys = hull.map((p) => p.y);
+        const left = Math.max(...xs) - obstacle.x;
+        const right = obstacle.x + obstacle.w - Math.min(...xs);
+        const top = Math.max(...ys) - obstacle.y;
+        const bottom = obstacle.y + obstacle.h - Math.min(...ys);
+        if (left <= 0 || right <= 0 || top <= 0 || bottom <= 0) return;
+        // a way out that ends past the field's edge is no way out: an icon
+        // pushed there is pulled straight back over the copy, so take the
+        // shortest of the ways that fit (or the shortest, when none do)
+        const fits = (dx: number, dy: number) =>
+            item.x + dx >= 0 && item.x + dx <= Math.max(0, W - item.size) && item.y + dy >= 0 && item.y + dy <= Math.max(0, H - item.size);
+        const ways = [
+            { side: "left", push: left, fits: fits(-left, 0) },
+            { side: "right", push: right, fits: fits(right, 0) },
+            { side: "top", push: top, fits: fits(0, -top) },
+            { side: "bottom", push: bottom, fits: fits(0, bottom) },
+        ];
+        const open = ways.filter((way) => way.fits);
+        const way = (open.length ? open : ways).reduce((a, b) => (b.push < a.push ? b : a));
+        if (way.side === "left") {
+            item.x -= left;
+            item.vx = -Math.abs(item.vx) * RESTITUTION;
+        } else if (way.side === "right") {
+            item.x += right;
+            item.vx = Math.abs(item.vx) * RESTITUTION;
+        } else if (way.side === "top") {
+            item.y -= top;
+            item.vy = -Math.abs(item.vy) * RESTITUTION;
+        } else {
+            item.y += bottom;
+            item.vy = Math.abs(item.vy) * RESTITUTION;
         }
+    };
+
+    // bands around the copy, inset from the field's edges
+    const bands = (): Box[] => {
+        const size = opts.size;
+        const inset = Math.min(size * 0.9, W * 0.05, H * 0.05);
+        const copy = copyBox(SCATTER_MARGIN);
+        const ex = copy
+            ? { x: Math.max(0, copy.x), y: Math.max(0, copy.y), w: Math.min(W, copy.x + copy.w) - Math.max(0, copy.x), h: Math.min(H, copy.y + copy.h) - Math.max(0, copy.y) }
+            : { x: W * 0.19, y: H * 0.3, w: W * 0.62, h: H * 0.4 };
         return [
             { x: inset, y: inset, w: W - inset * 2, h: ex.y - inset },
             { x: inset, y: ex.y + ex.h, w: W - inset * 2, h: H - inset - (ex.y + ex.h) },
@@ -121,16 +201,17 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         ].filter((band) => band.w >= size && band.h >= size);
     };
 
-    const scatter = (shapes: Point[][]) => {
+    const scatter = (hulls: Point[][]) => {
         measure();
         const regions = bands();
         const placed: Point[] = [];
         icons.forEach((el, index) => {
             const item: Item = {
-                el, size: opts.size, hull: shapes[index], x: 0, y: 0, vx: 0, vy: 0, angle: 0, av: 0,
+                el, size: opts.size, hull: hulls[index], x: 0, y: 0, vx: 0, vy: 0, angle: 0, av: 0,
                 dragging: false, pointerId: null, grabX: 0, grabY: 0, lastT: 0, moved: false, downX: 0, downY: 0,
             };
-            // best candidate: the sample furthest from everything placed
+            // best candidate: the sample furthest from everything placed, so
+            // the scatter reads as even and never self-overlaps
             let best = { x: 0, y: 0 };
             let bestDistance = -1;
             for (let attempt = 0; attempt < CANDIDATES; attempt++) {
@@ -160,12 +241,15 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
     const clampAll = () => {
         measure();
         for (const item of items) {
+            keepOffCopy(item);
             clampItem(item);
             setTransform(item);
         }
+        start();
     };
 
     const integrate = (item: Item, dt: number) => {
+        const frames = dt * 60;
         if (item.vx !== 0 || item.vy !== 0) {
             item.x += item.vx * dt;
             item.y += item.vy * dt;
@@ -183,8 +267,9 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
                 item.y = item.y <= 0 ? 0 : maxY;
             }
             if (hit > IMPACT_SPEED) opts.onImpact?.();
-            item.vx *= DAMPING;
-            item.vy *= DAMPING;
+            const drag = DAMPING ** frames;
+            item.vx *= drag;
+            item.vy *= drag;
             if (Math.hypot(item.vx, item.vy) < STOP_SPEED) {
                 item.vx = 0;
                 item.vy = 0;
@@ -192,12 +277,12 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         }
         if (item.av !== 0) {
             item.angle += item.av * dt;
-            item.av *= ANG_DAMPING;
+            item.av *= ANG_DAMPING ** frames;
             if (Math.abs(item.av) < ANG_STOP) item.av = 0;
         } else {
             // settle back to the position-matched lean, never upside down
             const tilt = tiltFor(item);
-            item.angle += (tilt - item.angle) * 0.08;
+            item.angle += (tilt - item.angle) * (1 - (1 - TILT_SETTLE) ** frames);
             if (Math.abs(tilt - item.angle) < 0.002) item.angle = tilt;
         }
     };
@@ -258,17 +343,23 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         }
         collide();
         for (const item of items) {
+            keepOffCopy(item);
             clampItem(item);
             if (!atRest(item)) moving = true;
             setTransform(item);
         }
-        if (moving && !stopped) raf = requestAnimationFrame(step);
-        else running = false;
+        if (moving && visible && !stopped) {
+            raf = requestAnimationFrame(step);
+        } else {
+            running = false;
+            if (!moving) field.dataset.playState = "resting";
+        }
     };
 
     const start = () => {
-        if (running || stopped) return;
+        if (running || stopped || !visible || !items.length) return;
         running = true;
+        field.dataset.playState = "moving";
         last = 0;
         raf = requestAnimationFrame(step);
     };
@@ -312,6 +403,8 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         item.vy = clamp((nextY - item.y) / dt, -MAX_SPEED, MAX_SPEED);
         item.x = nextX;
         item.y = nextY;
+        keepOffCopy(item);
+        clampItem(item);
         item.lastT = event.timeStamp;
         setTransform(item);
     };
@@ -350,20 +443,9 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         spin(item, clamp(speed / 220, 1, 8));
     };
 
-    const stop = () => {
-        if (stopped) return;
-        stopped = true;
-        running = false;
-        cancelAnimationFrame(raf);
-        resize?.disconnect();
-        for (const icon of icons) icon.removeEventListener("pointerdown", onPointerDown);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        window.removeEventListener("pointercancel", onPointerUp);
-    };
-
-    const ready = Promise.all(icons.map((icon) => silhouette(icon, opts.size))).then((shapes) => {
-        if (stopped) return;
+    // the first time the field is seen, the copy has its real size: scatter then
+    const place = () => {
+        if (!shapes || items.length || !visible) return;
         scatter(shapes);
         for (const icon of icons) icon.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointermove", onPointerMove);
@@ -372,6 +454,39 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
         resize = new ResizeObserver(clampAll);
         resize.observe(field);
         start();
+    };
+
+    const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        running = false;
+        cancelAnimationFrame(raf);
+        resize?.disconnect();
+        sight?.disconnect();
+        for (const icon of icons) {
+            icon.removeEventListener("pointerdown", onPointerDown);
+            icon.style.removeProperty("transform");
+            delete icon.dataset.dragging;
+        }
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        delete field.dataset.playState;
+    };
+
+    const ready = Promise.all(icons.map((icon) => silhouette(icon, opts.size))).then((hulls) => {
+        if (stopped) return;
+        shapes = hulls;
+        sight = new IntersectionObserver((entries) => {
+            visible = entries.some((entry) => entry.isIntersecting);
+            if (!visible) return;
+            place();
+            if (items.some((item) => !atRest(item))) start();
+        });
+        sight.observe(field);
+    }, (error: unknown) => {
+        if (!stopped) field.dataset.playState = "unavailable";
+        throw error;
     });
 
     return { ready, stop };

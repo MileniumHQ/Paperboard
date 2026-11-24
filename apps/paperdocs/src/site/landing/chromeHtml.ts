@@ -1,11 +1,10 @@
 import { DOCS_LINKS, FOOTER_SITE_LINKS, LEARN_LINKS, SITE_LINKS } from "../links";
 import { iconHtml } from "./images";
 
-// Static HTML fragments for the landing's custom-element hosts. BgOverlay,
-// StyledText, and PaperButton are still custom elements upgraded by the plain
-// scripts in public/js, so their markup is handed to Solid as innerHTML. These
-// builders are the single source for that markup, shared with the client
-// scripts' expectations of the same class names and attributes.
+// Static HTML fragments for the landing's topbar menus and footer links,
+// handed to Solid as innerHTML. These builders are the single source for that
+// markup, shared with public/js/topbar.js's expectations of the same class
+// names and attributes.
 
 export function escapeHtml(value: string): string {
     return value

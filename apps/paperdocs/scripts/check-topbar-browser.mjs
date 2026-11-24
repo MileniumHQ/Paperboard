@@ -22,8 +22,8 @@ export async function checkTopbarWordmark(browser, origin) {
     };
     const wordmark = page => page.evaluate(() => {
         const mark = document.querySelector('.topbar-brand .paper-wordmark');
-        const label = mark.querySelector('.paper-wordmark-label');
-        const host = mark.querySelector('.styled-text-host');
+        const label = mark.querySelector('.paper-wordmark-plain');
+        const host = mark.querySelector('.paper-wordmark-lettering');
         const probe = document.createElement('span');
         probe.style.color = 'var(--paper-text)';
         document.body.append(probe);
@@ -45,14 +45,14 @@ export async function checkTopbarWordmark(browser, origin) {
         }
         // the landing chrome isn't the topbar and stays textured
         const landing = await open('/');
-        assert.equal(await landing.evaluate(() => getComputedStyle(document.querySelector('.site-topbar__name .styled-text-host')).display !== 'none'), true, 'The landing wordmark keeps its texture');
+        assert.equal(await landing.evaluate(() => getComputedStyle(document.querySelector('.site-topbar__name marketing-text')).display !== 'none'), true, 'The landing wordmark keeps its texture');
     });
 
     await inTheme('dark', async open => {
         for (const path of pages) {
             const { labelShown, textured } = await wordmark(await open(path));
             assert.equal(textured, true, `${path}: dark mode keeps the texture`);
-            assert.equal(labelShown, false, `${path}: the textured wordmark's label is only for screen readers`);
+            assert.equal(labelShown, false, `${path}: the textured wordmark shows no plain title beside it`);
         }
         // switching the theme from the topbar changes it in place (the init
         // script only runs on a load, so the toggle's choice stands)
