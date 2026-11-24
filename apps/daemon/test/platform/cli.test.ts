@@ -2,7 +2,7 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
-import { childEnv, craneBinary, runCrane, spawnChild, startCrane } from "testkit/crane";
+import { childEnv, craneBinary, killWorkloads, runCrane, spawnChild, startCrane, workloadRecords } from "testkit/crane";
 import { dataDir, tempDir } from "testkit/fs";
 import { Rpc } from "testkit/rpc";
 import { isAlive, TEST_TIMEOUT_MS, waitFor, within } from "testkit/wait";
@@ -93,6 +93,52 @@ describe("the daemon command line works headless", () => {
 			expect(run.output).not.toContain(`rm ${data}`);
 			expect(fs.existsSync(path.join(data, "local"))).toBe(true);
 		});
+	}
+
+	if (process.platform === "win32") {
+		test("the scheduled task runs --headless with a quoted --data-dir, no time limit and normal priority", async () => {
+			const data = path.join(tempDir(), "with space");
+			const run = await runCrane(["install-service", "--dry-run", "--system", "--name", "pb-test", "--data-dir", data], childEnv(dataDir()));
+			expect(run.code).toBe(0);
+			expect(run.output).toContain("<BootTrigger>");
+			expect(run.output).toContain("<LogonType>S4U</LogonType>");
+			expect(run.output).toContain("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>");
+			expect(run.output).toContain("<Priority>5</Priority>");
+			expect(run.output).toContain(`--headless --data-dir &quot;${data}&quot;`);
+		});
+
+		// A real task: only on CI's throwaway Windows runner, which is an administrator
+		if (process.env.CI) {
+			test("a --system task starts the daemon at once, and removing it leaves its workloads running and its data in place", async () => {
+				const data = path.join(tempDir(), "with space");
+				const name = `pb-ci-${process.pid}`;
+				const free = net.createServer();
+				await new Promise<void>((resolve) => free.listen(0, "127.0.0.1", resolve));
+				const port = (free.address() as net.AddressInfo).port;
+				await new Promise<void>((resolve) => free.close(() => resolve()));
+				const install = await runCrane(["install-service", "--system", "--name", name, "--data-dir", data, "--host", "127.0.0.1", "--port", String(port)], childEnv(dataDir()), 60_000);
+				let removed = false;
+				try {
+					expect(install.code).toBe(0);
+					expect(install.output).toContain("It is running");
+					const handshake = JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")) as { port: number; token: string };
+					const rpc = await Rpc.authed(`ws://127.0.0.1:${handshake.port}`, handshake.token);
+					await rpc.ok("process:run", { id: "survivor", command: process.execPath, args: ["-e", "process.stdin.resume(); setInterval(() => {}, 1000)"] });
+					const [record] = await waitFor("the workload's metadata", () => workloadRecords(data).length === 1 && workloadRecords(data));
+					await rpc.close();
+
+					const uninstall = await runCrane(["uninstall-service", "--system", "--name", name], childEnv(dataDir()), 60_000);
+					removed = uninstall.code === 0;
+					expect(uninstall.code).toBe(0);
+					await waitFor("the daemon to stop", () => !isAlive(JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")).pid));
+					expect(isAlive(record!.childPid)).toBe(true);
+					expect(fs.existsSync(path.join(data, "local"))).toBe(true);
+				} finally {
+					if (!removed) await runCrane(["uninstall-service", "--system", "--name", name], childEnv(dataDir()), 60_000);
+					await killWorkloads(data);
+				}
+			});
+		}
 	}
 
 	if (process.platform === "darwin") {
