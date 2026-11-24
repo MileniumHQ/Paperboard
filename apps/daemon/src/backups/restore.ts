@@ -146,7 +146,7 @@ export function swapIn(workDir: string, panelId: string, storageDir: string, sta
             try {
                 fs.unlinkSync(path.join(dir, JOURNAL));
             } catch (err) {
-                throw new Error(`Its journal, ${path.join(dir, JOURNAL)}, couldn't be deleted (${errorMessage(err)})`, { cause: err });
+                throw new Error(`the journal ${path.join(dir, JOURNAL)} couldn't be deleted (${errorMessage(err)})`, { cause: err });
             }
         },
         clear: () =>
