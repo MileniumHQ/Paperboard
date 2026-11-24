@@ -36,7 +36,7 @@ export default function DaemonCliDoc() {
                     <tr><td><PaperCode>pair</PaperCode></td><td>Opens pairing on the daemon running for the data directory, prints the code, and waits until a computer pairs.</td></tr>
                     <tr><td><PaperCode>status</PaperCode></td><td>Shows whether a daemon is running for the data directory, with its version, PID, address and paired computers.</td></tr>
                     <tr><td><PaperCode>identify</PaperCode></td><td>Prints what this computer is, as Paperboard names it: its OS, what is built on it, the machine it runs in, its motherboard, and an agent operating it.</td></tr>
-                    <tr><td><PaperCode>install-service</PaperCode></td><td>Installs, turns on and starts the daemon as a systemd (Linux) or launchd (macOS) service. On Windows it prints Task Scheduler commands.</td></tr>
+                    <tr><td><PaperCode>install-service</PaperCode></td><td>Installs, turns on and starts the daemon as a systemd (Linux) or launchd (macOS) service, or a Task Scheduler task (Windows).</td></tr>
                     <tr><td><PaperCode>uninstall-service</PaperCode></td><td>Stops the service and removes it. The data directory is kept.</td></tr>
                     <tr><td><PaperCode>help [command]</PaperCode></td><td>Prints help for the program or for one command.</td></tr>
                 </tbody>
