@@ -15,6 +15,7 @@ import {
     useWizard,
     createRead,
     showError,
+    showToast,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
@@ -154,34 +155,51 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     let jobId: string | null = null;
     // a start the wizard has since left (or started again) is cancelled when it answers
     let startToken = 0;
-    // only the setup this wizard started answers
+    // pushes that came before the start's answer named their job: the newest is kept
+    let early: ComputerSetupState | null = null;
+    // the newer state of the job this wizard started; anything else goes nowhere
+    const take = (state: ComputerSetupState) => {
+        if (state.jobId !== jobId) return;
+        const shown = setup();
+        if (shown?.jobId === state.jobId && shown.revision >= state.revision) return;
+        setSetup(state);
+    };
     onCleanup(computerSetupApi.onChanged((state) => {
-        if (state.jobId === jobId) setSetup(state);
+        if (jobId === null && startToken > 0 && (!early || early.jobId !== state.jobId || early.revision < state.revision)) early = state;
+        take(state);
     }));
     const cancelJob = (id: string) => {
         void computerSetupApi.cancel(id).catch((err) => showError("Couldn't stop setting up the computer", err));
     };
     const startSetup = () => {
         const token = ++startToken;
+        jobId = null;
+        early = null;
         batch(() => {
             setSetup(null);
             setPassword("");
+            // each computer asks with its own account (its ~/.ssh/config User)
+            setUsername("");
             setSigningIn(false);
         });
         const target = host().trim();
         computerSetupApi.start(target, name().trim() || undefined).then(
             (started) => {
-                if (token === startToken) jobId = started.jobId;
-                else cancelJob(started.jobId);
+                if (token !== startToken) return cancelJob(started.jobId);
+                jobId = started.jobId;
+                take(started);
+                if (early) take(early);
+                early = null;
             },
             (err) => {
                 if (token !== startToken) return;
-                setSetup({ jobId: "", host: target, steps: [], signIn: null, result: { failed: errorMessage(err) } });
+                setSetup({ jobId: "", revision: 0, host: target, steps: [], signIn: null, result: { failed: errorMessage(err) } });
             },
         );
     };
     const stopSetup = () => {
         startToken++;
+        early = null;
         setSetup(null);
         if (!jobId) return;
         const id = jobId;
@@ -199,6 +217,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         } finally {
             setSigningIn(false);
         }
+    };
+    // what stopped the setup, when something did
+    const failure = () => {
+        const result = setup()?.result;
+        return result && "failed" in result ? result.failed : null;
     };
     createEffect(on(() => setup()?.signIn?.username, (asked) => {
         if (asked !== undefined && !username()) setUsername(asked);
@@ -303,6 +326,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             if ("paired" in result) {
                 props.onComplete({ id: result.paired.id });
                 props.onClose();
+                // said where it outlives the wizard
+                if (result.paired.notice) showToast({ variant: "warning", title: `${name() || host()} is added`, message: result.paired.notice });
             } else if ("useCode" in result) {
                 setCodeHint(result.useCode);
                 go(CODE);
@@ -440,25 +465,21 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             >
                 <PaperFlex center fullWidth fullHeight padding="full">
                     <PaperFlex direction="column" gap="full" fullWidth maxWidth="panel-small">
-                        <PaperFlex direction="column" gap="half">
-                            <PaperText preset="title">Setting Up {name() || host()}</PaperText>
-                            <PaperText preset="text">
-                                Paperboard signs in over SSH, installs its server if it
-                                isn't there yet, and pairs with it.
-                            </PaperText>
-                        </PaperFlex>
+                        {/* the steps say what it does; the dialog keeps its height for them */}
+                        <PaperText preset="title">Setting Up {name() || host()}</PaperText>
 
                         <PaperLoaderGroup>
-                            {/* a step shows once it starts: the sign-in form has room below the
-                                ones under way. Steps only ever start in order, so a row keeps its
-                                place (and its loader) as each push brings the steps again */}
-                            <Index each={(setup()?.steps ?? []).filter((step) => step.status !== "waiting")}>
+                            {/* a step shows once it starts, so the sign-in form has room below the
+                                ones under way; once it fails, only the step that failed stays beside
+                                the error. Steps start in order, so a row keeps its place (and its
+                                loader) as each push brings the steps again */}
+                            <Index each={(setup()?.steps ?? []).filter((step) => (failure() ? step.status === "error" : step.status !== "waiting"))}>
                                 {(step) => (
                                     <PaperLoader
                                         percent={step().percent}
-                                        loaderStatus={step().status}
+                                        // a step that can't say how far it is spins
+                                        loaderStatus={step().status === "loading" && step().percent === undefined ? "indeterminate" : step().status}
                                         label={step().status === "loading" ? `${step().label}...` : step().label}
-                                        subtitle={step().note}
                                     />
                                 )}
                             </Index>
@@ -486,20 +507,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                         onInput={(e) => setPassword(e.currentTarget.value)}
                                         error={asked().error}
                                     />
-                                    <PaperFlex>
-                                        <PaperButton variant="text" size="small" onClick={() => {
-                                            stopSetup();
-                                            setCodeHint("");
-                                            goTo?.(CODE);
-                                        }}>
-                                            Connect with pairing code
-                                        </PaperButton>
-                                    </PaperFlex>
                                 </PaperFlex>
                             )}
                         </Show>
 
-                        <Show when={(() => { const r = setup()?.result; return r && "failed" in r ? r.failed : null; })()}>
+                        <Show when={failure()}>
                             {(failed) => (
                                 <PaperError
                                     title={`Couldn't set up ${name() || host()}`}
@@ -508,6 +520,17 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 />
                             )}
                         </Show>
+
+                        {/* the code is one click away whatever the setup is doing, failed included */}
+                        <PaperFlex>
+                            <PaperButton variant="text" size="small" onClick={() => {
+                                stopSetup();
+                                setCodeHint("");
+                                goTo?.(CODE);
+                            }}>
+                                Connect with pairing code
+                            </PaperButton>
+                        </PaperFlex>
                     </PaperFlex>
                 </PaperFlex>
             </PaperWizardStep>
