@@ -80,8 +80,9 @@ registerTestCleanup(() => {
 });
 
 // Spawns a child process and collects its output.
-export function spawnChild(command: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string) {
-	const proc = spawn(command, args, { env, cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+// stdin "pipe" keeps the child's stdin open until proc.stdin is ended
+export function spawnChild(command: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string, stdin: "ignore" | "pipe" = "ignore") {
+	const proc = spawn(command, args, { env, cwd, stdio: [stdin, "pipe", "pipe"], windowsHide: true });
 	running.add(proc);
 	let output = "";
 	proc.stdout?.setEncoding("utf8");

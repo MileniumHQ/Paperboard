@@ -76,7 +76,7 @@ describe("the daemon command line works headless", () => {
 	test("pair --json prints the code, the address and the certificate the daemon answers with, then the paired computer", async () => {
 		const dir = dataDir();
 		const crane = await startCrane({ dataDir: dir, host: "0.0.0.0" });
-		const pair = spawnChild(await craneBinary(), ["pair", "--json", "--data-dir", dir], childEnv(dataDir()));
+		const pair = spawnChild(await craneBinary(), ["pair", "--json", "--data-dir", dir], childEnv(dataDir()), undefined, "pipe");
 		const opened = await waitFor("the pairing line", () => {
 			const line = pair.output().split("\n").find((l) => l.startsWith("{"));
 			return line !== undefined && (JSON.parse(line) as { code: string; listen: { host: string; port: number }; fingerprint: string });
@@ -95,6 +95,22 @@ describe("the daemon command line works headless", () => {
 		await client.ok("auth:pair", { code: opened.code, clientName: "CI" });
 		expect((await within("pair to exit", pair.exited, 20_000)).code).toBe(0);
 		expect(pair.output().trim().split("\n").at(-1)).toBe(JSON.stringify({ paired: "CI" }));
+		await client.close();
+		await crane.stop();
+	});
+
+	// Inventory: Security — a code opened over SSH closes when the channel does, so none is left open.
+	test("pair --json closes pairing when its stdin ends, as an SSH channel closing does", async () => {
+		const dir = dataDir();
+		const crane = await startCrane({ dataDir: dir, host: "0.0.0.0" });
+		const pair = spawnChild(await craneBinary(), ["pair", "--json", "--data-dir", dir], childEnv(dataDir()), undefined, "pipe");
+		await waitFor("the pairing line", () => pair.output().split("\n").some((l) => l.startsWith("{")), { timeoutMs: 20_000 });
+		const client = await crane.rpc();
+		const status = async () => (await client.ok("system:pairing-status", {})) as { active: boolean };
+		expect((await status()).active).toBe(true);
+		pair.proc.stdin!.end();
+		await within("pair to exit", pair.exited, 20_000);
+		expect((await status()).active).toBe(false);
 		await client.close();
 		await crane.stop();
 	});

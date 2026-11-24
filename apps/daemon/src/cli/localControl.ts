@@ -215,13 +215,6 @@ export async function runStatus(json: boolean): Promise<number> {
     return EXIT.OK;
 }
 
-// Opens pairing, prints the code and waits for a computer to pair. Ctrl+C
-// closes pairing again so no code is left open behind the user's back.
-/**
- * Opens pairing and waits for a computer to pair. With json, the first line
- * is {code, listen, fingerprint} and the last {paired}: Paperboard setting a
- * computer up over SSH pins that fingerprint before it sends the code.
- */
 function printPairingHelp(code: string, listen: { host: string; port: number } | undefined): void {
     console.log(`Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`);
     console.log("");
@@ -238,6 +231,13 @@ function printPairingHelp(code: string, listen: { host: string; port: number } |
     console.log("");
 }
 
+/**
+ * Opens pairing, prints the code and waits for a computer to pair. Ctrl+C
+ * (or, with json, stdin ending) closes pairing again, so no code is left
+ * open behind the user's back. With json, the first line is {code, listen,
+ * fingerprint} and the last {paired}: Paperboard setting a computer up over
+ * SSH pins that fingerprint before it sends the code.
+ */
 export async function runPair(json = false): Promise<number> {
     const daemon = await connectLocalDaemon();
     if (!daemon.handshake.token) {
@@ -262,6 +262,13 @@ export async function runPair(json = false): Promise<number> {
     };
     process.once("SIGINT", onInterrupt);
     process.once("SIGTERM", onInterrupt);
+    // whoever reads the JSON holds stdin open: its end (an SSH channel
+    // closing, or the connection dropping) closes pairing as Ctrl+C would,
+    // since sshd without a terminal sends no signal
+    if (json) {
+        process.stdin.once("end", onInterrupt);
+        process.stdin.resume();
+    }
     try {
         const before = await daemon.call("system:pairing-status");
         const known = new Set(before.computers.map((c) => `${c.name}\n${c.pairedAt}`));
@@ -277,7 +284,8 @@ export async function runPair(json = false): Promise<number> {
             wake = null;
             if (interrupted) {
                 await daemon.call("system:pairing-cancel");
-                console.log("Pairing cancelled.");
+                // with json, no one may be reading any more
+                if (!json) console.log("Pairing cancelled.");
                 return EXIT.INTERRUPTED;
             }
             const status = await daemon.call("system:pairing-status");
@@ -293,6 +301,10 @@ export async function runPair(json = false): Promise<number> {
     } finally {
         process.off("SIGINT", onInterrupt);
         process.off("SIGTERM", onInterrupt);
+        if (json) {
+            process.stdin.off("end", onInterrupt);
+            process.stdin.pause();
+        }
         daemon.close();
     }
 }
