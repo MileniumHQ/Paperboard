@@ -3,7 +3,7 @@ import { debug, debugErr } from "./debug";
 import { PROTOCOL_VERSION, readValue, type EventPayload, type RpcAction, type RpcParams, type RpcResult } from "./protocol";
 import { shape, type Infer } from "./shape";
 import { newClientId } from "./channels";
-import { TransportRegistry, type ActionHandler } from "./transport/registry";
+import { TransportRegistry, registerSet, type ActionHandler } from "./transport/registry";
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
@@ -665,9 +665,10 @@ export class CraneTransport {
 
     /** Registers a panel's Blocks entries ("kind.id" or "project/kind.id") and their handlers, in one call. */
     public async registerBlocks(panelId: string, blocks: { entry: string; handler: ActionHandler; schema: BlockSchema }[]): Promise<void> {
-        for (const { entry, handler, schema } of blocks) this.blocksRegistry.addAction(panelId, entry, handler, schema);
-        await this.ensureConnected();
-        await this.call("blocks:register-set", { panelId, entries: blocks.map(({ entry, schema }) => ({ entry, schema })) });
+        await this.blocksRegistry.addActions(panelId, blocks, async () => {
+            await this.ensureConnected();
+            await registerSet((action, params) => this.call(action as RpcAction, params as never), panelId, blocks.map(({ entry, schema }) => ({ entry, schema })));
+        });
     }
 
     public async unregisterBlock(panelId: string, entry: string): Promise<void> {

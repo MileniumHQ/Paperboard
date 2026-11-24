@@ -16,8 +16,8 @@ export function ownNamespace(panelId: string, ctx: RpcContext): string {
 }
 
 /** A registry refusal: the namespace belongs to another socket. */
-export function ownedElsewhere(result: { ok: boolean }, what: string): void {
-    if (!result.ok) throw new Refusal(what, ErrorCode.CONFLICT);
+export function ownedElsewhere(result: { ok: boolean; block?: string }, what: string): void {
+    if (!result.ok) throw new Refusal(result.block === undefined ? what : `${what}: block "${result.block}"`, ErrorCode.CONFLICT);
 }
 
 // a registry call's own failure is answered as it is, typed by its code
@@ -45,7 +45,7 @@ export const blocksRpc = rpcModule({
     // goes at the next protocol version
     "blocks:register": ({ panelId, entry, schema }, ctx) => {
         const owner = ownNamespace(panelId, ctx);
-        ownedElsewhere(blocksRegistry.register(owner, [{ entry, schema }], ctx.ws), conflict(`block "${entry}"`, owner));
+        ownedElsewhere(blocksRegistry.register(owner, [{ entry, schema }], ctx.ws), conflict("a block", owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "block:registered", panelId: owner, entry });
         return { success: true };
     },

@@ -55,10 +55,11 @@ export interface CarriedOutcome {
 }
 
 // result of a namespace write; ok:false with code "CONFLICT" means the name
-// is already owned by a different socket
+// is already owned by a different socket; `block` names the entry it is
+// refused for, when it is an entry
 export type RegistryResult =
     | { ok: true }
-    | { ok: false; code: "CONFLICT"; owner: WebSocket };
+    | { ok: false; code: "CONFLICT"; owner: WebSocket; block?: string };
 
 /** A refused project definition or project block: answered INVALID_PARAMS. */
 export class ProjectError extends Error {
@@ -93,7 +94,7 @@ export class BlocksRegistry {
                 logger.warn(
                     `[Blocks] Refused to register "${entry}" for panel "${panelId}": already registered by another socket`,
                 );
-                return { ok: false, code: "CONFLICT", owner: existing.ws };
+                return { ok: false, code: "CONFLICT", owner: existing.ws, block: entry };
             }
             this.assertProjectOwned(panelId, entry, ws);
         }

@@ -163,12 +163,12 @@ export async function startWireServer(token = "test-token", port = 0): Promise<W
                     result = server.answer(action, params, frame);
                 }
             } catch (err) {
-                send({ type: "response", id, error: (err as Error).message });
+                send({ type: "response", id, error: (err as Error).message, code: (err as { code?: string }).code });
                 return;
             }
             Promise.resolve(result).then(
                 (value) => send({ type: "response", id, result: value }),
-                (err: Error) => send({ type: "response", id, error: err.message }),
+                (err: Error & { code?: string }) => send({ type: "response", id, error: err.message, code: err.code }),
             );
         };
         ws.on("message", (raw) => {

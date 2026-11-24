@@ -354,6 +354,7 @@ describe("the blocks registry", () => {
 
 			const refused = await second.call("blocks:register-set", { panelId: "test.blockset", entries: [block("fresh"), block("held")] });
 			expect(refused.code).toBe("CONFLICT");
+			expect(refused.error).toContain('block "command.held"');
 			const listed = (await first.ok("blocks:list", { panelId: "test.blockset" })).entries.map((e: { entry: string }) => e.entry);
 			expect(listed).toEqual(["command.held"]);
 			for (const s of [first, second]) await s.close();
