@@ -205,10 +205,11 @@ export interface ShellCallContract {
     // Report an Issue: the diagnostics it attaches (the computer looked at,
     // its panels, recent log lines), scrubbed, as the person sees them
     "issue-details": { args: void; answer: string };
-    // sends what the person typed, and the diagnostics they saw unless they
-    // left them out (""), to Paperboard's issues service (services/issues),
-    // with this app's version and system
-    "issue-send": { args: { text: string; details: string }; answer: void };
+    // sends what the person typed, and the diagnostics issue-details last
+    // gathered unless they left them out, to Paperboard's issues service
+    // (services/issues), with this app's version and system. The
+    // diagnostics stay in main: a body over the browser-mode bridge's cap is refused.
+    "issue-send": { args: { text: string; includeDetails: boolean }; answer: void };
 
     "app-update-state": { args: void; answer: AppUpdateState };
     "update-queue": { args: void; answer: UpdateQueueState };

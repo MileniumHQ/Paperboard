@@ -1,4 +1,4 @@
-import { Match, Switch, batch, createSignal } from "solid-js";
+import { Match, Show, Switch, batch, createSignal } from "solid-js";
 import {
     PaperButton,
     PaperCheckbox,
@@ -33,14 +33,15 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
     const details = createRead(() => shellIpc().invoke("issue-details"), { source: () => props.open });
     const send = createAction();
 
+    // gathered fresh and not failed: a value kept from an earlier open isn't what main would send
+    const gathered = () => details.value() !== undefined && !details.loading() && !details.error();
     // with diagnostics on, only once they're gathered: what's sent is what was shown
-    const ready = () => text().trim() !== "" && (!includeDetails() || details.value() !== undefined);
+    const ready = () => text().trim() !== "" && (!includeDetails() || gathered());
 
     const submit = () => {
         if (!ready() || send.busy()) return;
-        const attached = includeDetails() ? (details.value() ?? "") : "";
         void send.run("Couldn't send the issue", async () => {
-            await shellIpc().invoke("issue-send", { text: text(), details: attached });
+            await shellIpc().invoke("issue-send", { text: text(), includeDetails: includeDetails() });
             batch(() => {
                 setText("");
                 props.onClose();
@@ -89,23 +90,31 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                         label="Include logs and panel versions"
                         description="Recent warnings, errors and log lines, and the panels on the computer you're looking at. Paths, names, addresses and keys are removed."
                     />
+                    <Show when={includeDetails() && details.error()}>
+                        <PaperError
+                            title="Couldn't gather the logs"
+                            error={details.error()}
+                            action={{ label: "Try again", disabled: details.loading(), onClick: () => void details.reload() }}
+                        />
+                    </Show>
                     <PaperCollapsible title="See what's sent" icon="visibility">
                         <Switch>
-                            <Match when={details.error() && details.value() === undefined}>
-                                <PaperError
-                                    title="Couldn't gather the logs"
-                                    error={details.error()}
-                                    action={{ label: "Try again", disabled: details.loading(), onClick: () => void details.reload() }}
-                                />
+                            <Match when={!includeDetails()}>
+                                <PaperCode block wrap language="text">
+                                    Nothing: the logs and panel versions are left out.
+                                </PaperCode>
                             </Match>
-                            <Match when={details.value() === undefined}>
+                            <Match when={details.error()}>
+                                <PaperText preset="hint">The logs couldn't be gathered, so there is nothing to show yet.</PaperText>
+                            </Match>
+                            <Match when={!gathered()}>
                                 <PaperLoader loaderStatus="indeterminate" centered delay={150} label="Gathering logs..." />
                             </Match>
                             <Match when={details.value()}>
                                 {(attached) => (
                                     <PaperFlex direction="column" maxHeight="panel-height-small" scrollable>
                                         <PaperCode block wrap language="text">
-                                            {includeDetails() ? attached() : "Nothing: the logs and panel versions are left out."}
+                                            {attached()}
                                         </PaperCode>
                                     </PaperFlex>
                                 )}

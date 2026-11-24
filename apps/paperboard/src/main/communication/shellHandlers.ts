@@ -6,7 +6,7 @@
 // origin for IPC, session cookie + Origin for HTTP). Window and updater
 // calls stay Electron-only in shelldata.ts.
 import * as path from "path";
-import connectionPool from "./papercrane/ConnectionPool";
+import connectionPool, { LOCAL_COMPUTER_NAME } from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
 import { getPaperboardDir, getFilesDir, getLogsDir, ensureDir } from "daemon/core/paths";
 import { buildDetails, localScrubber, readLogTail, type DetailsInput } from "../issueDetails";
@@ -59,11 +59,22 @@ async function collectIssueDetails(): Promise<string> {
             panels,
             log: readLogTail(getLogsDir()),
         },
-        localScrubber([...paired, ...discovery.look()].flatMap((computer) => [computer.name, computer.host])),
+        // every computer's name, this one's included: the app logs a custom name it was given.
+        // The default name says nothing, and "this computer" in the details is Paperboard's own wording.
+        localScrubber(
+            [...computers, ...discovery.list()]
+                .filter((computer) => computer.name !== LOCAL_COMPUTER_NAME)
+                .flatMap((computer) => [computer.name, computer.host]),
+        ),
     );
 }
 
 export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
+    // the diagnostics the person last saw. They stay here and issue-send
+    // sends exactly these, so the form never carries up to 60 KB back (the
+    // browser-mode bridge refuses bodies over 64 KiB), and what's sent is
+    // what was shown.
+    let gathered: string | null = null;
     return {
         // throws until the local daemon is verified: why it isn't, once known
         "crane-credentials": () => {
@@ -142,11 +153,16 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "launch-options": () => deps.launchOptions(),
         graphics: () => deps.graphics(),
         "app-settings-changed": () => deps.appSettingsChanged(),
-        "issue-details": () => collectIssueDetails(),
-        "issue-send": ({ text, details }) => {
+        "issue-details": async () => {
+            gathered = null;
+            gathered = await collectIssueDetails();
+            return gathered;
+        },
+        "issue-send": ({ text, includeDetails }) => {
             if (typeof text !== "string") throw new Error("Invalid parameter: text");
-            if (typeof details !== "string") throw new Error("Invalid parameter: details");
-            return deps.sendIssue(text, details);
+            if (typeof includeDetails !== "boolean") throw new Error("Invalid parameter: includeDetails");
+            if (includeDetails && gathered === null) throw new Error("The logs weren't gathered. Reopen Report an Issue and try again.");
+            return deps.sendIssue(text, includeDetails ? gathered! : "");
         },
     };
 }

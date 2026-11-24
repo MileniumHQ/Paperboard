@@ -85,7 +85,7 @@ function isPlaintextAnswer(err: any): boolean {
     return code === "EPROTO" || /SSL|TLS|WRONG_VERSION_NUMBER/.test(String(err?.message || ""));
 }
 
-const LOCAL_COMPUTER_NAME = "This Computer";
+export const LOCAL_COMPUTER_NAME = "This Computer";
 const COMPUTER_NAME_MAX = 64;
 
 // a name is shown on the rail and in every header; blank or huge is refused
