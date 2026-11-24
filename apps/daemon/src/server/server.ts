@@ -49,6 +49,8 @@ export interface ServerOptions {
     remotesFile?: string;
     // mDNS announcement on non-loopback binds (default on)
     advertise?: boolean;
+    // stop, as on SIGTERM, once the process that started the daemon is gone
+    exitWithParent?: boolean;
 }
 
 export interface ServerInstance {
@@ -335,6 +337,23 @@ function daemonLifecycle(parts: DaemonParts) {
     };
 }
 
+// A Windows user task runs the daemon under conhost --headless, and ending
+// the task ends only conhost: the daemon then stops the way a signal stops
+// it, leaving its workloads for the next daemon
+function followParent(): void {
+    const parent = process.ppid;
+    const timer = setInterval(() => {
+        try {
+            process.kill(parent, 0);
+        } catch {
+            clearInterval(timer);
+            logger.info(`[Paperboard Server] the process that started the daemon (PID ${parent}) is gone; stopping`);
+            process.emit("SIGTERM");
+        }
+    }, 2000);
+    timer.unref();
+}
+
 // One attempt to listen on a port. Builds the attempt's own engine, auth and
 // servers, and settles once the daemon is ready; a failed bind tears all of
 // it down before rejecting, so a retry starts clean.
@@ -396,6 +415,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             }
             settled = true;
             lifecycle.arm();
+            if (options.exitWithParent) followParent();
 
             // Start background services for installed panels
             try {

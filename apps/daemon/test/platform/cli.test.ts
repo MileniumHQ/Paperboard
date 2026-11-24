@@ -71,6 +71,27 @@ describe("the daemon command line works headless", () => {
 		await crane.stop();
 	});
 
+	// how a Windows user task's daemon stops with the conhost it runs under
+	test("--exit-with-parent stops the daemon once the process that started it is gone", async () => {
+		const dir = dataDir();
+		const free = net.createServer();
+		await new Promise<void>((resolve) => free.listen(0, "127.0.0.1", resolve));
+		const port = (free.address() as net.AddressInfo).port;
+		await new Promise<void>((resolve) => free.close(() => resolve()));
+		const launch = [await craneBinary(), "--headless", "--host", "127.0.0.1", "--port", String(port), "--exit-with-parent"];
+		const parent = spawnChild(process.execPath, ["-e", `const [bin, ...args] = JSON.parse(process.argv[1]); require("node:child_process").spawn(bin, args, { stdio: "ignore" }); setInterval(() => {}, 1000);`, JSON.stringify(launch)], childEnv(dir));
+		let daemon: number | undefined;
+		try {
+			daemon = await waitFor("the daemon to start", () => fs.existsSync(path.join(dir, "local", "crane.json")) && (JSON.parse(fs.readFileSync(path.join(dir, "local", "crane.json"), "utf8")) as { pid: number }).pid, { timeoutMs: 30_000 });
+			parent.proc.kill("SIGKILL");
+			await parent.exited;
+			await waitFor("the daemon to stop with its parent", () => !isAlive(daemon!), { timeoutMs: 15_000 });
+		} finally {
+			parent.proc.kill("SIGKILL");
+			if (daemon !== undefined && isAlive(daemon)) process.kill(daemon, "SIGKILL");
+		}
+	});
+
 	if (process.platform === "linux") {
 		test("the systemd unit runs --headless with a quoted --data-dir, KillMode=process and OOMPolicy=continue", async () => {
 			const data = path.join(tempDir(), "with space");
@@ -110,8 +131,8 @@ describe("the daemon command line works headless", () => {
 			expect(run.output).toMatch(/<TimeTrigger>\s*<Repetition>\s*<Interval>PT1M<\/Interval>/);
 			expect(run.output).toContain("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>");
 			expect(run.output).toContain(`--headless --data-dir &quot;${data}&quot;`);
-			// no console window: conhost hosts the daemon headless
-			expect(run.output).toMatch(/conhost\.exe<\/Command>/i);
+			// the system task runs the daemon itself, so ending the task ends the daemon
+			expect(run.output).toMatch(/papercrane[^<\\]*\.exe<\/Command>/i);
 			expect(run.output).toContain("netsh advfirewall firewall add rule");
 		});
 
@@ -123,6 +144,9 @@ describe("the daemon command line works headless", () => {
 			expect(run.output).toContain("<LogonType>InteractiveToken</LogonType>");
 			expect(run.output).toContain(`\\Paperboard\\${os.userInfo().username.replace(/[\\/:*?"<>|]/g, "_")}\\pb-test`);
 			expect(run.output).not.toContain("netsh");
+			// no console window: conhost hosts the daemon headless, and the daemon stops with it
+			expect(run.output).toMatch(/conhost\.exe<\/Command>/i);
+			expect(run.output).toContain("--exit-with-parent");
 		});
 
 		// A real task: only on CI's throwaway Windows runner, which is an administrator

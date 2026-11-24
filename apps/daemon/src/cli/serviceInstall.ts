@@ -333,8 +333,8 @@ interface WindowsTaskState {
 
 /**
  * Whether a task exists and runs, and the PID of the papercrane it runs: the
- * task's running instance names the process it started (conhost), and the
- * daemon is the process of this program below it.
+ * task's running instance names the process it started (the daemon, or the
+ * conhost of a user task), and the daemon is that process or one below it.
  */
 function windowsTaskState(task: string, exe: string | null): WindowsTaskState {
     const cut = task.lastIndexOf("\\");
@@ -490,10 +490,15 @@ function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => s
             ? `A system service named ${target.name} is installed. Remove it first: from a terminal opened with Run as administrator, run papercrane uninstall-service --system${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`
             : `You have a user service named ${target.name}. Remove it first: papercrane uninstall-service${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`);
     }
-    // conhost --headless gives the daemon a console with no window: a console
-    // program started at sign-in would otherwise open one on the desktop,
-    // and closing it would stop the daemon
+    // A user task's console program would open a window on the desktop,
+    // which stops the daemon when closed: conhost --headless gives it a
+    // console with no window. Ending the task ends only conhost, so the
+    // daemon follows it out. A system task runs where no window shows, and
+    // runs the daemon itself.
     const conhost = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "conhost.exe");
+    const action = target.scope === "user"
+        ? { command: conhost, args: ["--headless", command!, ...args, "--exit-with-parent"] }
+        : { command: command!, args };
     const firewallRule = target.scope === "system" ? windowsFirewallRule(target.name) : null;
     const notes = target.scope === "user"
         ? [
@@ -509,7 +514,7 @@ function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => s
         firewallRule,
         file: windowsTaskFile(target.scope, target.name),
         encoding: "utf16le",
-        contents: taskSchedulerXml({ scope: target.scope, account, command: conhost, args: ["--headless", command!, ...args], dataDir }),
+        contents: taskSchedulerXml({ scope: target.scope, account, ...action, dataDir }),
         commands: [
             ["schtasks", "/Create", "/TN", task, "/XML", windowsTaskFile(target.scope, target.name), "/F"],
             ...(firewallRule

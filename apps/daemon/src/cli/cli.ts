@@ -34,6 +34,7 @@ export interface ServeOptions {
     noAuth?: boolean;
     headless?: boolean;
     startPairing?: boolean;
+    exitWithParent?: boolean;
 }
 
 export type ServiceScope = "user" | "system";
@@ -144,6 +145,7 @@ function serveOptions(opts: Record<string, unknown>, env: NodeJS.ProcessEnv): Se
     if (opts.auth === false) options.noAuth = true;
     if (opts.headless) options.headless = true;
     if (opts.startPairing) options.startPairing = true;
+    if (opts.exitWithParent) options.exitWithParent = true;
     if (typeof opts.port === "number") options.port = opts.port;
     else if (env.PAPERCRANE_PORT !== undefined) options.port = parsePort(env.PAPERCRANE_PORT, "PAPERCRANE_PORT");
     if (typeof opts.host === "string") options.host = opts.host;
@@ -218,6 +220,8 @@ function buildProgram(env: NodeJS.ProcessEnv, run: (command: CliCommand) => void
         .option("--no-auth", "turn off authentication, for development on a trusted single-user computer (127.0.0.1 only)")
         .addOption(new Option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL in a production build").hideHelp())
         .addOption(new Option("--panel-service <module>").hideHelp())
+        // how a Windows user task's daemon stops with the conhost it runs under
+        .addOption(new Option("--exit-with-parent").hideHelp())
         .action(guarded((opts: Record<string, unknown>, cmd: Command) => {
             if (cmd.args.length > 0) {
                 throw new InvalidArgumentError(`unknown command '${cmd.args[0]}'.`);
