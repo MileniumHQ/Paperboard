@@ -32,8 +32,9 @@ function branchName(branch: string | undefined): string {
 // one SteamCMD run at a time
 const serialized = new SerialQueue().run;
 
-/** the panel's SteamCMD folder; a test hands its own */
-const workspace = (own?: string) => (own ? Promise.resolve(own) : rawFiles.getPath(".steam", PANEL_ID));
+/** the panel's own SteamCMD folder, in its storage beside the servers; a test hands its own */
+export const STEAM_FOLDER = ".steam";
+const workspace = (own?: string) => (own ? Promise.resolve(own) : rawFiles.getPath(STEAM_FOLDER, PANEL_ID));
 
 function bootstrapName(platform = process.platform): string {
     if (platform === "win32") return "steamcmd.exe";

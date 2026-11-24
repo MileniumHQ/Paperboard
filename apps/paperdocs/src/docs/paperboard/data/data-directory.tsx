@@ -62,7 +62,7 @@ export default function DataDirectoryDoc() {
                     <tr><td><PaperCode>configs/&lt;panel id&gt;.json</PaperCode></td><td>Each panel's settings.</td></tr>
                     <tr><td><PaperCode>files/&lt;panel id&gt;/</PaperCode></td><td>Each panel's files, such as a game server's worlds.</td></tr>
                     <tr><td><PaperCode>packages/</PaperCode></td><td>Programs that panels use, such as a Java runtime.</td></tr>
-                    <tr><td><PaperCode>backups/</PaperCode></td><td>Panel backups kept on this computer, and the backup locations and schedules. See <PaperLink href="/docs/paperboard/backups/">Backups</PaperLink>.</td></tr>
+                    <tr><td><PaperCode>backups/</PaperCode></td><td>Panel backups kept on this computer, and the backup locations. See <PaperLink href="/docs/paperboard/backups/">Backups</PaperLink>.</td></tr>
                     <tr><td><PaperCode>logs/</PaperCode></td><td>Log files. <PaperCode>paperboard.log</PaperCode> is the main one.</td></tr>
                     <tr><td><PaperCode>sockets/</PaperCode></td><td>Connections to running programs, such as open terminals. Only your account can open it.</td></tr>
                     <tr><td><PaperCode>local/</PaperCode></td><td>This computer's private files, listed below. Only your account can open it.</td></tr>

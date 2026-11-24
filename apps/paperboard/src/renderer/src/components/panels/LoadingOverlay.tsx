@@ -14,10 +14,6 @@ export interface LoadingOverlayProps {
     compact?: boolean;
     /** Accessible name for the bar; never rendered as visible text. */
     label?: string;
-    /** How far along, from 0 to 1; the bar moves on its own without it. */
-    value?: number;
-    /** Shown under the bar when the wait needs explaining, such as a backup. */
-    title?: string;
     /** Under the bar while it waits, under the failure once it failed. */
     detail?: string;
     /** When set, replaces the loader with the failure and its recovery. */
@@ -51,12 +47,8 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
             <Show when={!props.error}>
                 <PaperProgress
                     aria-label={props.label ?? "Loading"}
-                    value={props.value === undefined ? undefined : props.value * 100}
                     class={styles.overlayProgress}
                 />
-            </Show>
-            <Show when={!props.error && props.title}>
-                <PaperText preset="label">{props.title}</PaperText>
             </Show>
             <Show when={props.error}>
                 {(error) => (

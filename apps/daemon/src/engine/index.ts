@@ -8,13 +8,12 @@ import { resolveSecureTargetPath, openResolvedFile } from "../core/pathContainme
 import { ProgressCallback, streamToFileWithProgress } from "../packages/download";
 import { getPaperboardDir } from "../core/paths";
 import { extractArchive } from "./archives";
-import { panelServices, PanelServicesManager, type PageConnection } from "../panels/panelServices";
+import { panelServices, PanelServicesManager, type BackupHook, type PageConnection } from "../panels/panelServices";
 import { CredentialStore } from "../security/credentials";
 import { logger } from "../core/logger";
 import { resolveRegistryUrl } from "../core/util";
 import { daemonReleaseKey } from "@mileniumhq/release";
 import type { MonitorLifecycle } from "@mileniumhq/paperapi/monitorProtocol";
-import type { BackupEnded } from "../backups/types";
 import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { WorkloadRegistry, type ProcessStreams, type TerminalStreams } from "./workloads";
 import { PackageManager, sanitizeIdOrThrow, type PackageInstallOutcome, type PackageUpdateWait, type ReleaseSource } from "./packages";
@@ -95,15 +94,15 @@ export class PaperCraneEngine {
         this.workloads = new WorkloadRegistry(this.localDir, this.packages);
         this.packages.useWorkloads(this.workloads);
         this.panels = new PanelInstaller(
-            { appDataDir: this.appDataDir, panelsDir: this.panelsDir, filesDir: this.filesDir, configsDir: this.configsDir },
+            { panelsDir: this.panelsDir, filesDir: this.filesDir, configsDir: this.configsDir },
             operations, this.services, this.workloads, this.packages, this.credentialsStore, this.registry,
         );
     }
 
     // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*,
     // and writeFileAtomic's *.<12 hex>.tmp)
-    // and recovers swaps a crash interrupted (parkedSwap.ts), in packages,
-    // panel releases and restored panel data.
+    // and recovers swaps a crash interrupted (parkedSwap.ts), in packages
+    // and panel releases.
     //
     // Explicit, NOT in the constructor: sweeping deletes live temp files,
     // so it must only run after this instance owns its port. A second
@@ -436,32 +435,20 @@ export class PaperCraneEngine {
     public restartPanelService(panelId: string): Promise<boolean> { return this.panels.restartPanelService(panelId); }
     public uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<UninstallResult> { return this.panels.uninstallPanel(panelId, options); }
     public installedPanelVersion(panelId: string): string | null { return this.panels.installedPanelVersion(panelId); }
-    public panelDataEntries(panelId: string): { files: string; config: string } { return this.panels.panelDataEntries(panelId); }
     public withPanelOperation<T>(panelId: string, fn: () => Promise<T>): Promise<T> { return this.panels.withPanelOperation(panelId, fn); }
-    public withServicePaused<T>(panelId: string, fn: () => Promise<T>, rollback?: () => Promise<void>): Promise<T> {
-        return this.panels.withServicePaused(panelId, fn, rollback);
-    }
-    public replacePanelData(panelId: string, staged: { filesDir: string; configFile: string | null }): Promise<void> {
-        return this.panels.replacePanelData(panelId, staged);
-    }
     public onPanelDataDeleted(listener: (panelId: string) => void | Promise<void>): () => void { return this.panels.onPanelDataDeleted(listener); }
 
     /** Panel service children that have not exited. */
     public runningServiceCount(): number { return this.services.runningCount(); }
     /** Each running panel service's process, by panel. */
     public serviceRoots(): Array<{ panelId: string; pid: number }> { return this.services.processRoots(); }
-    /** asks the panel's running service to get ready for a backup of its
-     * data, when it takes part; see PanelServicesManager.prepareForBackup */
-    public prepareServiceForBackup(panelId: string, sourceId?: string): Promise<boolean> {
-        return this.services.prepareForBackup(requirePanelId(panelId), sourceId);
+    /** the backup hooks the panel's running service has; see PanelServicesManager.backupHooks */
+    public backupHooks(panelId: string): ReadonlySet<BackupHook> | null {
+        return this.services.backupHooks(requirePanelId(panelId));
     }
-    public prepareServiceForRestore(panelId: string, sourceId?: string): Promise<boolean> {
-        return this.services.prepareForBackup(requirePanelId(panelId), sourceId, 300_000, "restore");
-    }
-    /** tells the panel's running service how a backup or restore of its
-     * data ended; see PanelServicesManager.tellBackupEnded */
-    public tellServiceBackupEnded(panelId: string, operation: "backup" | "restore", ended: BackupEnded): void {
-        this.services.tellBackupEnded(requirePanelId(panelId), operation, ended);
+    /** asks the panel's running service one of its backup hooks; see PanelServicesManager.askBackupHook */
+    public askBackupHook(panelId: string, hook: BackupHook, payload: Record<string, unknown>): Promise<unknown> {
+        return this.services.askBackupHook(requirePanelId(panelId), hook, payload);
     }
     /** one of the panel's pages is open on `connection` until it closes; see PanelServicesManager.pageOpened */
     public pageOpened(panelId: string, connection: PageConnection): void {

@@ -167,8 +167,8 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                     },
                     (refreshToken) =>
                         "locationId" in target
-                            ? client.call("backup:destination-reconnect", { destinationId: target.locationId.trim(), ...google, refreshToken }, 120_000)
-                            : client.call("backup:destination-add", { destination: { kind: "gdrive", label: target.label.trim(), ...google, refreshToken } }, 120_000),
+                            ? client.call("backup:location-reconnect", { locationId: target.locationId.trim(), ...google, refreshToken }, 120_000)
+                            : client.call("backup:location-add", { location: { kind: "gdrive", label: target.label.trim(), ...google, refreshToken } }, 120_000),
                 );
             },
             "backup-gdrive-cancel": () => cancelGoogleSignIn(),

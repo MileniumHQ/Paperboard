@@ -11,11 +11,12 @@ import { PANEL_ID, SERVER_PROC_ID } from "../../service/types";
 // saving back on when it starts and finds the server still running. The
 // marker is removed only once the server has confirmed save-on: a write the
 // daemon could not deliver, or one the server never answered, leaves the
-// marker for the next recovery. A
-// backup of the whole server uses that on purpose: Paperboard stops this
-// service for the copy, and the service that starts after it ends the pause.
+// marker for the next recovery. A backup pauses saving in its beforeBackup
+// and turns it back on in its afterBackup; a service that dies between them
+// ends the pause when it starts again.
 
-const PAUSED_MARKER = ".paperboard-saving-paused";
+/** a server folder's record of a pause; backups leave it out */
+export const PAUSED_MARKER = ".paperboard-saving-paused";
 const FLUSH_TIMEOUT_MS = 120_000;
 const COMMAND_TIMEOUT_MS = 15_000;
 
@@ -117,11 +118,11 @@ async function pauseSaving(ctx: Server): Promise<void> {
 }
 
 /**
- * The service's beforeBackup: a running server writes its world out and
- * stops saving. Saving stays off while Paperboard stops this service and
- * copies the server folder; the service that starts after the copy finds
- * the marker and turns saving back on (recoverPausedSaving). When the
- * server cannot pause, saving is turned back on and the backup refused.
+ * A backup's preparation: a running server writes its world out and stops
+ * saving. Saving stays off while Paperboard copies the server folder, and
+ * the backup's end turns it back on (recoverPausedSaving), as a service
+ * that starts after dying meanwhile does. When the server cannot pause,
+ * saving is turned back on and the backup refused.
  */
 export async function pauseSavingForBackup(ctx: Server): Promise<void> {
     if (ctx.state.serverStatus === "offline") return;
@@ -151,7 +152,7 @@ async function resumeSaving(ctx: Server): Promise<void> {
     await ctx.files.delete(PAUSED_MARKER, PANEL_ID);
 }
 
-/** at service start: a pause the last service left behind is ended */
+/** after a backup's copy, and at service start: a pause still standing is ended */
 export async function recoverPausedSaving(ctx: Server): Promise<boolean> {
     if (!(await ctx.files.exists(PAUSED_MARKER, PANEL_ID))) return false;
     await resumeSaving(ctx);

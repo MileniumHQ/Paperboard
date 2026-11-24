@@ -1,5 +1,6 @@
 // Where backups go. The daemon owns the list of backup locations and which
-// one each panel uses, in <data dir>/backups/destinations.json. Location
+// one each panel uses, in <data dir>/backups/destinations.json (its keys
+// keep the name locations had when the file was first written). Location
 // secrets (S3 secret keys, Google sign-ins) live in the vault under the
 // reserved "shell-backups" owner, never in this file. The computer's own
 // folder is built in and cannot be removed; it carries the machine's name,
@@ -14,37 +15,37 @@ import { computerHostname } from "../server/hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
 import { errorCode } from "@mileniumhq/paperapi/errors";
-import { LOCAL_DESTINATION_ID, isDestinationId } from "@mileniumhq/paperapi/protocol";
+import { LOCAL_LOCATION_ID, isLocationId } from "@mileniumhq/paperapi/protocol";
 
 /** vault owner for location secrets; shell-* ids are reserved, no panel holds it */
 export const BACKUP_VAULT_OWNER = "shell-backups";
-export { LOCAL_DESTINATION_ID, isDestinationId };
-export const MAX_DESTINATIONS = 16;
-export const DESTINATION_LABEL_MAX = 60;
+export { LOCAL_LOCATION_ID, isLocationId };
+export const MAX_LOCATIONS = 16;
+export const LOCATION_LABEL_MAX = 60;
 
-export type Destination =
+export type StoredLocation =
     | { id: string; kind: "local"; label: string }
     | { id: string; kind: "s3"; label: string; s3: S3Settings }
     | { id: string; kind: "gdrive"; label: string; drive: DriveSettings };
 
 export interface BackupConfig {
     version: 1;
-    destinations: Destination[];
-    /** panel id to destination id */
+    locations: StoredLocation[];
+    /** panel id to location id */
     panels: Record<string, string>;
 }
 
-export function localDestination(): Destination {
-    return { id: LOCAL_DESTINATION_ID, kind: "local", label: computerHostname() };
+export function localLocation(): StoredLocation {
+    return { id: LOCAL_LOCATION_ID, kind: "local", label: computerHostname() };
 }
 
 function str(v: unknown, max: number): v is string {
     return typeof v === "string" && v.length <= max;
 }
 
-function parseDestination(raw: any): Destination | null {
-    if (!raw || typeof raw !== "object" || !isDestinationId(raw.id) || raw.id === LOCAL_DESTINATION_ID) return null;
-    if (!str(raw.label, DESTINATION_LABEL_MAX)) return null;
+function parseLocation(raw: any): StoredLocation | null {
+    if (!raw || typeof raw !== "object" || !isLocationId(raw.id) || raw.id === LOCAL_LOCATION_ID) return null;
+    if (!str(raw.label, LOCATION_LABEL_MAX)) return null;
     if (raw.kind === "s3") {
         const s = raw.s3;
         if (!s || ![s.endpoint, s.region, s.bucket, s.prefix, s.accessKeyId].every((v) => str(v, 512)) || typeof s.pathStyle !== "boolean") return null;
@@ -75,20 +76,20 @@ function parseBackupConfig(raw: any): BackupConfig {
     if (!raw || typeof raw !== "object" || raw.version !== 1 || !Array.isArray(raw.destinations) || !raw.panels || typeof raw.panels !== "object") {
         throw new Error("it is not a backup locations file this Paperboard understands");
     }
-    const destinations: Destination[] = [localDestination()];
+    const locations: StoredLocation[] = [localLocation()];
     for (const entry of raw.destinations) {
-        if (entry?.id === LOCAL_DESTINATION_ID) continue;
-        const parsed = parseDestination(entry);
+        if (entry?.id === LOCAL_LOCATION_ID) continue;
+        const parsed = parseLocation(entry);
         if (!parsed) throw new Error(`it has a malformed backup location: ${JSON.stringify(entry?.id ?? null)}`);
-        destinations.push(parsed);
+        locations.push(parsed);
     }
     const panels: Record<string, string> = {};
-    for (const [panelId, destId] of Object.entries(raw.panels)) {
-        if (!isPanelId(panelId) || !isDestinationId(destId)) throw new Error(`it has a malformed panel entry: ${JSON.stringify(panelId)}`);
+    for (const [panelId, locationId] of Object.entries(raw.panels)) {
+        if (!isPanelId(panelId) || !isLocationId(locationId)) throw new Error(`it has a malformed panel entry: ${JSON.stringify(panelId)}`);
         // a panel pointing at a removed location has no location
-        if (destinations.some((d) => d.id === destId)) panels[panelId] = destId;
+        if (locations.some((l) => l.id === locationId)) panels[panelId] = locationId;
     }
-    return { version: 1, destinations, panels };
+    return { version: 1, locations, panels };
 }
 
 /** reads the config. A missing file is a fresh install; a file that is
@@ -99,7 +100,7 @@ export function readBackupConfig(file: string): BackupConfig {
     try {
         text = fs.readFileSync(file, "utf8");
     } catch (err) {
-        if (errorCode(err) === "ENOENT") return { version: 1, destinations: [localDestination()], panels: {} };
+        if (errorCode(err) === "ENOENT") return { version: 1, locations: [localLocation()], panels: {} };
         throw new BackupConfigUnreadableError(file, (err as Error).message);
     }
     try {
@@ -126,6 +127,6 @@ export function recoverBackupConfig(file: string): string {
 
 export async function writeBackupConfig(file: string, config: BackupConfig): Promise<void> {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const stored = { ...config, destinations: config.destinations.filter((d) => d.id !== LOCAL_DESTINATION_ID) };
+    const stored = { version: config.version, destinations: config.locations.filter((l) => l.id !== LOCAL_LOCATION_ID), panels: config.panels };
     await writeFileAtomic(file, JSON.stringify(stored, null, 2));
 }

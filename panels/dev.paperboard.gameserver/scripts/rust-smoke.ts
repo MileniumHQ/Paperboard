@@ -15,7 +15,7 @@ import { RUST_APP_ID } from "../src/games/rust";
 import { assert, PANEL, until, withScenarioDaemon } from "./scenarioDaemon";
 
 await withScenarioDaemon("rust-real", async ({ addServer }) => {
-    const { backupApi, backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
+    const { backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
     const server = await addServer("Rust", "rust", "rust-server");
     const proc = `${server.id}-rust-server`;
     const online = (label: string, timeout = 900_000) => until(async () => {
@@ -106,14 +106,13 @@ await withScenarioDaemon("rust-real", async ({ addServer }) => {
         await server.calls.saveWorld();
         console.log("save: Rust confirmed it and the save file changed");
 
-        await backupLocationsApi.setForPanel(PANEL, "local", undefined, server.id);
-        const api = backupApi.forSource(PANEL, server.id);
-        const record = await api.create({ label: "Rust smoke" });
+        await backupLocationsApi.setForPanel(PANEL, "local");
+        const record = await server.calls.backUp({ label: "Rust smoke" });
         await online("restart after backup");
         console.log(`backup: ${record.size} bytes, SHA-256 ${record.sha256}; stopped for the copy and restarted`);
         await server.calls.rustUnban({ steamId: id });
         fs.writeFileSync(path.join(server.directory, "after-backup.txt"), "must disappear on restore");
-        await api.restore(record.id);
+        await server.calls.restoreBackup({ backupId: record.id });
         // a restore stops the server to put its files back, then starts it again
         await until(async () => (await server.state()).serverStatus === "online", "restart after restore", 600_000);
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");

@@ -100,7 +100,7 @@ function setup(options: { storage?: ProjectStorage } = {}) {
         for (const listener of listeners.get(key) ?? []) listener(payload);
     };
     const said = (project: string) => state.log.filter((l) => l.project === project).map((l) => `${l.level}: ${l.message}`);
-    return { ready, call, make, subscribers, fire, said, fired, registry, state: () => state };
+    return { ready, call, make, subscribers, fire, said, fired, registry, files, runtime, state: () => state };
 }
 
 const JOINED_KEY = `${GAME} /event.joined`;
@@ -175,6 +175,70 @@ describe("the service's runtime", () => {
         expect(s.state().projectsError).toBe("the disk is gone");
         await expect(s.call.createProject({ name: "x" })).rejects.toThrow("The projects couldn't be read: the disk is gone");
         await expect(s.call.loadFlows({ project: "p-x" })).rejects.toThrow("The projects couldn't be read");
+    });
+});
+
+describe("backups", () => {
+    test("hold changes back while the files are copied, then go on", async () => {
+        const s = setup();
+        await s.ready;
+        const id = await s.make("Mine", flows(onRun(say("one"))));
+        expect(await s.runtime.backup.beforeBackup(null)).toEqual({ paths: [""] });
+        let written = false;
+        const saving = s.call.saveFlows({ project: id, flows: flows(onRun(say("two"))), preview: null }).then(() => (written = true));
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(written).toBe(false);
+        await s.runtime.backup.resume();
+        await saving;
+        expect(written).toBe(true);
+    });
+
+    test("a restore reads the projects the backup's files hold and stops the runs", async () => {
+        const s = setup();
+        await s.ready;
+        const kept = await s.make("Kept", flows(onRun({ type: WAIT })));
+        await s.call.runFlows({ project: kept });
+        await until("the run to start", () => s.state().running[kept] === 1);
+        const index = structuredClone(s.files.get("projects.json")) as { projects: { id: string }[] };
+        await s.runtime.backup.beforeRestore(null);
+        // the files the daemon swaps in: a project the backup never had, and one only it has
+        s.files.set("projects.json", { version: 1, projects: [{ id: "p-old", name: "Old", enabled: true, createdAt: 1, editedAt: 1 }] });
+        s.files.set("projects/p-old.json", flows(onRun(say("old"))));
+        await s.runtime.backup.restored();
+        expect(index.projects.map((p) => p.id)).toEqual([kept]);
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Old"]);
+        await until("the run to stop", () => !s.state().running[kept]);
+        await expect(s.call.loadFlows({ project: kept })).rejects.toThrow("no project");
+        expect(s.said("p-old")).toEqual([]);
+    });
+
+    test("a restore that fails keeps the changes held until the files are back, then they land", async () => {
+        const s = setup();
+        await s.ready;
+        const id = await s.make("Mine", flows(onRun(say("one"))));
+        const original = structuredClone(s.files.get("projects.json"));
+        await s.runtime.backup.beforeRestore(null);
+        let renamed = false;
+        const renaming = s.call.updateProject({ project: id, name: "Renamed" }).then(() => (renamed = true));
+        s.files.set("projects.json", { projects: "damaged" });
+        await expect(s.runtime.backup.restored()).rejects.toThrow("damaged");
+        await new Promise((resolve) => setImmediate(resolve));
+        // the held change has not run against the damaged files
+        expect(renamed).toBe(false);
+        expect(s.runtime.backup.paused()).toBe(true);
+        // the daemon puts the files back and says so
+        s.files.set("projects.json", original);
+        await s.runtime.backup.resume();
+        await renaming;
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Renamed"]);
+        expect((s.files.get("projects.json") as { projects: { name: string }[] }).projects[0].name).toBe("Renamed");
+        expect((await s.call.loadFlows({ project: id })).workspace.blocks?.blocks).toHaveLength(1);
+    });
+
+    test("a target is refused, as Blocks backs up as a whole", async () => {
+        const s = setup();
+        await s.ready;
+        await expect(s.runtime.backup.beforeBackup("x")).rejects.toThrow("no \"x\" to back up");
     });
 });
 

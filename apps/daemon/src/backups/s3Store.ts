@@ -1,12 +1,12 @@
 // S3-compatible backups (AWS S3, Cloudflare R2, MinIO, Backblaze B2): one
-// object per archive and one per record, under <prefix><panel dir>/.
+// object per archive and one per record, under <prefix><panel dir>/<target folder>/.
 // Requests are signed with AWS Signature Version 4; an upload streams the
 // archive with an unsigned payload hash over TLS.
 import * as crypto from "crypto";
 import { panelFilesDirName } from "../core/storage";
 import { logger } from "../core/logger";
 import { assertSecureUrl, expectOk, httpRequest, type HttpRequestInit } from "./http";
-import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
+import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, targetFolder, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 export interface S3Settings {
     /** https://s3.<region>.amazonaws.com, https://<account>.r2.cloudflarestorage.com */
@@ -135,12 +135,12 @@ export class S3BackupStore implements BackupStore {
         return httpRequest(url.toString(), { ...init, method, headers });
     }
 
-    private panelPrefix(panelId: string): string {
-        return `${this.prefix}${panelFilesDirName(panelId)}/`;
+    private targetPrefix(panelId: string, target: string | null): string {
+        return `${this.prefix}${panelFilesDirName(panelId)}/${targetFolder(target)}/`;
     }
 
     private keys(record: BackupRecord): { archive: string; record: string } {
-        const base = `${this.panelPrefix(record.panelId)}${record.id}`;
+        const base = `${this.targetPrefix(record.panelId, record.target)}${record.id}`;
         return { archive: `${base}.pbbackup`, record: `${base}.json` };
     }
 
@@ -172,8 +172,8 @@ export class S3BackupStore implements BackupStore {
         return { used: objects.reduce((sum, o) => sum + (o.key.endsWith(".pbbackup") ? o.size : 0), 0), available: null };
     }
 
-    async list(panelId: string): Promise<BackupRecord[]> {
-        const objects = await this.listKeys(this.panelPrefix(panelId));
+    async list(panelId: string, target: string | null): Promise<BackupRecord[]> {
+        const objects = await this.listKeys(this.targetPrefix(panelId, target));
         const archives = new Set(objects.filter((o) => o.key.endsWith(".pbbackup")).map((o) => o.key.slice(0, -".pbbackup".length)));
         const recordKeys = objects
             .map((o) => o.key)
@@ -199,7 +199,7 @@ export class S3BackupStore implements BackupStore {
                 parsed = null;
             }
             if (!parsed) unreadable.push(key.slice(key.lastIndexOf("/") + 1, -".json".length));
-            else if (parsed.panelId === panelId) records.push(parsed);
+            else if (parsed.panelId === panelId && parsed.target === target) records.push(parsed);
         }
         if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);

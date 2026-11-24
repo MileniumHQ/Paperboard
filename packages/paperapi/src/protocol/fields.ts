@@ -33,7 +33,7 @@ export function readValue<T>(s: Shape<T>, value: unknown, at: string): T {
 
 /**
  * A value the code it goes to checks itself: a param a service validates
- * (a backup source, a port claim), or a daemon record the caller doesn't
+ * (a backup location to add, a port claim), or a daemon record the caller doesn't
  * look inside. Its type is what the wire carries.
  */
 export function typed<T>(): Shape<T> {

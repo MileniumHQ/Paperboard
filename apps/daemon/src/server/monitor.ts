@@ -25,8 +25,8 @@ import {
 // config document, a URL that may hold a token) is reported by shape only.
 const SHOWN_ARGS = new Set([
     "panelId", "action", "event", "trigger", "project", "id", "name",
-    "computerId", "packageName", "version", "backupId", "sourceId",
-    "destinationId", "downloadId", "appId", "signal", "cols", "rows",
+    "computerId", "packageName", "version", "backupId", "target",
+    "locationId", "downloadId", "appId", "signal", "cols", "rows",
     "timeoutMs", "stdin", "consoleInput", "inputEncoding", "allowDowngrade",
     "deleteData", "targetPath", "path", "cwd", "command",
 ]);

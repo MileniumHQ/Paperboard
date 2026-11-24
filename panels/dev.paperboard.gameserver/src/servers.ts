@@ -1,4 +1,5 @@
 import { defaultGame, gameFor } from "./games";
+import { readBackupSchedule, type BackupSchedule } from "./backupSchedule";
 // A server's id is also its Blocks project id. Files stay where they were
 // created: the migrated server owns the original panel folder.
 export const PANEL_ID = "dev.paperboard.gameserver";
@@ -11,10 +12,12 @@ export interface StoredServer {
     directory: string;
     createdAt: number;
     settings: Record<string, unknown>;
+    /** its routine backups; kept outside its settings, which a restore replaces */
+    backupSchedule?: BackupSchedule;
 }
 export interface ServersConfig {
     version: number;
-    /** Reserved once, so legacy backups never exclude a pre-existing user directory. */
+    /** Reserved once, so the legacy server's backups never leave out a pre-existing user directory. */
     serversDirectory: string;
     servers: StoredServer[];
     /** The server from before several servers (see Server.legacy), and what a widget with no server chosen shows. */
@@ -93,6 +96,12 @@ export function readServersConfig(saved: unknown): ServersConfig {
         )
             throw new Error("The saved servers are damaged");
         gameFor(s.game);
+        let backupSchedule: BackupSchedule | undefined;
+        try {
+            backupSchedule = s.backupSchedule === undefined ? undefined : readBackupSchedule(s.backupSchedule);
+        } catch (err) {
+            throw new Error(`The saved servers are damaged: ${(err as Error).message}`, { cause: err });
+        }
         ids.add(s.id);
         directories.add(s.directory);
         return {
@@ -102,6 +111,7 @@ export function readServersConfig(saved: unknown): ServersConfig {
             directory: s.directory,
             createdAt: s.createdAt,
             settings: s.settings,
+            ...(backupSchedule ? { backupSchedule } : {}),
         };
     });
     if (

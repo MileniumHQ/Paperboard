@@ -297,7 +297,7 @@ $ bunx paperapi call dev.example.hello command.reset-greetings
             </PaperText>
             <PaperCode block language="text">
 {`Watching calls involving dev.example.hello on Paperboard at 127.0.0.1:45464. Press Ctrl+C to stop.
-05:40:12.875  dev.example.hello         blocks:emit                          0.2 ms  ok  panelId=dev.example.hello entry=‹25 chars› payload={state} duringCall=‹41 chars›
+05:40:12.875  dev.example.hello         blocks:emit                          0.2 ms  ok  panelId=dev.example.hello entry=‹25 chars› payload={state}
 05:40:12.875  host                      blocks:call                          0.6 ms  ok  panelId=dev.example.hello entry=‹13 chars› request={inputs} timeoutMs=30000
 05:40:12.938  host                      blocks:call                          0.2 ms  ✗ INTERNAL Name is required  panelId=dev.example.hello entry=‹13 chars› request={inputs} timeoutMs=30000
 05:40:13.000  dev.example.hello         service stopped                   code null

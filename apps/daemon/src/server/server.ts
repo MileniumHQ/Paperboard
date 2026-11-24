@@ -28,6 +28,8 @@ import { certFingerprint } from "../security/pinnedTls";
 import { logger } from "../core/logger";
 import { PanelServicesManager } from "../panels/panelServices";
 import { backupServiceFor } from "../rpc/backups";
+import { problemsFor } from "../rpc/problems";
+import { clipProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { readDaemonStatus } from "../cli/localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFile";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -300,7 +302,6 @@ function daemonLifecycle(parts: DaemonParts) {
         };
         step("saving the paired tokens", () => auth.flushTokenStore());
         step("closing the token store", () => auth.dispose());
-        step("stopping routine backups", () => backupServiceFor(engine).dispose());
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
@@ -418,15 +419,33 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             lifecycle.arm();
             if (options.exitWithParent) followParent();
 
+            // a restore a crash interrupted is rolled back before any panel reads its
+            // files; a panel whose files could not be put back says so, and its
+            // service stays stopped rather than run on them half swapped. When which
+            // panel is not known, no service starts.
+            const keptUntilNextStart = "and its service stays stopped until Paperboard starts again and tries once more.";
+            try {
+                for (const failed of backupServiceFor(engine).recoverAtStartup()) {
+                    const message = `${failed.error}. Its original files are kept at ${failed.kept}, ${keptUntilNextStart}`;
+                    if (failed.panelId === null) {
+                        logger.error(`[Paperboard Server] an interrupted restore could not be read or undone: ${message}`);
+                        panelServices.holdBackAll(`An interrupted restore of an unknown panel couldn't be undone: ${failed.error}. Its files are kept at ${failed.kept}; no panel's service starts until Paperboard starts again and tries once more.`);
+                        continue;
+                    }
+                    problemsFor(engine).report(failed.panelId, { key: "paperboard:interrupted-restore", title: "An interrupted restore couldn't be undone", message: clipProblemReport({ title: "", message }).message });
+                    panelServices.holdBack(failed.panelId, `An interrupted restore couldn't be undone: ${message}`);
+                }
+            } catch (err) {
+                logger.error("[Paperboard Server] interrupted restores could not be looked for in backups/.work:", err);
+                panelServices.holdBackAll(`Paperboard couldn't look for interrupted restores (${errorMessage(err)}), so no panel's service starts on files a restore may have left half swapped until Paperboard starts again and tries once more.`);
+            }
+
             // Start background services for installed panels
             try {
                 panelServices.init(localPort, auth);
             } catch (err) {
                 logger.error("[Paperboard Server] no panel service started: the panels folder could not be read:", err);
             }
-
-            // routine backups run while the daemon does, app open or not
-            backupServiceFor(engine).startScheduler();
 
             // this instance owns the port now: safe to sweep interrupted
             // artifacts (never before — see sweepStartupOrphans)

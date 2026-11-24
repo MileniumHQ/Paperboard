@@ -12,7 +12,7 @@ import { isInstallRunning } from "./softwareInstall";
 import { commandLine, observeLine, onReady, sendChatMessage } from "./observe";
 import { portSpecs, portNames, restoreJavaPort } from "./ports";
 import { livePortDeps } from "../../service/portDeps";
-import { withSavingPaused, pauseSavingForBackup, recoverPausedSaving, saveWorld } from "./saving";
+import { PAUSED_MARKER, pauseSavingForBackup, recoverPausedSaving, saveWorld } from "./saving";
 import { minecraftState, type MinecraftState } from "./state";
 
 /** A Minecraft server's part of its game: its install lock, saving pause, console and roster are its own. */
@@ -34,8 +34,9 @@ export function minecraftService(server: Server): GameService & { minecraft: Min
         async dispose() {},
         readIcon: () => readServerIcon({ serverDir: () => server.root() }),
         processIds: [SERVER_PROC_ID, INSTALLER_PROC_ID],
-        // the running server locks each world's, and Windows won't let a locked file be read
-        backupSkip: ["session.lock"],
+        // the running server locks each world's, and Windows won't let a locked file be read;
+        // the pause's own marker is no part of the world
+        backupSkip: ["session.lock", PAUSED_MARKER],
         loadOptions: () => loadConfigAndProperties(server),
         prepareLaunch: () => prepareLaunch(server),
         afterStop: (moves) => restoreJavaPort(moves, livePortDeps(server)),
@@ -51,8 +52,7 @@ export function minecraftService(server: Server): GameService & { minecraft: Min
         backup: {
             mode: "quiesce",
             before: () => pauseSavingForBackup(server),
-            recover: () => recoverPausedSaving(server),
-            withConsistentData: (work) => withSavingPaused(server, work),
+            after: async () => void (await recoverPausedSaving(server)),
         },
     };
 }

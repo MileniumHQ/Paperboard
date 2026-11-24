@@ -66,7 +66,7 @@ async function loadBackups() {
     try {
         const status = await backupApi.status(PANEL_ID);
         $("[data-out=location]").textContent = status.location
-            ? `Backups go to ${status.location.label} (${status.location.detail}).${status.running ? ` A backup is ${status.running === "create" ? "being made" : "being restored"}.` : ""}`
+            ? `Backups go to ${status.location.label} (${status.location.detail}).${status.progress ? ` A backup is ${status.progress.kind === "create" ? "being made" : "being restored"}.` : ""}`
             : "No backup location chosen yet.";
         list.replaceChildren();
         if (!status.location) return;

@@ -1,5 +1,5 @@
-// The computer's own folder: backups in <data dir>/backups/panels/<panel dir>/, an
-// archive and its record side by side. The archive lands under a temp name
+// The computer's own folder: backups in <data dir>/backups/panels/<panel
+// dir>/<target folder>/, an archive and its record side by side. The archive lands under a temp name
 // and the record is written last, so a listed backup always has its bytes.
 import * as fs from "fs";
 import * as path from "path";
@@ -7,7 +7,7 @@ import { Transform } from "stream";
 import { pipeline } from "stream/promises";
 import { panelFilesDirName, writeFileAtomic } from "../core/storage";
 import { logger } from "../core/logger";
-import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
+import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, targetFolder, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 /** a file copy that reports the bytes copied so far */
 async function copyCounting(from: string, to: string, onProgress?: BytesProgress): Promise<void> {
@@ -26,12 +26,12 @@ async function copyCounting(from: string, to: string, onProgress?: BytesProgress
 export class LocalBackupStore implements BackupStore {
     constructor(private readonly root: string) {}
 
-    private panelDir(panelId: string): string {
-        return path.join(this.root, panelFilesDirName(panelId));
+    private dir(panelId: string, target: string | null): string {
+        return path.join(this.root, panelFilesDirName(panelId), targetFolder(target));
     }
 
     private files(record: BackupRecord): { archive: string; record: string } {
-        const dir = this.panelDir(record.panelId);
+        const dir = this.dir(record.panelId, record.target);
         return { archive: path.join(dir, `${record.id}.pbbackup`), record: path.join(dir, `${record.id}.json`) };
     }
 
@@ -43,18 +43,15 @@ export class LocalBackupStore implements BackupStore {
     async usage(): Promise<BackupUsage> {
         fs.mkdirSync(this.root, { recursive: true });
         let used = 0;
-        for (const panel of fs.readdirSync(this.root, { withFileTypes: true })) {
-            if (!panel.isDirectory()) continue;
-            for (const file of fs.readdirSync(path.join(this.root, panel.name))) {
-                if (file.endsWith(".pbbackup")) used += fs.statSync(path.join(this.root, panel.name, file)).size;
-            }
+        for (const entry of fs.readdirSync(this.root, { withFileTypes: true, recursive: true })) {
+            if (entry.isFile() && entry.name.endsWith(".pbbackup")) used += fs.statSync(path.join(entry.parentPath, entry.name)).size;
         }
         const fsStats = fs.statfsSync(this.root);
         return { used, available: fsStats.bavail * fsStats.bsize };
     }
 
-    async list(panelId: string): Promise<BackupRecord[]> {
-        const dir = this.panelDir(panelId);
+    async list(panelId: string, target: string | null): Promise<BackupRecord[]> {
+        const dir = this.dir(panelId, target);
         if (!fs.existsSync(dir)) return [];
         const records: BackupRecord[] = [];
         const unreadable: string[] = [];
@@ -73,8 +70,8 @@ export class LocalBackupStore implements BackupStore {
                 unreadable.push(id);
                 continue;
             }
-            // a record for another panel, or without its archive, is not listed
-            if (parsed.panelId === panelId && fs.existsSync(this.files(parsed).archive)) records.push(parsed);
+            // a record for another panel or target, or without its archive, is not listed
+            if (parsed.panelId === panelId && parsed.target === target && fs.existsSync(this.files(parsed).archive)) records.push(parsed);
         }
         if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);

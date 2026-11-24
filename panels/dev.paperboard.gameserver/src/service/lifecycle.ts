@@ -139,19 +139,40 @@ function readOomKills(ctx: Server): number | null {
     }
 }
 
+function refuseIfHeld(ctx: Server): void {
+    if (ctx.backupHold) throw new Error(ctx.backupHold === "backup" ? "The server's files are being backed up; start it once the copy is made" : "A backup is being restored; start the server once it is in place");
+}
+
 /** `carry`: lines the fresh console opens with, as why the server is starting again. */
 export async function startServerInstance(
     ctx: Server,
     carry: GameServerState["serverEntries"] = [],
 ): Promise<void> {
+    // a start already under way is this one: it ends, or fails, with it
+    if (ctx.lifecycle.starting) return ctx.lifecycle.starting;
     if (ctx.state.serverStatus !== "offline") return;
     // the last run's cleanup puts back files this start reads
     await ctx.lifecycle.released;
+    if (ctx.lifecycle.starting) return ctx.lifecycle.starting;
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller, and said in the console for the restarts that
     // have none: a half-settled server folder is not a launch failure
-    try { assertRecoverySettled(ctx, "starting the server"); }
+    try {
+        assertRecoverySettled(ctx, "starting the server");
+        refuseIfHeld(ctx);
+    }
     catch (err) { report(ctx, "The server was not started", err); throw err; }
+    // from here, with no await before it, a backup or restore waits for this start
+    const starting = launchServer(ctx, carry);
+    ctx.lifecycle.starting = starting;
+    try {
+        await starting;
+    } finally {
+        if (ctx.lifecycle.starting === starting) ctx.lifecycle.starting = null;
+    }
+}
+
+async function launchServer(ctx: Server, carry: GameServerState["serverEntries"]): Promise<void> {
     try {
         ctx.setState({ activeIssue: null });
         await loadServerOptions(ctx);
@@ -181,6 +202,8 @@ export async function startServerInstance(
         if (ctx.game.isMutating()) {
             throw new Error("A server install is running; start the server once it finishes.");
         }
+        // a backup or restore that began while this start prepared has the folder now
+        refuseIfHeld(ctx);
         // the last run's console and chat stay above the new one: they are
         // what a crash, or the players before it, said. An update before the
         // start has already said its lines into it.

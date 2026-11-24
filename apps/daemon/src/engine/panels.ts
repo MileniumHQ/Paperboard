@@ -17,7 +17,7 @@ import { requireReleaseOrder } from "../packages/releasePolicy";
 import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { fetchRegistryRecord } from "../packages/registryRecord";
 import { releaseMessage, requireReleaseSignature } from "@mileniumhq/release";
-import { recoverParked, rollbackFailed, swapParked } from "../packages/parkedSwap";
+import { recoverParked, swapParked } from "../packages/parkedSwap";
 import type { WorkloadRegistry } from "./workloads";
 import { sanitizeIdOrThrow, type PackageManager, type ReleaseSource } from "./packages";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -48,14 +48,12 @@ export interface UninstallResult {
 const UPDATE_STOP_GRACE_MS = 30_000;
 
 export interface PanelDirs {
-    appDataDir: string;
     panelsDir: string;
     filesDir: string;
     configsDir: string;
 }
 
 export class PanelInstaller {
-    private appDataDir: string;
     private panelsDir: string;
     private filesDir: string;
     private configsDir: string;
@@ -71,18 +69,15 @@ export class PanelInstaller {
         private credentialsStore: CredentialStore,
         private registry: ReleaseSource,
     ) {
-        this.appDataDir = dirs.appDataDir;
         this.panelsDir = dirs.panelsDir;
         this.filesDir = dirs.filesDir;
         this.configsDir = dirs.configsDir;
     }
 
-    // Startup only, by the daemon that owns the data dir: a panel release or
-    // restore a crash interrupted is put back, or its leftover removed
+    // Startup only, by the daemon that owns the data dir: a panel release a
+    // crash interrupted is put back, or its leftover removed
     public recoverAtStartup(): void {
         recoverParked(this.panelsDir, "replaced");
-        recoverParked(this.filesDir, "restore-parked");
-        recoverParked(this.configsDir, "restore-parked");
     }
 
     // a panel's operation lock: install, restart, uninstall, backup and
@@ -390,16 +385,6 @@ export class PanelInstaller {
 
     // ─── Panel data, for backups ─────────────────────────────────────────
 
-    /** a panel's backed-up data, relative to the data dir: its file storage
-     * and its config document. Vault secrets are not panel data here. */
-    public panelDataEntries(panelId: string): { files: string; config: string } {
-        const cleanId = requirePanelId(panelId);
-        return {
-            files: path.posix.join("files", panelFilesDirName(cleanId)),
-            config: path.posix.join("configs", this.configName(cleanId)),
-        };
-    }
-
     /** the installed panel's manifest version, null when it declares none */
     public installedPanelVersion(panelId: string): string | null {
         const cleanId = requirePanelId(panelId);
@@ -420,78 +405,6 @@ export class PanelInstaller {
     public onPanelDataDeleted(listener: (panelId: string) => void | Promise<void>): () => void {
         this.dataDeletedListeners.add(listener);
         return () => this.dataDeletedListeners.delete(listener);
-    }
-
-    /** runs fn (a backup copying the panel's data) with the panel's service
-     * stopped, so the copy is not taken mid-write, then starts the service
-     * again if it was running and waits for it to be ready. An optional
-     * rollback runs while stopped if the work or its restart fails, then the
-     * original service is restarted. A service that does not come back
-     * fails the call. Call inside withPanelOperation. */
-    public async withServicePaused<T>(panelId: string, fn: () => Promise<T>, rollback?: () => Promise<void>): Promise<T> {
-        const cleanId = requirePanelId(panelId);
-        const restart = this.restarter(cleanId);
-        if (this.services.isActive(cleanId)) await this.services.stopService(cleanId);
-        if (!rollback) {
-            try {
-                return await fn();
-            } finally {
-                await restart();
-            }
-        }
-        try {
-            const result = await fn();
-            await restart();
-            return result;
-        } catch (err) {
-            try {
-                await this.services.stopService(cleanId);
-                await rollback();
-                await restart();
-            } catch (rollbackErr) {
-                throw rollbackFailed(err, rollbackErr);
-            }
-            throw err;
-        }
-    }
-
-    // starts the panel's service again and waits for it, when it was meant
-    // to run at the time this was made; nothing when it was not
-    private restarter(cleanId: string): () => Promise<void> {
-        const wasActive = this.services.isActive(cleanId);
-        return async () => {
-            if (wasActive) await this.services.startAndWait(cleanId);
-        };
-    }
-
-    /**
-     * Replaces a panel's file storage and config document with staged
-     * copies (a restore). The service and the processes the panel owns are
-     * stopped and observed exiting first. The live data is parked only
-     * until the panel is ready on the new data (a service that was not
-     * running stays stopped): a failure puts the parked data back in place
-     * and restarts the panel on it. Call inside withPanelOperation.
-     */
-    public async replacePanelData(panelId: string, staged: { filesDir: string; configFile: string | null }): Promise<void> {
-        const cleanId = requirePanelId(panelId);
-        if (!fs.existsSync(path.join(this.panelsDir, cleanId))) throw new Error(`Panel ${cleanId} is not installed`);
-        const entries = this.panelDataEntries(cleanId);
-        const liveFiles = path.join(this.appDataDir, entries.files);
-        const liveConfig = path.join(this.appDataDir, entries.config);
-        const restart = this.restarter(cleanId);
-        try {
-            await this.services.stopService(cleanId);
-            await this.workloads.stopPanelWorkloads(cleanId);
-        } catch (err) {
-            // nothing moved: the panel runs on its data again
-            await restart().catch((restartErr) => { throw rollbackFailed(err, restartErr); });
-            throw err;
-        }
-        await swapParked([liveFiles, liveConfig], "restore-parked", async () => {
-            await moveFileSafe(staged.filesDir, liveFiles);
-            if (staged.configFile) await moveFileSafe(staged.configFile, liveConfig);
-            await restart();
-        }, { before: () => this.services.stopService(cleanId), after: restart });
     }
 
     public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<UninstallResult> {

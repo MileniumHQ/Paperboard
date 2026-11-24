@@ -1,34 +1,8 @@
 // Calls the daemon makes into this transport's handlers (an `action_call`
-// frame), and the scope a handler runs in while it answers one.
-import type { AsyncLocalStorage as CallStorage } from "async_hooks";
-
+// frame).
 import { debugErr } from "../debug";
 import { errorMessage } from "../errors";
 import type { TransportRegistry } from "./registry";
-import { nodeBuiltin } from "./socket";
-
-// The action call a service is answering, for the requests it makes while
-// doing so. Some requests stop the service that makes them (a backup pauses
-// its own panel's service), and the daemon, which cannot get the action's
-// answer from a service it stopped, needs to know which call to answer for it.
-// Only Node runs a service; other contexts have nothing to carry.
-interface ActionCallScope {
-    run<T>(callId: string, fn: () => T): T;
-    current(): string | undefined;
-}
-let actionCallScope: ActionCallScope | undefined;
-
-export async function loadActionCallScope(): Promise<void> {
-    if (actionCallScope) return;
-    const { AsyncLocalStorage } = await nodeBuiltin("async_hooks");
-    const storage: CallStorage<string> = new AsyncLocalStorage();
-    actionCallScope = { run: (callId, fn) => storage.run(callId, fn), current: () => storage.getStore() };
-}
-
-/** The call being answered where this runs, if any. */
-export function currentActionCall(): string | undefined {
-    return actionCallScope?.current();
-}
 
 export interface ActionCallFrame {
     callId: string;
@@ -67,10 +41,7 @@ export function answerActionCall(registry: TransportRegistry, call: ActionCallFr
         }
     };
     Promise.resolve()
-        .then(() => {
-            const run = () => handler(...(Array.isArray(args) ? args : []));
-            return actionCallScope ? actionCallScope.run(callId, run) : run();
-        })
+        .then(() => handler(...(Array.isArray(args) ? args : [])))
         .then(
             (result) => reply({ result: result === undefined ? null : result }),
             (err) => reply({ error: errorMessage(err) }),

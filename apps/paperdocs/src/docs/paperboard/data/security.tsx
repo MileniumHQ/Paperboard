@@ -92,7 +92,7 @@ export default function SecurityDoc() {
 
             <PaperText preset="subheader" as="h2" id="backups">Backups</PaperText>
             <PaperText preset="body" as="p">
-                Backups are plain compressed archives, not encrypted. Anyone who can read the backup location can read the panel's files and settings in it.
+                Backups are plain compressed archives, not encrypted. Anyone who can read the backup location can read the files and data the panel backed up.
                 See <PaperLink href="/docs/paperboard/backups/">Backups</PaperLink>.
             </PaperText>
 

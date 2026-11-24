@@ -7,7 +7,7 @@ import { TransportRegistry, registerSet, type ActionHandler } from "./transport/
 import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } from "./transport/credentials";
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
-import { answerActionCall, currentActionCall, loadActionCallScope } from "./transport/actionCalls";
+import { answerActionCall } from "./transport/actionCalls";
 import { errorMessage } from "./errors";
 import type { BlockSchema } from "./blocksSchema";
 import { isRecord } from "./records";
@@ -169,7 +169,6 @@ export class CraneTransport {
     }
 
     private async open(): Promise<void> {
-        if (this.isNode) await loadActionCallScope();
         const creds = await resolveCredentials({
             port: this.opts.port,
             token: this.opts.token,
@@ -523,8 +522,6 @@ export class CraneTransport {
         // typo'd field) can never clobber the real credential.
         // v marks the wire protocol version — the daemon refuses unknown
         // versions with a typed BAD_PROTOCOL error instead of guessing
-        const duringCall = currentActionCall();
-        if (duringCall) params = { ...params, duringCall };
         const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
         return new Promise<unknown>((resolve, reject) => {
             // null timeoutMs waits indefinitely (long-running operations)

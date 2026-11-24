@@ -41,8 +41,8 @@ export interface RpcEventPayloads {
     };
     [BACKUP_PROGRESS_EVENT]: {
         panelId: string;
-        sourceId?: string | null;
-        progress?: BackupProgress | null;
+        target: string | null;
+        progress: BackupProgress | null;
     };
     [PROBLEMS_EVENT]: {
         panelId: string;
