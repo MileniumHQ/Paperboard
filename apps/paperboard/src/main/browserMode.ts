@@ -13,6 +13,7 @@ import { BrowserSessions } from "./browserSessions";
 import { getLocalDir } from "daemon/core/paths";
 import { portRefusal } from "daemon/system/ports";
 import { createShellInvokeHandlers } from "./communication/shellHandlers";
+import { issueContext, sendIssue } from "./issueSend";
 import { shellServer } from "./communication/shellServer";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { applySavedAppSettings, logRendererMessage } from "./communication/shelldata";
@@ -53,6 +54,7 @@ function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
             graphics: () => ({ gpu: true }),
             openPath: (dir) => shell.openPath(dir),
             appSettingsChanged: applySavedAppSettings,
+            sendIssue: (text) => sendIssue(text, issueContext("browser", app.getVersion(), process.getSystemVersion())),
         });
         browserSessions ??= new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json"));
         const port = browserPort();

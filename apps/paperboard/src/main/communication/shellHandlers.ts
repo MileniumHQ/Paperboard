@@ -28,6 +28,8 @@ export interface ShellHandlerDeps {
     // main's side effects of freshly saved settings: why Run on startup
     // couldn't be applied, or null
     appSettingsChanged: () => Promise<string | null>;
+    // Report an Issue: sends the text with what this host says about itself
+    sendIssue: (text: string) => Promise<void>;
 }
 
 export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
@@ -109,5 +111,9 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "launch-options": () => deps.launchOptions(),
         graphics: () => deps.graphics(),
         "app-settings-changed": () => deps.appSettingsChanged(),
+        "issue-send": ({ text }) => {
+            if (typeof text !== "string") throw new Error("Invalid parameter: text");
+            return deps.sendIssue(text);
+        },
     };
 }

@@ -133,7 +133,7 @@ export function updateOutcomeText(outcome: UpdateCheckOutcome): string {
     }
     return said.join(" ");
 }
-const REPORT_NOTE = "A coding agent on this computer reads Paperboard's code, finds the likely cause, and writes the issue for you.";
+const REPORT_NOTE = "Tell Paperboard's maintainer what went wrong.";
 const QUIT_NOTE = "Stops the panels on this computer, unless its server daemon runs as a service. Panels on other computers keep running.";
 
 const quitApp = () => shellIpc().send("quit-app");
@@ -213,7 +213,7 @@ export default function AppSettings(props: {
                 <PaperPageHeader
                     icon="settings"
                     title="App Settings"
-                    subtitle={isBrowserShell() ? "Appearance, startup, and licenses." : "Appearance, startup, updates, help, and licenses."}
+                    subtitle={isBrowserShell() ? "Appearance, startup, help, and licenses." : "Appearance, startup, updates, help, and licenses."}
                 />
             </Show>
             {/* settings that didn't load are the defaults, not yours: none shows until they load */}
@@ -313,19 +313,16 @@ export default function AppSettings(props: {
                 {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
             </Show>
 
-            {/* the agent runs on the computer showing this window, which a browser tab or a phone isn't */}
-            <Show when={!props.compact && !isBrowserShell()}>
-                <PaperSectionHeader icon="help" title="Help" />
-                <PaperSettingList autoHeight>
-                    <PaperSettingItem title="Report an Issue" description={REPORT_NOTE}>
-                        <PaperButton onClick={() => setReportOpen(true)}>
-                            <PaperIcon>bug_report</PaperIcon>
-                            Report an Issue
-                        </PaperButton>
-                    </PaperSettingItem>
-                </PaperSettingList>
-                <IssueReport open={reportOpen()} onClose={() => setReportOpen(false)} />
-            </Show>
+            <PaperSectionHeader icon="help" title="Help" />
+            <PaperSettingList autoHeight>
+                <PaperSettingItem title="Report an Issue" description={REPORT_NOTE}>
+                    <PaperButton onClick={() => setReportOpen(true)}>
+                        <PaperIcon>bug_report</PaperIcon>
+                        Report an Issue
+                    </PaperButton>
+                </PaperSettingItem>
+            </PaperSettingList>
+            <IssueReport open={reportOpen()} onClose={() => setReportOpen(false)} />
 
             <PaperSectionHeader icon="license" title="Licenses" />
             <PaperSettingList autoHeight>

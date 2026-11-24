@@ -24,6 +24,7 @@ const calls = () =>
         graphics: () => ({ gpu: true }),
         openPath: async () => "",
         appSettingsChanged: async () => null,
+        sendIssue: async () => undefined,
     });
 
 function post(pathname: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
