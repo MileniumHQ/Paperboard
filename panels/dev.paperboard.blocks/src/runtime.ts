@@ -326,6 +326,7 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
             if ((await read) !== null) throw new Error("The projects couldn't be read, so they can't be replaced by a backup");
             await store.pause();
         },
+        paused: () => store.paused,
         /** the copy is made, or a restore did not happen: the held changes go on */
         resume: async (): Promise<void> => {
             if (store.paused) await store.resume(false);

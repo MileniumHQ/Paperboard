@@ -212,18 +212,27 @@ describe("backups", () => {
         expect(s.said("p-old")).toEqual([]);
     });
 
-    test("a restore that fails keeps the projects as they are and lets changes go on", async () => {
+    test("a restore that fails keeps the changes held until the files are back, then they land", async () => {
         const s = setup();
         await s.ready;
         const id = await s.make("Mine", flows(onRun(say("one"))));
+        const original = structuredClone(s.files.get("projects.json"));
         await s.runtime.backup.beforeRestore(null);
+        let renamed = false;
+        const renaming = s.call.updateProject({ project: id, name: "Renamed" }).then(() => (renamed = true));
         s.files.set("projects.json", { projects: "damaged" });
         await expect(s.runtime.backup.restored()).rejects.toThrow("damaged");
+        await new Promise((resolve) => setImmediate(resolve));
+        // the held change has not run against the damaged files
+        expect(renamed).toBe(false);
+        expect(s.runtime.backup.paused()).toBe(true);
         // the daemon puts the files back and says so
-        s.files.set("projects.json", { version: 1, projects: [{ id, name: "Mine", enabled: true, createdAt: 1, editedAt: 1 }] });
+        s.files.set("projects.json", original);
         await s.runtime.backup.resume();
+        await renaming;
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Renamed"]);
+        expect((s.files.get("projects.json") as { projects: { name: string }[] }).projects[0].name).toBe("Renamed");
         expect((await s.call.loadFlows({ project: id })).workspace.blocks?.blocks).toHaveLength(1);
-        await s.call.updateProject({ project: id, name: "Renamed" });
     });
 
     test("a target is refused, as Blocks backs up as a whole", async () => {

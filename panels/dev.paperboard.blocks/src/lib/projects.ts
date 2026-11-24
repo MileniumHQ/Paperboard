@@ -135,7 +135,6 @@ export class ProjectStore {
     // while paused, one task holds the queue: nothing is written until letGo
     private held: Promise<void> | null = null;
     private letGo: (() => void) | null = null;
-    private readAgain = false;
 
     constructor(private readonly storage: ProjectStorage) {}
 
@@ -189,25 +188,29 @@ export class ProjectStore {
     pause(): Promise<void> {
         if (this.held) throw new Error("The projects are already paused");
         return new Promise<void>((paused) => {
-            this.held = this.queue.run(async () => {
-                await new Promise<void>((go) => {
-                    this.letGo = go;
-                    paused();
-                });
-                // the files changed meanwhile: what is held is read again before any later change runs
-                if (this.readAgain) await this.open();
-            });
+            this.held = this.queue.run(
+                () =>
+                    new Promise<void>((go) => {
+                        this.letGo = go;
+                        paused();
+                    }),
+            );
         });
     }
 
-    /** Lets the changes held back run; with `reread` the projects are read from the files first, and a failure to is thrown. */
+    /**
+     * Lets the changes held back run. With `reread` the projects are read from
+     * the files first, while the changes are still held; when that fails it
+     * is thrown and the store stays paused, so a later `resume` goes on once
+     * the files are as they were.
+     */
     async resume(reread: boolean): Promise<void> {
         const held = this.held;
         const go = this.letGo;
         if (!held || !go) throw new Error("The projects are not paused");
+        if (reread) await this.open();
         this.held = null;
         this.letGo = null;
-        this.readAgain = reread;
         go();
         await held;
     }
