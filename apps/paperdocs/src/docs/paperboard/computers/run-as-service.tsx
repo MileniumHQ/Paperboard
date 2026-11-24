@@ -77,7 +77,7 @@ It is running (PID 48211) on https://192.168.1.50:45464.
                     <tr><td>Linux, system</td><td><PaperCode>/etc/systemd/system/papercrane.service</PaperCode></td></tr>
                     <tr><td>macOS, user</td><td><PaperCode>~/Library/LaunchAgents/dev.paperboard.papercrane.plist</PaperCode></td></tr>
                     <tr><td>macOS, system</td><td><PaperCode>/Library/LaunchDaemons/dev.paperboard.papercrane.plist</PaperCode></td></tr>
-                    <tr><td>Windows, user</td><td><PaperCode>%LOCALAPPDATA%\Paperboard\services\papercrane.xml</PaperCode>, as the task <PaperCode>\Paperboard\papercrane</PaperCode></td></tr>
+                    <tr><td>Windows, user</td><td><PaperCode>%LOCALAPPDATA%\Paperboard\services\papercrane.xml</PaperCode>, as the task <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode></td></tr>
                     <tr><td>Windows, system</td><td><PaperCode>%ProgramData%\Paperboard\services\papercrane.xml</PaperCode>, as the task <PaperCode>\Paperboard\papercrane</PaperCode></td></tr>
                 </tbody>
             </PaperTable>
@@ -153,11 +153,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.paperboard.papercran
             </PaperText>
             <PaperText preset="title" as="h3" id="manage-windows">Windows</PaperText>
             <PaperCode block language="text">
-{`schtasks /Query /TN \Paperboard\papercrane /V /FO LIST   (check it)
-schtasks /End /TN \Paperboard\papercrane                  (stop)
-schtasks /Run /TN \Paperboard\papercrane                  (start)`}
+{`schtasks /Query /TN \\Paperboard\\papercrane /V /FO LIST   (check it)
+schtasks /End /TN \\Paperboard\\papercrane                  (stop)
+schtasks /Run /TN \\Paperboard\\papercrane                  (start)`}
             </PaperCode>
             <PaperText preset="body" as="p">
+                That is the system task. A user task sits in a folder named after your account: <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode>.
                 Task Scheduler keeps no log of the daemon's output. Read <PaperCode>logs\paperboard.log</PaperCode> in its data directory.
             </PaperText>
             <PaperText preset="body" as="p">

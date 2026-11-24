@@ -37,7 +37,7 @@ export default function DaemonCliDoc() {
                     <tr><td><PaperCode>status</PaperCode></td><td>Shows whether a daemon is running for the data directory, with its version, PID, address and paired computers.</td></tr>
                     <tr><td><PaperCode>identify</PaperCode></td><td>Prints what this computer is, as Paperboard names it: its OS, what is built on it, the machine it runs in, its motherboard, and an agent operating it.</td></tr>
                     <tr><td><PaperCode>install-service</PaperCode></td><td>Installs, turns on and starts the daemon as a systemd (Linux) or launchd (macOS) service, or a Task Scheduler task (Windows).</td></tr>
-                    <tr><td><PaperCode>uninstall-service</PaperCode></td><td>Stops the service and removes it. The data directory is kept.</td></tr>
+                    <tr><td><PaperCode>uninstall-service</PaperCode></td><td>Stops the service and removes it, and on Windows its task and firewall rule. The data directory is kept.</td></tr>
                     <tr><td><PaperCode>help [command]</PaperCode></td><td>Prints help for the program or for one command.</td></tr>
                 </tbody>
             </PaperTable>
@@ -178,8 +178,8 @@ Arch         x64`}
                     <tr><td><PaperCode>--port &lt;port&gt;</PaperCode></td><td><PaperCode>45464</PaperCode></td><td>The port the service's daemon listens on.</td></tr>
                     <tr><td><PaperCode>--host &lt;address&gt;</PaperCode></td><td><PaperCode>0.0.0.0</PaperCode></td><td>The address the service's daemon listens on.</td></tr>
                     <tr><td><PaperCode>--data-dir &lt;path&gt;</PaperCode></td><td><PaperCode>PAPERBOARD_DIR</PaperCode> in your terminal, else <PaperCode>~/.paperboard</PaperCode> of the account it runs as</td><td>The service's data directory, written into the service. <PaperCode>--data-dir</PaperCode> wins over <PaperCode>PAPERBOARD_DIR</PaperCode>.</td></tr>
-                    <tr><td><PaperCode>--system</PaperCode></td><td>off</td><td>A system service that starts at boot. Needs root.</td></tr>
-                    <tr><td><PaperCode>--run-as &lt;user&gt;</PaperCode></td><td>The account that ran <PaperCode>sudo</PaperCode></td><td>With <PaperCode>--system</PaperCode> only: the account the daemon runs as.</td></tr>
+                    <tr><td><PaperCode>--system</PaperCode></td><td>off</td><td>A system service that starts at boot. Needs root, or an administrator terminal on Windows.</td></tr>
+                    <tr><td><PaperCode>--run-as &lt;user&gt;</PaperCode></td><td>The account that ran <PaperCode>sudo</PaperCode>, or on Windows your own</td><td>With <PaperCode>--system</PaperCode> only: the account the daemon runs as.</td></tr>
                     <tr><td><PaperCode>--name &lt;name&gt;</PaperCode></td><td><PaperCode>papercrane</PaperCode></td><td>The service name: letters, digits, <PaperCode>.</PaperCode>, <PaperCode>_</PaperCode> and <PaperCode>-</PaperCode>, at most 64. On macOS the job is labeled <PaperCode>dev.paperboard.&lt;name&gt;</PaperCode>.</td></tr>
                     <tr><td><PaperCode>--dry-run</PaperCode></td><td>off</td><td>Prints the file it would write and the commands it would run. Changes nothing.</td></tr>
                 </tbody>
@@ -187,7 +187,7 @@ Arch         x64`}
             <PaperText preset="body" as="p">
                 The service runs the daemon with <PaperCode>--headless</PaperCode>, restarts it after a crash, and stops only the daemon process, never the programs its panels started.
                 It must run from the downloaded program: a daemon run from Paperboard's source code refuses.
-                A user service refuses to install as root, and a system service refuses without root.
+                A user service refuses to install as root, and a system service refuses without root (on Windows, without an administrator terminal).
                 The full walkthrough is <PaperLink href="/docs/paperboard/run-as-service/">Run the daemon as a service</PaperLink>.
             </PaperText>
 
