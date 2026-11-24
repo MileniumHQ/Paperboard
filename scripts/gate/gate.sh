@@ -14,7 +14,7 @@
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
 #   tests).
-#   paperboard, library, the panels and the create-panel template also run
+#   paperboard, library, issues, the panels and the create-panel template run
 #   the styling check (scripts/gate/check-app-styling.sh): literal sizes,
 #   colors, motion, z-index and the like that have a PaperUI token, and
 #   var(--paper-...) written by hand in TSX.
@@ -268,7 +268,7 @@ gstep issues "issues typecheck" run_in "$ROOT/services/issues" bun run typecheck
 gstep issues "issues build" run_in "$ROOT/services/issues" bun run build
 gstep issues "issues tests" run_in "$ROOT/services/issues" bun run test
 gstep issues "issues code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/issues/src services/issues/test
-gwarn issues "issues styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/issues
+gstep issues "issues styling" bash "$ROOT/scripts/gate/check-app-styling.sh" services/issues
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
