@@ -95,6 +95,12 @@ export class Server {
         killDeadline: null as Timer | null,
         /** the game's cleanup after the last run's exit (afterStop); its files are read once it settles */
         released: Promise.resolve() as Promise<void>,
+        /**
+         * a start past its hold check, until it launched or failed; never
+         * rejects. A backup or restore waits for it, and the start refuses
+         * to launch into a hold that began meanwhile.
+         */
+        preparing: null as Promise<void> | null,
     };
     /** the ports the running server opened, by the game's names for them; empty while it is stopped */
     runPorts: ReadonlyMap<string, number> = new Map();
