@@ -48,7 +48,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             <PaperText preset="subheader" as="h2" id="add-the-computer">2. Add the computer in Paperboard</PaperText>
             <PaperTextList ordered>
                 <li>In Paperboard, select <b>Add Computer</b>, the plus button in the rail.</li>
-                <li>On <b>Connect a Computer</b>, the computers Paperboard finds on your network are listed by name, with the <PaperCode>.local</PaperCode> name they answer to, such as <PaperCode>office-pc.local:45464</PaperCode>. Select yours and then <b>Next</b>.</li>
+                <li>On <b>Connect a Computer</b>, the computers Paperboard finds on your network are listed by name, with the address they were found at, such as <PaperCode>192.168.1.50:45464</PaperCode>. Once paired, Paperboard switches to the computer&apos;s <PaperCode>.local</PaperCode> name if it answers there. Select yours and then <b>Next</b>.</li>
                 <li>If it is not listed, select <b>Custom IP</b>. On <b>Computer Details</b>, type its address in <b>Computer address</b>, and its port in <b>Server port</b> if it is not <PaperCode>45464</PaperCode>. The address and port as <PaperCode>papercrane pair</PaperCode> prints them, such as <PaperCode>192.168.1.50:45464</PaperCode>, also go in <b>Computer address</b> whole. <b>Next</b> turns on once Paperboard reaches the computer.</li>
                 <li>On <b>Pairing Verification</b>, type the code into <b>Pairing code</b>, with or without the space.</li>
                 <li>Select <b>Add Computer</b>.</li>

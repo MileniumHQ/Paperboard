@@ -253,7 +253,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                     <PaperSelectorItem
                                         value={suggestionKey(s)}
                                         icon="desktop_windows"
-                                        description={`${s.mdnsName ?? s.host}:${s.port}`}
+                                        description={`${s.host}:${s.port}`}
                                     >
                                         {s.name.replace(/\.local$/i, "")}
                                     </PaperSelectorItem>
