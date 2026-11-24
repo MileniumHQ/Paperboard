@@ -105,6 +105,9 @@ describe("the daemon command line works headless", () => {
 			expect(run.output).toContain("<LogonType>S4U</LogonType>");
 			expect(run.output).toContain("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>");
 			expect(run.output).toContain("<Priority>5</Priority>");
+			// Task Scheduler restarts nothing on its own: an every-minute trigger brings back a crashed daemon
+			expect(run.output).toMatch(/<TimeTrigger>\s*<Repetition>\s*<Interval>PT1M<\/Interval>/);
+			expect(run.output).toContain("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>");
 			expect(run.output).toContain(`--headless --data-dir &quot;${data}&quot;`);
 			// no console window: conhost hosts the daemon headless
 			expect(run.output).toMatch(/conhost\.exe<\/Command>/i);

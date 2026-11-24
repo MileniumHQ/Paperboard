@@ -380,6 +380,21 @@ export function taskSchedulerXml(options: {
     const trigger = options.scope === "user"
         ? [`    <LogonTrigger>`, `      <Enabled>true</Enabled>`, `      <UserId>${xml(options.account)}</UserId>`, `    </LogonTrigger>`]
         : [`    <BootTrigger>`, `      <Enabled>true</Enabled>`, `    </BootTrigger>`];
+    // Task Scheduler never restarts a program that crashed once it started
+    // (RestartOnFailure only covers a failed launch). This trigger starts the
+    // task every minute; while the daemon runs, IgnoreNew skips it. The daemon
+    // never exits cleanly on Windows, so a stopped task is a crashed one, and
+    // stopping it on purpose disables the task first.
+    const watchdog = [
+        `    <TimeTrigger>`,
+        `      <Repetition>`,
+        `        <Interval>PT1M</Interval>`,
+        `        <StopAtDurationEnd>false</StopAtDurationEnd>`,
+        `      </Repetition>`,
+        `      <StartBoundary>2000-01-01T00:00:00</StartBoundary>`,
+        `      <Enabled>true</Enabled>`,
+        `    </TimeTrigger>`,
+    ];
     return [
         `<?xml version="1.0" encoding="UTF-16"?>`,
         `<!-- Written by papercrane install-service. Remove it with papercrane uninstall-service. -->`,
@@ -393,6 +408,7 @@ export function taskSchedulerXml(options: {
         `  </RegistrationInfo>`,
         `  <Triggers>`,
         ...trigger,
+        ...watchdog,
         `  </Triggers>`,
         `  <Principals>`,
         `    <Principal id="Author">`,
@@ -419,11 +435,6 @@ export function taskSchedulerXml(options: {
         `    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>`,
         // the default (7) runs below normal, and workloads would inherit it
         `    <Priority>5</Priority>`,
-        // restart after a crash; a minute is the shortest wait Task Scheduler allows
-        `    <RestartOnFailure>`,
-        `      <Interval>PT1M</Interval>`,
-        `      <Count>999</Count>`,
-        `    </RestartOnFailure>`,
         `  </Settings>`,
         `  <Actions Context="Author">`,
         `    <Exec>`,
@@ -622,11 +633,17 @@ export async function installService(request: InstallRequest): Promise<number> {
     if (process.platform === "win32") {
         const win = plan as ReturnType<typeof windowsPlan>;
         // an update replaces the running daemon: /Create under a running
-        // instance would leave the old one running with its old options
-        if (windowsTaskState(win.task, win.exe).running) {
-            const end = ["schtasks", "/End", "/TN", win.task];
-            run(end);
-            ran.push(end);
+        // instance would leave the old one running with its old options.
+        // Disabled first, so the every-minute trigger can't start it again
+        // before /Create; /Create enables it.
+        const old = windowsTaskState(win.task, win.exe);
+        const steps = [
+            ...(old.exists ? [["schtasks", "/Change", "/TN", win.task, "/DISABLE"]] : []),
+            ...(old.running ? [["schtasks", "/End", "/TN", win.task]] : []),
+        ];
+        for (const step of steps) {
+            run(step);
+            ran.push(step);
         }
         // a rule from an earlier install may name an older program
         if (win.firewallRule && windowsFirewallRuleExists(win.firewallRule)) {
@@ -704,6 +721,8 @@ export async function uninstallService(target: ServiceTarget): Promise<number> {
         const state = target.dryRun ? { exists: true, running: true } : windowsTaskState(task, null);
         const rule = windowsFirewallRule(target.name);
         stop = [
+            // disabled first, so the every-minute trigger can't start it between /End and /Delete
+            ...(state.exists ? [["schtasks", "/Change", "/TN", task, "/DISABLE"]] : []),
             ...(state.running ? [["schtasks", "/End", "/TN", task]] : []),
             ...(state.exists ? [["schtasks", "/Delete", "/TN", task, "/F"]] : []),
             ...(target.scope === "system" && (target.dryRun || windowsFirewallRuleExists(rule))

@@ -153,12 +153,24 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.paperboard.papercran
             </PaperText>
             <PaperText preset="title" as="h3" id="manage-windows">Windows</PaperText>
             <PaperCode block language="text">
-{`schtasks /Query /TN \\Paperboard\\papercrane /V /FO LIST   (check it)
-schtasks /End /TN \\Paperboard\\papercrane                  (stop)
-schtasks /Run /TN \\Paperboard\\papercrane                  (start)`}
+{`schtasks /Query /TN \\Paperboard\\papercrane /V /FO LIST   (check it)`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                That is the system task. A user task sits in a folder named after your account: <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode>.
+                While the task is on, Task Scheduler starts the daemon again within a minute of it stopping, so a crash doesn&apos;t keep it down. To stop it, turn the task off first:
+            </PaperText>
+            <PaperCode block language="text">
+{`schtasks /Change /TN \\Paperboard\\papercrane /DISABLE
+schtasks /End /TN \\Paperboard\\papercrane`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                To start it again:
+            </PaperText>
+            <PaperCode block language="text">
+{`schtasks /Change /TN \\Paperboard\\papercrane /ENABLE
+schtasks /Run /TN \\Paperboard\\papercrane`}
+            </PaperCode>
+            <PaperText preset="body" as="p">
+                These name the system task. A user task sits in a folder named after your account: <PaperCode>\Paperboard\&lt;you&gt;\papercrane</PaperCode>.
                 Task Scheduler keeps no log of the daemon's output. Read <PaperCode>logs\paperboard.log</PaperCode> in its data directory.
             </PaperText>
             <PaperText preset="body" as="p">
@@ -186,7 +198,7 @@ schtasks /Run /TN \\Paperboard\\papercrane                  (start)`}
                 The new version runs from the next start: restart the service.
             </PaperText>
             <PaperText preset="body" as="p">
-                A daemon on Windows does not update itself. Download the new zip and replace the files.
+                A daemon on Windows does not update itself. Stop the service, replace the files with the ones from the new zip, then start it.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="remove">Remove the service</PaperText>
