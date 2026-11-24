@@ -53,3 +53,17 @@ export interface Issue extends IssueSubmission {
 export interface IssueError {
     error: { code: string; message: string };
 }
+
+/** How many issues one page of the dashboard's list holds. */
+export const LIST_PAGE = 100;
+
+/** An issue as the dashboard lists it: the full text and diagnostics load when it's picked. */
+export interface IssueSummary {
+    id: string;
+    /** Unix milliseconds */
+    receivedAt: number;
+    /** the first line of the text, cut at 200 characters */
+    title: string;
+    context: IssueContext;
+    hasDetails: boolean;
+}

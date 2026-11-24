@@ -2,7 +2,7 @@
 // the daily cap and the storage cap hold exactly across every Cloudflare
 // location, and the dashboard reads what was written without a second store.
 import { DurableObject } from "cloudflare:workers";
-import type { Issue, IssueContext, IssueSubmission } from "../shared";
+import { LIST_PAGE, type Issue, type IssueContext, type IssueSubmission, type IssueSummary } from "../shared";
 import { DAILY_LIMIT, STORE_LIMIT } from "./limits";
 
 const DAY = 86_400_000;
@@ -16,6 +16,17 @@ interface Row extends Record<string, SqlStorageValue> {
     context: string;
     details: string;
 }
+
+interface SummaryRow extends Record<string, SqlStorageValue> {
+    id: string;
+    received_at: number;
+    head: string;
+    context: string;
+    has_details: number;
+}
+
+// the list shows an issue by its first line, cut here so one long line stays small
+const TITLE_LENGTH = 200;
 
 const issueOf = (row: Row): Issue => ({
     id: row.id,
@@ -59,9 +70,26 @@ export class IssueStore extends DurableObject<unknown> {
         return { ok: true, issue };
     }
 
-    /** newest first */
-    list(): Issue[] {
-        return this.ctx.storage.sql.exec<Row>("SELECT * FROM issues ORDER BY received_at DESC").toArray().map(issueOf);
+    /** newest first, one page of summaries older than `before`; the full text and diagnostics come from get() */
+    list(before: number): { issues: IssueSummary[]; more: boolean } {
+        const rows = this.ctx.storage.sql
+            .exec<SummaryRow>(
+                "SELECT id, received_at, substr(text, 1, ?) AS head, context, details != '' AS has_details FROM issues WHERE received_at < ? ORDER BY received_at DESC LIMIT ?",
+                TITLE_LENGTH,
+                before,
+                LIST_PAGE + 1,
+            )
+            .toArray();
+        return {
+            issues: rows.slice(0, LIST_PAGE).map((row) => ({
+                id: row.id,
+                receivedAt: row.received_at,
+                title: row.head.split("\n", 1)[0]!,
+                context: JSON.parse(row.context) as IssueContext,
+                hasDetails: row.has_details === 1,
+            })),
+            more: rows.length > LIST_PAGE,
+        };
     }
 
     get(id: string): Issue | null {
