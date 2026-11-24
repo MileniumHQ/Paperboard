@@ -243,7 +243,7 @@ ${ENVIRONMENT_HELP}`);
         .command("pair")
         .summary("show a pairing code on the running daemon")
         .description("Open pairing on the daemon running on this computer and print the code. Enter it in Paperboard on the computer you are pairing. Waits until that computer pairs; Ctrl+C cancels.")
-        .option("--json", "print the code, the address it listens on and its certificate's fingerprint as one JSON line, then the paired computer as another")
+        .option("--json", "print the code, the address it listens on and its certificate's fingerprint as one JSON line, then the paired computer as another. Pairing closes when stdin ends, so keep it open while you wait")
         .addOption(dataDirOption())
         .action((opts: Record<string, unknown>) => {
             applyDataDir(opts, env);
