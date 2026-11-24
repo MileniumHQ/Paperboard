@@ -69,12 +69,18 @@ async function collectIssueDetails(): Promise<string> {
     );
 }
 
+// issue-details gathers held for issue-send: enough for a few open forms
+const GATHERS_KEPT = 8;
+
 export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
-    // the diagnostics the person last saw. They stay here and issue-send
-    // sends exactly these, so the form never carries up to 60 KB back (the
+    // the diagnostics the person saw. They stay here and issue-send sends
+    // exactly these, by id, so the form never carries up to 60 KB back (the
     // browser-mode bridge refuses bodies over 64 KiB), and what's sent is
     // what was shown.
-    let gathered: string | null = null;
+    // Each gather has its own id, so two forms (browser tabs) never send
+    // each other's. Only the latest few are kept: a form opens a new gather
+    // each time, and an old one's id is answered with a reopen.
+    const gathered = new Map<string, string>();
     return {
         // throws until the local daemon is verified: why it isn't, once known
         "crane-credentials": () => {
@@ -155,15 +161,20 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         graphics: () => deps.graphics(),
         "app-settings-changed": () => deps.appSettingsChanged(),
         "issue-details": async () => {
-            gathered = null;
-            gathered = await collectIssueDetails();
-            return gathered;
+            const text = await collectIssueDetails();
+            const id = crypto.randomUUID();
+            gathered.set(id, text);
+            // Map keeps insertion order: the oldest gather goes first
+            for (const old of [...gathered.keys()].slice(0, Math.max(0, gathered.size - GATHERS_KEPT))) gathered.delete(old);
+            return { id, text };
         },
-        "issue-send": ({ text, includeDetails }) => {
+        "issue-send": async ({ text, detailsId }) => {
             if (typeof text !== "string") throw new Error("Invalid parameter: text");
-            if (typeof includeDetails !== "boolean") throw new Error("Invalid parameter: includeDetails");
-            if (includeDetails && gathered === null) throw new Error("The logs weren't gathered. Reopen Report an Issue and try again.");
-            return deps.sendIssue(text, includeDetails ? gathered! : "");
+            if (detailsId !== null && typeof detailsId !== "string") throw new Error("Invalid parameter: detailsId");
+            const details = detailsId === null ? "" : gathered.get(detailsId);
+            if (details === undefined) throw new Error("The logs shown are out of date. Reopen Report an Issue and try again.");
+            await deps.sendIssue(text, details);
+            if (detailsId !== null) gathered.delete(detailsId);
         },
     };
 }

@@ -219,13 +219,15 @@ export interface ShellCallContract {
     // Run on startup couldn't be applied, or null
     "app-settings-changed": { args: void; answer: string | null };
     // Report an Issue: the diagnostics it attaches (the computer looked at,
-    // its panels, recent log lines), scrubbed, as the person sees them
-    "issue-details": { args: void; answer: string };
-    // sends what the person typed, and the diagnostics issue-details last
-    // gathered unless they left them out, to Paperboard's issues service
-    // (services/issues), with this app's version and system. The
-    // diagnostics stay in main: a body over the browser-mode bridge's cap is refused.
-    "issue-send": { args: { text: string; includeDetails: boolean }; answer: void };
+    // its panels, recent log lines), scrubbed, as the person sees them, with
+    // an id for this gather
+    "issue-details": { args: void; answer: { id: string; text: string } };
+    // sends what the person typed, and the diagnostics gathered under
+    // `detailsId` (null when they left them out), to Paperboard's issues
+    // service (services/issues), with this app's version and system. The
+    // diagnostics stay in main: a body over the browser-mode bridge's cap is
+    // refused, and the id makes what's sent the very text that was shown.
+    "issue-send": { args: { text: string; detailsId: string | null }; answer: void };
 
     "app-update-state": { args: void; answer: AppUpdateState };
     "update-queue": { args: void; answer: UpdateQueueState };

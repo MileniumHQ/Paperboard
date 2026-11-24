@@ -3,7 +3,7 @@
 // The service runs here as a local server speaking its wire format; the
 // worker's own suite (services/issues) checks the same shape is what it takes.
 import { afterEach, expect, test } from "bun:test";
-import { CONTEXT_KEYS, MAX_TEXT_LENGTH } from "issues/shared";
+import { CONTEXT_KEYS, CONTEXT_SHAPES, MAX_TEXT_LENGTH, SHELLS } from "issues/shared";
 import { issueContext, sendIssue } from "../../src/main/issueSend";
 
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -17,6 +17,19 @@ function serve(answer: (request: Request) => Response | Promise<Response>) {
     server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: answer });
     return `http://127.0.0.1:${server.port}`;
 }
+
+// Inventory: Core contracts — what the app says about itself is what the service's shapes take, kernels with a + included.
+test("the app's context passes the shapes the service holds it to", () => {
+    for (const shell of SHELLS) {
+        for (const version of ["15.1", "10.0.26100", "6.12.57+deb13-amd64", "6.12.47+rpt-rpi-v8"]) {
+            const context = issueContext(shell, "0.4.0-beta.5+build.7", version);
+            for (const [key, shape] of Object.entries(CONTEXT_SHAPES)) {
+                expect({ key, ok: shape.test(context[key as keyof typeof context]) }).toEqual({ key, ok: true });
+            }
+            expect(context.shell).toBe(shell);
+        }
+    }
+});
 
 // Inventory: Core contracts — the app sends the trimmed text, exactly the context the service takes, and the diagnostics or none.
 test("an issue is posted as JSON with the trimmed text, the app's context and the diagnostics", async () => {

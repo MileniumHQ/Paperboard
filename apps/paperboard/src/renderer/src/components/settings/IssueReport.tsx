@@ -41,7 +41,8 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
     const submit = () => {
         if (!ready() || send.busy()) return;
         void send.run("Couldn't send the issue", async () => {
-            await shellIpc().invoke("issue-send", { text: text(), includeDetails: includeDetails() });
+            // the id of the gather the person saw, so main sends that very text
+            await shellIpc().invoke("issue-send", { text: text(), detailsId: includeDetails() ? details.value()!.id : null });
             batch(() => {
                 setText("");
                 props.onClose();
@@ -114,7 +115,7 @@ export default function IssueReport(props: { open: boolean; onClose: () => void 
                                 {(attached) => (
                                     <PaperFlex direction="column" maxHeight="panel-height-small" scrollable>
                                         <PaperCode block wrap language="text">
-                                            {attached()}
+                                            {attached().text}
                                         </PaperCode>
                                     </PaperFlex>
                                 )}
