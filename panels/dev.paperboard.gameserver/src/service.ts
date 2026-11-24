@@ -1,6 +1,5 @@
 import {
     definePanelService,
-    backupApi,
     blocksApi,
     config,
     fileApi,
@@ -21,9 +20,13 @@ import {
     type ServersConfig,
     type StoredServer,
 } from "./servers";
+import type { BackupSchedule } from "./backupSchedule";
 import * as nodeFs from "node:fs/promises";
 import { Server } from "./service/server";
-import { announceChanges, bindBlocks, fireBackupEnded, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
+import { announceChanges, bindBlocks, fireTrigger, mergeBlocks, serverOperation, sharedBlocks, sharedTypes } from "./service/blocks";
+import { backUp, backupHooks, restoreBackup, routineBackups, type BackupsHost } from "./service/backups";
+import { readScheduleChoice } from "./backupSchedule";
+import { STEAM_FOLDER } from "./games/steam/steamcmd";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
 import { appendCapped, type GameServerState } from "./service/types";
@@ -39,7 +42,7 @@ import { settingsBlocks } from "./service/settingsBlocks";
 import { assertGameCall, gameFor, games } from "./games";
 import { loadServerOptions } from "./service/options";
 import { joinPort } from "./core/portNames";
-import { markResume, report, takeResume, waitUntil } from "./games/serviceKit";
+import { report, resumeFolder, takeResume, waitUntil } from "./games/serviceKit";
 export * from "./service/types";
 
 export type { ServerSummary };
@@ -215,16 +218,6 @@ async function removeOldHeadStore(): Promise<void> {
 async function initialize(server: Server): Promise<Server> {
     const { game } = server;
     try {
-        await backupApi.defineSource(PANEL_ID, {
-            id: server.id,
-            directory: server.stored.directory,
-            config: ["servers", { id: server.id }, "settings"],
-            processes: game.processIds.map((id) => server.processId(id)),
-            ...(server.legacy ? { legacy: true } : {}),
-            ...(server.legacy || game.backupExclude ? { exclude: [...(server.legacy ? [saved.serversDirectory] : []), ...(game.backupExclude ?? [])] } : {}),
-            ...(game.backupSkip ? { skip: [...game.backupSkip] } : {}),
-        });
-        server.backupSource = true;
         await nodeFs.mkdir(await fileApi.getPath(server.stored.directory, PANEL_ID), { recursive: true });
         server.blocks = await blocksApi.defineProject({ id: server.id, ...blocksProject(server) }, PANEL_ID);
         const blocks = server.blocks;
@@ -261,23 +254,15 @@ async function initialize(server: Server): Promise<Server> {
             server.process.onData(game.primaryProcessId, (chunk) => handleProcessData(server, chunk)),
             server.process.onExit(game.primaryProcessId, (code) => handleProcessExit(server, code)),
         );
-        await loadServerOptions(server);
-        const automation = readAutomation(server);
-        scheduleDailyRestart(server, restartServerInstance);
-        scheduleUpdateChecks(server, restartServerInstance);
-        await game.initialize(running);
-        server.icon = (await game.readIcon?.()) ?? null;
-        // the server runs either way; only the Blocks Library keeps the game's art
-        if (server.icon) {
-            await blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
-        }
-        // a backup or restore that stopped the running server left a marker:
-        // it starts again, as that work would have at its end
+        const automation = await loadSettings(server, running);
+        // a backup or restore that stopped the running server left a marker
+        // when the service died before its end: it starts again, as that
+        // work would have
         const resume = await takeResume(server);
         // the server was running when this service last saw it and nobody
         // stopped it: it went down while Paperboard was not watching (the
         // computer restarted, or the system ended it), which is a crash,
-        // unless a restore ended it
+        // unless a backup or restore ended it
         const crashed = wasRunning && !running;
         const restart = !running && (resume || (crashed && automation.restartAfterCrash));
         if (crashed) {
@@ -295,6 +280,20 @@ async function initialize(server: Server): Promise<Server> {
         }));
         throw err;
     }
+}
+/** Reads what the server's settings and files say, as its setup and a restore do; gives its automation. */
+async function loadSettings(server: Server, running: boolean) {
+    await loadServerOptions(server);
+    const automation = readAutomation(server);
+    scheduleDailyRestart(server, restartServerInstance);
+    scheduleUpdateChecks(server, restartServerInstance);
+    await server.game.initialize(running);
+    server.icon = (await server.game.readIcon?.()) ?? null;
+    // the server runs either way; only the Blocks Library keeps the game's art
+    if (server.icon && server.blocks) {
+        await server.blocks.update(blocksProject(server)).catch((err) => report(server, "The Blocks Library can't show this server's icon", err));
+    }
+    return automation;
 }
 /** Ends what a server's setup started: its subscriptions, timers and its game's own work. */
 async function dispose(server: Server): Promise<void> {
@@ -364,7 +363,7 @@ function renameServer(id: unknown, name: unknown): Promise<void> {
 function removeServer(id: unknown): Promise<void> {
     return serial(async () => {
         const server = requireServer(id);
-        if (server.activeOperations)
+        if (server.activeOperations || server.backupHold)
             throw new Error(
                 "Wait for this server's current operation to finish before removing it",
             );
@@ -374,9 +373,9 @@ function removeServer(id: unknown): Promise<void> {
             await stopServerInstance(server);
             await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 40_000, "the server to stop; its files and entry were kept");
             // Keep its directory and backups; removal never deletes user data.
+            // Its routine backups end with its entry, which holds their schedule.
             for (const name of server.game.portNames) await server.ports.release(name);
-            // a setup that failed may have made neither
-            if (server.backupSource) await server.backups.setSchedule(null);
+            // a setup that failed may have made none
             await server.blocks?.remove();
             await updateSaved((current) => {
                 const next = {
@@ -400,6 +399,45 @@ function removeServer(id: unknown): Promise<void> {
             throw err;
         }
     });
+}
+/** What the backup hooks and routine backups work on: the saved servers and their entries. */
+const backupsHost: BackupsHost = {
+    server: requireServer,
+    servers: () => [...entries.values()],
+    // the panel's own folders beside a legacy server's files: the other servers, their histories and the resume markers, and SteamCMD
+    panelFolders: () => [saved.serversDirectory, STEAM_FOLDER, ...games.map((g) => resumeFolder(g.id))],
+    async saveSchedule(server, change) {
+        let next: BackupSchedule | null = null;
+        await updateSaved((current) => ({
+            ...current,
+            servers: current.servers.map((s) => {
+                if (s.id !== server.id) return s;
+                const { backupSchedule, ...rest } = s;
+                next = change(backupSchedule ?? null);
+                return next ? { ...rest, backupSchedule: next } : rest;
+            }),
+        }));
+        return next;
+    },
+    async replaceSettings(server, settings) {
+        await updateSaved((current) => ({
+            ...current,
+            servers: current.servers.map((s) => (s.id === server.id ? { ...s, settings } : s)),
+        }));
+        publish();
+    },
+    async reload(server) {
+        // the server is stopped for a restore: what its last run left is settled again
+        await loadSettings(server, false);
+        publish();
+    },
+};
+const backups = backupHooks(backupsHost);
+const routine = routineBackups(backupsHost);
+/** Runs one of a server's backup calls: counted, so removal waits for it. */
+function onBackups<T>(id: unknown, work: (server: Server) => Promise<T>): Promise<T> {
+    const server = requireServer(id);
+    return serverOperation(server, () => work(server));
 }
 /** What the panel's own blocks run: the functions above, and each server's own operations. */
 const serversHost: ServersBlocksHost = {
@@ -452,6 +490,10 @@ const serversCalls: Pick<Handlers, ServersCallName> = {
     },
     readServerConfig: (_input, _ctx, { server }) => requireServer(server).settings,
     retryInitialize: async (_input, _ctx, { server }) => (await retryInitialize(server), true),
+    backUp: ({ label }, _ctx, { server }) => onBackups(server, (s) => backUp(s, label)),
+    restoreBackup: ({ backupId }, _ctx, { server }) => onBackups(server, (s) => restoreBackup(s, backupId)),
+    readBackupSchedule: (_input, _ctx, { server }) => requireServer(server).stored.backupSchedule ?? null,
+    writeBackupSchedule: ({ schedule }, _ctx, { server }) => onBackups(server, (s) => routine.set(s, schedule && readScheduleChoice(schedule))),
     servedPicture: (input) => pictureCall(input),
     steamAvatar: ({ steamId, size }) => steamAvatar(steamId, size),
 };
@@ -519,7 +561,7 @@ export const gameServerService = definePanelService({
     }])),
     async onInit(ctx) {
         rootContext = ctx;
-        // The daemon stops the service with SIGTERM (for a backup, an update, a
+        // The daemon stops the service with SIGTERM (for an update or a
         // restart). Each server's history is on disk before it ends: a server
         // stopped a moment ago would otherwise be found "running" by the next
         // service, and started again as one that crashed.
@@ -553,6 +595,7 @@ export const gameServerService = definePanelService({
             announcedServers = JSON.stringify(saved.servers.map((server) => server.id));
             panelBlocks = handle;
             publish();
+            routine.start();
         } catch (err) {
             ctx.setState({ serversError: errorMessage(err) });
             console.error("[gameserver] servers could not be loaded:", err);
@@ -581,35 +624,11 @@ export const gameServerService = definePanelService({
             );
         }
     },
-    // a restore ends each server it replaces; one that was running starts
-    // again on the restored files once the service is back
-    async beforeRestore(_ctx, { sourceId }) {
-        const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
-        for (const server of selected) {
-            if (server.game.backup.mode === "offline") await server.game.backup.before();
-            else if (await server.process.exists(server.game.primaryProcessId)) await markResume(server);
-        }
-    },
-    // a server's backup fires its Blocks events; a backup of the whole panel is no one server's
-    afterBackup(_ctx, ended) {
-        const server = ended.sourceId === undefined ? undefined : entries.get(ended.sourceId);
-        if (server) fireBackupEnded(server.blocks, ended, (what, err) => report(server, what, err));
-    },
-    async beforeBackup(_ctx, { sourceId }) {
-        const paused: Server[] = [];
-        try {
-            const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
-            for (const server of selected) {
-                await server.game.backup.before();
-                paused.push(server);
-            }
-        } catch (err) {
-            for (const server of paused) {
-                await server.game.backup.recover().catch((recoverErr) =>
-                    report(server, "Could not undo the preparation for the refused backup", recoverErr));
-            }
-            throw err;
-        }
-    },
+    // a backup of one server at a time: its folder, readied for the copy, and its settings
+    beforeBackup: (_ctx, { target }) => backups.beforeBackup(target),
+    afterBackup: (_ctx, { target }) => backups.afterBackup(target),
+    // a restore stops the server, and starts it again on the restored files and settings if it ran
+    beforeRestore: (_ctx, { target }) => backups.beforeRestore(target),
+    afterRestore: (_ctx, ended) => backups.afterRestore(ended),
 });
 export default gameServerService;

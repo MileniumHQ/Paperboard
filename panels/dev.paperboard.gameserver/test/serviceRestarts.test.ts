@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
 import { backupApi, backupLocationsApi } from "@mileniumhq/paperapi";
+import { waitFor } from "testkit/wait";
 import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -11,12 +12,14 @@ import { readTree, writeTree } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { javaPackageFor } from "../src/lib/versionProfile";
 import { joinPort } from "../src/core/portNames";
+import { ROUTINE_BACKUP_LABEL } from "../src/backupSchedule";
 
 const SERVERS = "servers-0123456789ab";
 const dataDir = process.env.PAPERBOARD_DIR!;
 const filesRoot = path.join(dataDir, "files", PANEL_ID, SERVERS);
 const serverDir = (id: string) => path.join(filesRoot, id);
 const historyFile = (id: string) => path.join(filesRoot, "history", `${id}.json`);
+const configFile = path.join(dataDir, "configs", `${PANEL_ID}.json`);
 const stored = (id: string) => ({ id, name: `Server ${id}`, game: "minecraft", directory: `${SERVERS}/${id}`, createdAt: 0, settings: { configured: true, software: "paper", version: "1.21.1" } });
 /** the stand-in server's pids, one per start (helpers/fakeJava.main.ts) */
 const runs = (id: string) => (fs.existsSync(path.join(serverDir(id), "runs.log")) ? fs.readFileSync(path.join(serverDir(id), "runs.log"), "utf8").split("\n").filter(Boolean).map(Number) : []);
@@ -159,7 +162,7 @@ describe("servers through restarts", () => {
         await waitForFile(historyFile("s-b"), (text) => text.includes(`"running":true`), "the running server's history to be saved");
         await serverCalls("s-b").stopServer();
         await state.waitFor("s-b", (s) => s.serverStatus === "offline", "s-b to stop");
-        // a backup, an update or a restart stops the service right after: the stop is what it keeps
+        // an update or a restart stops the service right after: the stop is what it keeps
         await restartService();
         const after = (await state.server("s-b"))!;
         expect(after.serverStatus).toBe("offline");
@@ -168,25 +171,34 @@ describe("servers through restarts", () => {
         expect(runs("s-b")).toHaveLength(1);
     });
 
-    test("each server is its own backup source: restoring one touches only that server, and removing a server keeps its world", async () => {
-        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-a");
-        const a = backupApi.forSource(PANEL_ID, "s-a");
-        const backup = await a.create({ label: "before" });
-        expect((await a.list()).map((b) => b.id)).toEqual([backup.id]);
-        // s-b is a source of its own: s-a's location is not its
-        expect((await backupApi.forSource(PANEL_ID, "s-b").status()).location).toBeNull();
-        await expect(backupApi.forSource(PANEL_ID, "s-b").list()).rejects.toThrow("No backup location chosen for this panel");
+    test("each server's backups are its own: restoring one puts back only that server's files and settings, and removing a server keeps its world", async () => {
+        await backupLocationsApi.setForPanel(PANEL_ID, "local");
+        const settingsOf = (id: string) => JSON.parse(fs.readFileSync(configFile, "utf8")).servers.find((s: { id: string }) => s.id === id).settings;
+        const automation = await serverCalls("s-a").readAutomation();
+        const settingsThen = settingsOf("s-a");
+        const backup = await serverCalls("s-a").backUp({ label: "before" });
+        expect(backup).toMatchObject({ target: "s-a", label: "before", paths: [`${SERVERS}/s-a`] });
+        expect((await backupApi.list(PANEL_ID, { target: "s-a" })).map((b) => b.id)).toEqual([backup.id]);
+        expect(await backupApi.list(PANEL_ID, { target: "s-b" })).toEqual([]);
+        // the label routine backups are told apart by is theirs alone
+        await expect(serverCalls("s-a").backUp({ label: ROUTINE_BACKUP_LABEL })).rejects.toThrow("kept for routine backups");
+        // a backup of the panel as a whole would be every server's at once
+        await expect(backupApi.create(PANEL_ID)).rejects.toThrow("one server at a time");
 
         fs.writeFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "s-a changed");
         fs.writeFileSync(path.join(serverDir("s-b"), "world", "level.dat"), "s-b changed");
-        await a.restore(backup.id);
+        await serverCalls("s-a").writeAutomation({ patch: { dailyRestart: "04:00" } });
+        await serverCalls("s-a").restoreBackup({ backupId: backup.id });
         expect(fs.readFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "utf8")).toBe("s-a world");
         expect(fs.readFileSync(path.join(serverDir("s-b"), "world", "level.dat"), "utf8")).toBe("s-b changed");
+        // its settings are the backup's, saved and read again
+        expect(await serverCalls("s-a").readAutomation()).toEqual(automation);
+        expect(settingsOf("s-a")).toEqual(settingsThen);
 
         const before = readTree(serverDir("s-b"));
         expect(await serverCalls("s-b").removeServer()).toEqual({ removed: "s-b" });
         expect(readTree(serverDir("s-b"))).toEqual(before);
-        const saved = JSON.parse(fs.readFileSync(path.join(dataDir, "configs", `${PANEL_ID}.json`), "utf8"));
+        const saved = JSON.parse(fs.readFileSync(configFile, "utf8"));
         expect(saved.servers.map((s: { id: string }) => s.id)).toEqual(["s-a"]);
     });
 
@@ -194,20 +206,55 @@ describe("servers through restarts", () => {
         const state = servicesState();
         // a crash would leave it stopped: only the restore's own resume starts it
         await serverCalls("s-a").writeAutomation({ patch: { restartAfterCrash: false } });
-        await backupLocationsApi.setForPanel(PANEL_ID, "local", undefined, "s-a");
-        const a = backupApi.forSource(PANEL_ID, "s-a");
-        const backup = await a.create({ label: "running" });
+        const backup = await serverCalls("s-a").backUp({ label: "running" });
         await serverCalls("s-a").startServer();
         const seen = (await state.waitFor("s-a", (s) => s.serverStatus === "online", "s-a online")).serverEntries.length;
         // its stand-in notes each start's pid in the server folder, which the restore replaces too
         const pid = runs("s-a").at(-1);
         fs.writeFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "s-a after the backup");
-        await a.restore(backup.id);
+        await serverCalls("s-a").restoreBackup({ backupId: backup.id });
         expect(fs.readFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "utf8")).toBe("s-a world");
         const back = await state.waitFor("s-a", (s) => s.serverStatus === "online" && runs("s-a").at(-1) !== pid, "s-a started again on the restored files");
         expect(alive(pid!)).toBe(false);
         expect(back.serverEntries.slice(seen).map((e) => e.content).join("\n")).not.toContain("stopped while Paperboard was not running");
         await serverCalls("s-a").stopServer();
         await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
+    });
+
+    test("a server's due routine backup runs, and pruning deletes only its routine backups beyond the newest kept", async () => {
+        const made = await serverCalls("s-a").backUp({ label: "by hand" });
+        // two older routine backups, as earlier runs of the schedule left them
+        const older = [await backupApi.create(PANEL_ID, { target: "s-a", label: ROUTINE_BACKUP_LABEL }), await backupApi.create(PANEL_ID, { target: "s-a", label: ROUTINE_BACKUP_LABEL })];
+        const byHand = (await backupApi.list(PANEL_ID, { target: "s-a" })).filter((b) => b.label !== ROUTINE_BACKUP_LABEL).map((b) => b.id);
+        expect(byHand).toContain(made.id);
+
+        const schedule = await serverCalls("s-a").writeBackupSchedule({ schedule: { everyHours: 24, keep: 1 } });
+        expect(schedule).toMatchObject({ everyHours: 24, keep: 1, last: null });
+        expect(Date.parse(schedule!.nextRunAt) - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
+        // the schedule is the server's own, beside the settings a restore replaces
+        const config = JSON.parse(fs.readFileSync(configFile, "utf8"));
+        const entry = config.servers.find((s: { id: string }) => s.id === "s-a");
+        expect(entry.backupSchedule).toEqual(schedule);
+        expect(entry.settings.backupSchedule).toBeUndefined();
+
+        // a day later: it is due as the service starts
+        entry.backupSchedule.nextRunAt = new Date(Date.now() - 1000).toISOString();
+        fs.writeFileSync(configFile, JSON.stringify(config));
+        await restartService();
+        const ran = await waitFor("the routine backup to run", async () => (await serverCalls("s-a").readBackupSchedule())?.last ?? null, { timeoutMs: 60_000, intervalMs: 200 });
+        expect(ran).toMatchObject({ ok: true, message: null });
+        const after = await serverCalls("s-a").readBackupSchedule();
+        expect(Date.parse(after!.nextRunAt) - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
+
+        const kept = await backupApi.list(PANEL_ID, { target: "s-a" });
+        const routine = kept.filter((b) => b.label === ROUTINE_BACKUP_LABEL);
+        expect(routine).toHaveLength(1);
+        expect(older.map((b) => b.id)).not.toContain(routine[0]!.id);
+        // every backup made by hand stays
+        expect(kept.filter((b) => b.label !== ROUTINE_BACKUP_LABEL).map((b) => b.id)).toEqual(byHand);
+
+        expect(await serverCalls("s-a").writeBackupSchedule({ schedule: null })).toBeNull();
+        const off = JSON.parse(fs.readFileSync(configFile, "utf8"));
+        expect(off.servers.find((s: { id: string }) => s.id === "s-a").backupSchedule).toBeUndefined();
     });
 });

@@ -3,7 +3,7 @@
 // service modules keep for it. The panel's service makes one when a server is
 // added or loaded and disposes of it when the server is removed; every helper
 // that works on a server is handed it.
-import { backupApi, fileApi, portApi, processApi, type BlocksProjectHandle, type PortClaim, type PortRequest } from "@mileniumhq/paperapi";
+import { fileApi, portApi, processApi, type BlocksProjectHandle, type PortClaim, type PortRequest } from "@mileniumhq/paperapi";
 import { scopedFiles } from "../scopedFiles";
 import { serverPortLabel, serverPortName } from "../core/portNames";
 import { gameFor } from "../games";
@@ -46,8 +46,8 @@ export class Server {
     /**
      * The one server from before there were several (ServersConfig.legacyServer).
      * It keeps the names it had: its process is the game's bare id ("mc-server"),
-     * its ports the bare names ("java"), its folder the panel's own, and its
-     * backups the panel's original history. They are never migrated: the
+     * its ports the bare names ("java"), and its folder the panel's own. They
+     * are never migrated: the
      * daemon and the port registry can't rename a process or a claim, so a
      * server running through the update that made it legacy (Paperboard's
      * servers outlive its restarts) could only take new names by stopping,
@@ -67,8 +67,12 @@ export class Server {
     #state: GameServerState;
     readonly #host: ServerHost;
 
-    /** whether the server is a backup source, once its setup has made it one */
-    backupSource?: true;
+    /**
+     * A backup's copy or a restore holding the server's folder, from its
+     * preparation until it carries on: the server doesn't start meanwhile,
+     * and it isn't removed.
+     */
+    backupHold: "backup" | "restore" | null = null;
     /** the server's Blocks project, once its setup has made it */
     blocks?: BlocksProjectHandle;
     /** its own picture, when its game has one and it is set */
@@ -167,13 +171,9 @@ export class Server {
     trigger(id: string, output: unknown): void {
         this.#host.trigger(this, id, output);
     }
-    /** the server's backups, as the backup service keeps them */
     /** its console and chat as kept across service restarts, when they are */
     get history() {
         return this.#host.history;
-    }
-    get backups() {
-        return backupApi.forSource(PANEL_ID, this.id);
     }
     /** its folder, as a path on this computer */
     root(): Promise<string> {

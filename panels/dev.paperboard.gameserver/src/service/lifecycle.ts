@@ -150,7 +150,10 @@ export async function startServerInstance(
     if (ctx.state.serverStatus !== "offline") return;
     // refused to the caller, and said in the console for the restarts that
     // have none: a half-settled server folder is not a launch failure
-    try { assertRecoverySettled(ctx, "starting the server"); }
+    try {
+        assertRecoverySettled(ctx, "starting the server");
+        if (ctx.backupHold) throw new Error(ctx.backupHold === "backup" ? "The server's files are being backed up; start it once the copy is made" : "A backup is being restored; start the server once it is in place");
+    }
     catch (err) { report(ctx, "The server was not started", err); throw err; }
     try {
         ctx.setState({ activeIssue: null });

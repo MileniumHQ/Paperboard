@@ -3,8 +3,8 @@
 // adds its own through its service's blocks().
 import type { Server } from "./server";
 import type { BlockCommandDefinition, BlockEventDefinition, BlockSet, BlockTypeDefinition, BlockValueDefinition, BlocksProjectHandle } from "@mileniumhq/paperapi";
-import type { BackupEnded, BackupRecord, CallInput, CallsOf } from "@mileniumhq/paperapi";
-import { MAX_BUFFERED_ENTRIES, type ChatMessage, type GameServerState } from "./types";
+import { backupApi, type BackupRecord, type CallInput, type CallsOf } from "@mileniumhq/paperapi";
+import { MAX_BUFFERED_ENTRIES, PANEL_ID, type ChatMessage, type GameServerState } from "./types";
 import { TRIGGER_IDS, type CallName, type TriggerId, type gameServerContract } from "./contract";
 import { restartServerInstance, sendServerCommand, startServerInstance, stopServerInstance } from "./lifecycle";
 import { waitUntil } from "../games/serviceKit";
@@ -12,6 +12,7 @@ import { listLogFiles, readLogFile } from "./logs";
 import { sayInChat } from "./calls";
 import { automationView, readAutomation, writeAutomation } from "./automation";
 import { assertGameCall } from "../games";
+import { backUp, restoreBackup } from "./backups";
 
 /**
  * A player, by the name the server knows them by. The panel's own type.
@@ -37,9 +38,7 @@ function playerType(onlinePlayers: (server: string) => readonly string[], server
     };
 }
 
-// A backup is its record as Paperboard keeps it: a block that backs up or
-// restores is answered with the record by Paperboard itself when the backup
-// stopped the service, so every backup block passes the record as it is.
+// A backup is its record as Paperboard keeps it, passed as it is.
 const BACKUP_TYPE: BlockTypeDefinition<BackupRecord> = {
     id: "backup",
     name: "Backup",
@@ -165,7 +164,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 icon: "backup",
                 description: "The server's backups, newest first",
                 type: "list<backup>",
-                read: () => ctx.backups.list(),
+                read: () => backupApi.list(PANEL_ID, { target: ctx.id }),
             },
             {
                 id: "log-files",
@@ -276,7 +275,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 text: "Back up the server as {name}",
                 inputs: { name: { type: "text", name: "Name", optional: true, maxLength: 128 } },
                 output: "backup",
-                run: ({ name }: { name?: string }) => ctx.backups.create(name ? { label: name } : {}),
+                run: ({ name }: { name?: string }) => backUp(ctx, name),
             },
             {
                 id: "restore-backup",
@@ -287,7 +286,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 text: "Restore {backup}",
                 inputs: { backup: { type: "backup", name: "Backup" } },
                 output: "backup",
-                run: ({ backup }: { backup: unknown }) => ctx.backups.restore(backupId(backup)),
+                run: ({ backup }: { backup: unknown }) => restoreBackup(ctx, backupId(backup)),
             },
             {
                 id: "delete-backup",
@@ -298,7 +297,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 text: "Delete {backup}",
                 inputs: { backup: { type: "backup", name: "Backup" } },
                 run: async ({ backup }: { backup: unknown }) => {
-                    await ctx.backups.delete(backupId(backup));
+                    await backupApi.delete(PANEL_ID, backupId(backup), { target: ctx.id });
                 },
             },
             needsCall(ctx, "writeAutomation", {
@@ -360,7 +359,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 name: "When a Backup Finishes",
                 category: "Backups",
                 icon: "backup",
-                description: "Runs once a backup of the server is saved where its backups go, whoever started it",
+                description: "Runs once a backup of the server is saved where its backups go: one made with Back Up Now, Back Up the Server or the routine schedule",
                 values: { backup: { type: "backup", name: "Backup" } },
             },
             {
@@ -368,7 +367,7 @@ export function sharedBlocks(ctx: Server): BlockSet {
                 name: "When a Backup Fails",
                 category: "Backups",
                 icon: "error",
-                description: "Runs when a backup of the server could not be made, whoever started it",
+                description: "Runs when a backup of the server made with Back Up Now, Back Up the Server or the routine schedule could not be made",
                 values: { error: { type: "text", name: "Error" } },
             },
         ],
@@ -580,7 +579,7 @@ const EVENT_VALUES: Record<TriggerId, (output: unknown) => Record<string, unknow
 export type BlocksFailure = (what: string, err: unknown) => void;
 
 /** Fires When a Backup Finishes or When a Backup Fails for how a backup of the server ended. */
-export function fireBackupEnded(blocks: BlocksProjectHandle | undefined, ended: BackupEnded, failed: BlocksFailure): void {
+export function fireBackupEnded(blocks: BlocksProjectHandle | undefined, ended: { ok: true; backup: BackupRecord } | { ok: false; error: string }, failed: BlocksFailure): void {
     if (!blocks) return;
     const event = ended.ok ? BACKUP_EVENTS.finished : BACKUP_EVENTS.failed;
     blocks.fire(event, ended.ok ? { backup: ended.backup } : { error: ended.error })

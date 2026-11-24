@@ -273,13 +273,16 @@ export function settingPort(spec: { name: string; label: string; protocol: PortS
 }
 
 /**
- * The resume marker of a backup or restore that stopped a running server. It
- * lives outside the server folder: a restored snapshot must never decide
- * whether to restart.
+ * The resume marker of a backup or restore that stopped a running server:
+ * the server starts again at the work's end, or, when the service died
+ * meanwhile, once it is back. It lives outside the server folder, so a
+ * restored snapshot never decides whether to restart.
  */
-const resumeMarker = (ctx: Server) => rawFiles.getPath(`.${ctx.stored.game}-resume/${ctx.id}`, PANEL_ID);
+const resumeMarker = (ctx: Server) => rawFiles.getPath(`${resumeFolder(ctx.stored.game)}/${ctx.id}`, PANEL_ID);
+/** the folder in the panel's storage that holds a game's resume markers */
+export const resumeFolder = (game: string) => `.${game}-resume`;
 
-/** Marks a running server to start again once the service is back, the work that stops it done. */
+/** Marks a running server to start again once the work that stops it is done. */
 export async function markResume(ctx: Server) {
     await writePrivate(await resumeMarker(ctx), "resume after offline operation\n");
 }
@@ -290,6 +293,18 @@ export async function takeResume(ctx: Server): Promise<boolean> {
     if (!(await exists(marker))) return false;
     await fs.unlink(marker);
     return true;
+}
+
+/**
+ * Starts the server again when a backup or restore stopped it, and drops
+ * the marker. A start that fails says so in the server's console and its
+ * problems; it does not undo the work.
+ */
+export async function resumeIfMarked(ctx: Server, after: string): Promise<void> {
+    if (!(await takeResume(ctx)) || (await ctx.process.exists(ctx.game.primaryProcessId))) return;
+    // lifecycle reaches every game's service, which import this module
+    const { startServerInstance } = await import("../service/lifecycle");
+    await startServerInstance(ctx).catch((err) => report(ctx, `The server could not start again after ${after}`, err));
 }
 
 export interface OfflineBackupSpec {
@@ -307,15 +322,10 @@ export interface OfflineBackupSpec {
 }
 /**
  * Backups of a game that can't be copied while it runs: save, stop, copy,
- * then start again. A crash between them leaves the marker, which restarts
- * the server when Paperboard comes back.
+ * then start again. The stop leaves a resume marker, so a service that dies
+ * before the start starts the server once it is back.
  */
 export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService["backup"] {
-    /** Starts the server again when this backup stopped it, and drops the marker. */
-    const recover = async () => {
-        // lifecycle reaches every game's service, which import this module
-        if ((await takeResume(ctx)) && !(await ctx.process.exists(spec.processId))) await (await import("../service/lifecycle")).startServerInstance(ctx);
-    };
     async function before() {
         const flag = spec.flag();
         if (flag.busy) throw new Error(`Wait for the ${spec.name} operation to finish`);
@@ -336,11 +346,11 @@ export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService
         } catch (err) {
             // refused after it stopped: the server starts again, as the copy would have ended
             flag.busy = false;
-            if (marked) await recover().catch((startErr) => report(ctx, `${spec.name} could not start again after the refused backup`, startErr));
+            if (marked) await resumeIfMarked(ctx, "the refused backup");
             throw err;
         } finally { flag.busy = false; }
     }
-    return { mode: "offline", before, recover, async withConsistentData(work) { await before(); return work(); } };
+    return { mode: "offline", before, after: () => resumeIfMarked(ctx, "its backup") };
 }
 
 /**

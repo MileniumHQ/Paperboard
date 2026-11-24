@@ -17,23 +17,18 @@ import {
     createRead,
     showError,
 } from "@mileniumhq/paperui";
-import {
-    backupApi,
-    backupProgressText,
-    ROUTINE_BACKUP_HOURS,
-    ROUTINE_BACKUP_LABEL,
-    type BackupRecord,
-    type BackupSchedule,
-} from "../lib/api";
+import { backupApi, backupProgressText, type BackupRecord } from "../lib/api";
+import { ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL, type BackupScheduleChoice } from "../backupSchedule";
 import { useServer } from "../lib/server";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 import { createSaves } from "../lib/saves";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
-// made now or routinely by this computer's Paperboard Server, which makes
-// them whether Paperboard is open or not. A running server keeps running:
-// it writes its world out and pauses saving while the folder is copied.
+// made now or routinely by the panel's service on this computer's Paperboard
+// Server, whether Paperboard is open or not. A running server keeps running
+// with its saving paused while the folder is copied, or, for a game that
+// can't be copied while it runs, is saved, stopped and started again.
 
 const DEFAULT_SCHEDULE = { everyHours: 24, keep: 7 } as const;
 const KEEP_CHOICES = [1, 2, 3, 5, 7, 10, 14, 30];
@@ -54,26 +49,36 @@ function sizeText(bytes: number): string {
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 
 export default function Backups(props: { active: boolean; whileRunning: "quiesce" | "offline" }) {
-    const backupsApi = backupApi.forSource(PANEL_ID, useServer().id);
+    const server = useServer();
+    const ofServer = { target: server.id };
     // looked up again each time the tab is shown: routine backups happen
     // while it is not. Each read keeps the rows it did not change, so a
     // reload rebuilds no backup's row; the server's running backup or
-    // restore, made here or routinely, arrives as it moves
+    // restore, made here, by a block or routinely, arrives as it moves, and
+    // once it ends its backup and the schedule's last result are read
     // why the running backup's progress can't be heard; once it can again, what it missed is read again
     const [lost, setLost] = createSignal<string | null>(null);
     const read = createRead(
         async () => {
-            const status = await backupsApi.status();
-            return { status, backups: status.location ? await backupsApi.list() : [] };
+            const [status, schedule] = await Promise.all([backupApi.status(PANEL_ID, ofServer), server.calls.readBackupSchedule()]);
+            return { status, schedule, backups: status.location ? await backupApi.list(PANEL_ID, ofServer) : [] };
         },
         {
             source: () => props.active,
             follow: (land) =>
-                backupsApi.onProgress(
-                    (change) => land((prev) => prev && { ...prev, status: { ...prev.status, progress: change.progress } }),
-                    (why) => {
-                        setLost(why);
-                        if (why === null) void read.reload();
+                backupApi.onProgress(
+                    PANEL_ID,
+                    (change) => {
+                        // another server's backup is that server's
+                        if (change.target !== server.id) return;
+                        land((prev) => prev && { ...prev, status: { ...prev.status, progress: change.progress } });
+                        if (change.progress === null) void read.reload();
+                    },
+                    {
+                        onLost: (why) => {
+                            setLost(why);
+                            if (why === null) void read.reload();
+                        },
                     },
                 ),
             message: errorMessage,
@@ -113,13 +118,13 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     // a backup needs somewhere to go; the first one asks where
     const ensureLocation = async (): Promise<boolean> => {
         if (status()?.location) return true;
-        return (await backupsApi.chooseLocation()).status === "chosen";
+        return (await backupApi.chooseLocation(PANEL_ID)).status === "chosen";
     };
 
     const changeLocation = () => act("location", "Couldn't change the location", async () => {
-        const result = await backupsApi.chooseLocation();
+        const result = await backupApi.chooseLocation(PANEL_ID);
         return result.status === "chosen"
-            ? { title: "Location changed", message: `Backups now go to ${result.location.label}.` }
+            ? { title: "Location changed", message: `Game Server's backups now go to ${result.location.label}.` }
             : null;
     });
 
@@ -127,12 +132,12 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     const backUpNow = () => act(status()?.location ? "create" : "location", "Couldn't back up the server", async () => {
         if (!(await ensureLocation())) return null;
         setBusy("create");
-        const record = await backupsApi.create();
+        const record = await server.calls.backUp({});
         return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
     });
 
-    const schedule = () => status()?.schedule ?? null;
-    const routine = saves.setting<{ everyHours: BackupSchedule["everyHours"]; keep: number } | null>(
+    const schedule = () => read.value()?.schedule ?? null;
+    const routine = saves.setting<BackupScheduleChoice | null>(
         "schedule",
         () => {
             const stored = schedule();
@@ -141,8 +146,8 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         async (next) => {
             // a first routine backup needs somewhere to go; closing the picker calls it off
             if (next && !(await ensureLocation())) return false;
-            const saved = await backupsApi.setSchedule(next);
-            read.set((prev) => prev && { ...prev, status: saved });
+            const saved = await server.calls.writeBackupSchedule({ schedule: next });
+            read.set((prev) => prev && { ...prev, schedule: saved });
         },
     );
     const keepChoices = () => {
@@ -162,25 +167,25 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
     };
 
     const confirm = async () => {
-        const target = confirming();
-        if (!target || confirmBusy()) return;
+        const asked = confirming();
+        if (!asked || confirmBusy()) return;
         setConfirmBusy(true);
         // a refusal is a toast over the dialog, which stays open
         let done = false;
         try {
-            if (target.kind === "restore") await backupsApi.restore(target.record.id);
-            else await backupsApi.delete(target.record.id);
+            if (asked.kind === "restore") await server.calls.restoreBackup({ backupId: asked.record.id });
+            else await backupApi.delete(PANEL_ID, asked.record.id, ofServer);
             done = true;
         } catch (err) {
-            showError(target.kind === "restore" ? "Couldn't restore the backup" : "Couldn't delete the backup", errorMessage(err));
+            showError(asked.kind === "restore" ? "Couldn't restore the backup" : "Couldn't delete the backup", errorMessage(err));
         } finally {
             setConfirmBusy(false);
         }
         if (!done) return;
         setConfirmOpen(false);
         setNotice(
-            target.kind === "restore"
-                ? { title: "Restored", message: `Restored the backup from ${dateText(target.record.createdAt)}.` }
+            asked.kind === "restore"
+                ? { title: "Restored", message: `Restored the backup from ${dateText(asked.record.createdAt)}.` }
                 : { title: "Deleted", message: "Deleted the backup." },
         );
         await load();
@@ -216,7 +221,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
             <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Kept in"
-                    description={status()?.location ? `${status()!.location!.label}: ${status()!.location!.detail}` : "Choose where this server's backups go."}
+                    description={status()?.location ? `${status()!.location!.label}: ${status()!.location!.detail}` : "Choose where backups go. Every server's go to the same place."}
                 >
                     <PaperButton size="small" disabled={busy() !== null || status() === null} onClick={() => void changeLocation()}>
                         {status()?.location ? "Change" : "Choose"}
@@ -241,7 +246,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
                                 <PaperSelectMenu
                                     name="backupEvery"
                                     value={String(current().everyHours)}
-                                    onValueChange={(value) => routine.set({ everyHours: Number(value) as BackupSchedule["everyHours"], keep: current().keep })}
+                                    onValueChange={(value) => routine.set({ everyHours: Number(value) as BackupScheduleChoice["everyHours"], keep: current().keep })}
                                 >
                                     <For each={[...ROUTINE_BACKUP_HOURS]}>
                                         {(hours) => <PaperSelectMenuItem value={String(hours)}>{everyText(hours)}</PaperSelectMenuItem>}

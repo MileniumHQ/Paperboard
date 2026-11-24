@@ -77,11 +77,16 @@ export interface GameService {
     observeLine(line: string, final?: boolean): void;
     portNames: readonly string[];
     ports(deps: PortDeps): AsyncIterable<PortSpec>;
+    /**
+     * How the server's folder is readied for a backup's copy, which is made
+     * while the service keeps running. "quiesce": a running server keeps
+     * going with its saving paused; "offline": it is saved and stopped.
+     */
     backup: {
         mode: "quiesce" | "offline";
+        /** Readies the folder for the copy; throwing refuses the backup, with nothing left paused or stopped. */
         before(): Promise<void>;
-        /** Undoes `before` when the backup it readied is refused. */
-        recover(): Promise<unknown>;
-        withConsistentData<T>(work: () => Promise<T>): Promise<T>;
+        /** Carries on once the copy is done, or failed: saving resumes, or the server `before` stopped starts again. */
+        after(): Promise<void>;
     };
 }

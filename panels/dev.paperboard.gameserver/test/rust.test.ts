@@ -202,7 +202,7 @@ describe("Rust", () => {
         }
     });
 
-    test("a backup refused after Rust stopped for it starts Rust again and drops its resume marker", async () => {
+    test("a backup that stopped Rust for its copy starts Rust again afterwards and drops its resume marker", async () => {
         const server = await rustServer();
         await online(server);
         const marker = path.join(process.env.PAPERBOARD_DIR!, "files", PANEL_ID, ".rust-resume", server.server.id);
@@ -211,8 +211,8 @@ describe("Rust", () => {
         expect(await exit).toBe(0);
         expect(server.server.state.serverStatus).toBe("offline");
         expect(fs.existsSync(marker)).toBe(true);
-        // the panel's backup is refused (another server would not stop): this one is put back as it was
-        await server.server.game.backup.recover();
+        // the copy is done (or the backup refused): Rust carries on as it was
+        await server.server.game.backup.after();
         await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again");
         expect(fs.existsSync(marker)).toBe(false);
         await stop(server);

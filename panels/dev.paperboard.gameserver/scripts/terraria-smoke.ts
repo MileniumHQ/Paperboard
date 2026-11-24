@@ -13,7 +13,7 @@ import { assert, PANEL, until, withScenarioDaemon } from "./scenarioDaemon";
 const VERSION = "1.4.5.8";
 
 await withScenarioDaemon("terrariaReal", async ({ addServer }) => {
-    const { backupApi, backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
+    const { backupLocationsApi, processApi, secretsApi } = await import("@mileniumhq/paperapi");
     const server = await addServer("Terraria", "terraria", "terrariaServer");
     const proc = `${server.id}-terraria-server`;
     const online = (label: string, timeout = 300_000) => until(async () => {
@@ -63,13 +63,12 @@ await withScenarioDaemon("terrariaReal", async ({ addServer }) => {
 
         await server.calls.startServer();
         await online("restart");
-        await backupLocationsApi.setForPanel(PANEL, "local", undefined, server.id);
-        const api = backupApi.forSource(PANEL, server.id);
-        const record = await api.create({ label: "Terraria smoke" });
+        await backupLocationsApi.setForPanel(PANEL, "local");
+        const record = await server.calls.backUp({ label: "Terraria smoke" });
         await online("restart after backup");
         console.log(`backup: ${record.size} bytes, SHA-256 ${record.sha256}; stopped for the copy and restarted`);
         fs.writeFileSync(path.join(server.directory, "after-backup.txt"), "must disappear on restore");
-        await api.restore(record.id);
+        await server.calls.restoreBackup({ backupId: record.id });
         await online("restart after restore");
         assert(!fs.existsSync(path.join(server.directory, "after-backup.txt")), "Restore did not replace the server's files");
         assert((await secretsApi.get(`${server.id}-terraria-join-password`, PANEL)).value === "wire-secret", "Restore lost the vault's join password");
