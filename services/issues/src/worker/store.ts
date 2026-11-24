@@ -42,7 +42,9 @@ export class IssueStore extends DurableObject<unknown> {
         ctx.storage.sql.exec(
             "CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, received_at INTEGER NOT NULL, text TEXT NOT NULL, context TEXT NOT NULL)",
         );
-        ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS issues_received ON issues (received_at)");
+        // the list pages on (received_at, id); the first release indexed received_at alone
+        ctx.storage.sql.exec("DROP INDEX IF EXISTS issues_received");
+        ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS issues_received_id ON issues (received_at, id)");
         // issues kept before diagnostics existed have none
         const columns = ctx.storage.sql.exec<{ name: string }>("SELECT name FROM pragma_table_info('issues')").toArray();
         if (!columns.some((column) => column.name === "details")) {
@@ -70,13 +72,16 @@ export class IssueStore extends DurableObject<unknown> {
         return { ok: true, issue };
     }
 
-    /** newest first, one page of summaries older than `before`; the full text and diagnostics come from get() */
-    list(before: number): { issues: IssueSummary[]; more: boolean } {
+    /** newest first, one page of summaries after (`before`, `beforeId`) in (received_at, id) order; the full text and diagnostics come from get() */
+    list(before: number, beforeId: string | null = null): { issues: IssueSummary[]; more: boolean } {
         const rows = this.ctx.storage.sql
             .exec<SummaryRow>(
-                "SELECT id, received_at, substr(text, 1, ?) AS head, context, details != '' AS has_details FROM issues WHERE received_at < ? ORDER BY received_at DESC LIMIT ?",
+                "SELECT id, received_at, substr(text, 1, ?) AS head, context, details != '' AS has_details FROM issues WHERE received_at < ? OR (received_at = ? AND id < ?) ORDER BY received_at DESC, id DESC LIMIT ?",
                 TITLE_LENGTH,
                 before,
+                before,
+                // with no id, every issue of that millisecond is already shown
+                beforeId ?? "",
                 LIST_PAGE + 1,
             )
             .toArray();

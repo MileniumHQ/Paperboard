@@ -3,6 +3,7 @@
 // each downloadable as a prompt for a coding agent.
 import {
     CONTEXT_KEYS,
+    CONTEXT_SHAPES,
     MAX_BODY_BYTES,
     MAX_CONTEXT_LENGTH,
     MAX_DETAILS_LENGTH,
@@ -53,16 +54,6 @@ const invalid = (message: string) => new Failure(400, "invalid_issue", message);
 
 // control characters other than tab and line breaks have no place in a report
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
-
-// The context lands in an agent's instructions (prompt.ts), so each field is
-// held to the shape the app really sends, never a line a person could word.
-const CONTEXT_SHAPES: Record<Exclude<keyof IssueContext, "shell">, RegExp> = {
-    appVersion: /^\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,40})?(?:\+[0-9A-Za-z.-]{1,40})?$/,
-    os: /^(?:macOS|Windows|Linux)$/,
-    osVersion: /^[0-9A-Za-z._-]+$/,
-    // Node's process.arch names
-    arch: /^(?:arm|arm64|ia32|loong64|mips|mipsel|ppc|ppc64|riscv64|s390|s390x|x64)$/,
-};
 
 function contextOf(value: unknown): IssueContext {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid("context must be an object.");
@@ -187,7 +178,10 @@ async function dashboard(request: Request, env: Env, url: URL): Promise<Response
         if (request.method !== "GET") throw new Failure(405, "method_not_allowed", "List issues with GET.", { Allow: "GET" });
         const before = Number(url.searchParams.get("before") ?? Number.MAX_SAFE_INTEGER);
         if (!Number.isSafeInteger(before)) throw invalid("before must be a time in milliseconds.");
-        return json(await store(env).list(before), 200, DASHBOARD_HEADERS);
+        // issues share a millisecond now and then, so a page can start after one issue of it
+        const beforeId = url.searchParams.get("beforeId");
+        if (beforeId !== null && !/^[0-9a-f-]{36}$/.test(beforeId)) throw invalid("beforeId must be an issue's id.");
+        return json(await store(env).list(before, beforeId), 200, DASHBOARD_HEADERS);
     }
     const match = ISSUE_ROUTE.exec(url.pathname);
     if (!match) throw new Failure(404, "not_found", "No such dashboard route.");

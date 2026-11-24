@@ -5,7 +5,7 @@ import { DAILY_LIMIT, STORE_LIMIT } from "../src/worker/limits";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MAX_BODY_BYTES, MAX_DETAILS_LENGTH, MAX_TEXT_LENGTH, type Issue } from "../src/shared";
+import { LIST_PAGE, MAX_BODY_BYTES, MAX_DETAILS_LENGTH, MAX_TEXT_LENGTH, type Issue } from "../src/shared";
 import { SUBMIT_LIMIT, startIssues, validIssue, type Issues } from "./helpers/worker";
 
 let service: Issues | undefined;
@@ -47,6 +47,14 @@ test("a submitted issue is kept with its context and listed newest first", async
     const issues = await listed(service);
     expect(issues.map((issue) => issue.text)).toEqual(["Second problem", "First problem\nsecond line"]);
     expect(issues[1]).toMatchObject({ id, context: validIssue().context, details: validIssue().details });
+});
+
+// Inventory: Core contracts — Linux kernels with a + (Debian, Raspberry Pi OS) can still report.
+test.each(["6.12.57+deb13-amd64", "6.1.0+bpo-amd64", "6.12.47+rpt-rpi-v8"])("a kernel version like %s is taken", async (osVersion) => {
+    service = await startIssues();
+    const sent = await service.submit(validIssue({ context: { ...(validIssue().context as object), osVersion } }));
+    expect(sent.status).toBe(201);
+    expect((await listed(service))[0]!.context.osVersion).toBe(osVersion);
 });
 
 // Inventory: Data loss — a store from before diagnostics keeps its issues when the worker that adds them starts.
@@ -200,4 +208,21 @@ test("the list holds summaries in pages, and each issue is read in full by its i
     expect((await service.dashboard("/dashboard/api/issues?before=soon")).status).toBe(400);
     const none = await service.dashboard(`/dashboard/api/issues?before=${page.issues[0]!.receivedAt}`);
     expect(await none.json()).toEqual({ issues: [], more: false });
+});
+
+// Inventory: Data loss — issues received in the same millisecond are never skipped between pages.
+test("a page can start after one issue of a shared millisecond", async () => {
+    service = await startIssues();
+    const at = Date.now() - HOUR;
+    await service.seed(LIST_PAGE + 5, at);
+    const first = (await (await service.dashboard("/dashboard/api/issues")).json()) as { issues: { id: string; receivedAt: number }[]; more: boolean };
+    expect(first.issues).toHaveLength(LIST_PAGE);
+    expect(first.more).toBe(true);
+    const last = first.issues.at(-1)!;
+    const second = (await (await service.dashboard(`/dashboard/api/issues?before=${last.receivedAt}&beforeId=${last.id}`)).json()) as { issues: { id: string }[]; more: boolean };
+    expect(second.more).toBe(false);
+    const ids = [...first.issues, ...second.issues].map((issue) => issue.id);
+    expect(ids).toHaveLength(LIST_PAGE + 5);
+    expect(new Set(ids).size).toBe(LIST_PAGE + 5);
+    expect((await service.dashboard("/dashboard/api/issues?before=1&beforeId=nope")).status).toBe(400);
 });

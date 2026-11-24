@@ -4,13 +4,14 @@ Collects the issues people send from **App Settings → Help → Report an Issue
 
 - `src/worker`: the Worker. `index.ts` routes and validates, `store.ts` is the Durable Object that keeps the issues, `access.ts` checks the Access token, `prompt.ts` writes the download.
 - `src/dashboard`: the dashboard, a PaperUI page built by Vite into `dist/dashboard` and served by the Worker as static assets.
-- `src/shared.ts`: what the app sends and the limits. The app imports it as `issues/shared` (`apps/paperboard/src/main/issueSend.ts`).
+- `src/shared.ts`: what the app sends, the limits, and the shape each context field must take (`CONTEXT_SHAPES`). The app imports it as `issues/shared` (`apps/paperboard/src/main/issueSend.ts`), and its tests check its own context against the same shapes.
 
 ## Endpoints
 
-- `POST /v1/issues`: public. Takes `application/json` with exactly `{ text, context, details }`. `text` is trimmed, 1 to 10,000 characters, with no control characters other than tabs and line breaks. `context` is exactly `appVersion`, `os`, `osVersion`, `arch` and `shell` (`window` or `browser`), each one line of at most 100 characters. `details` is the diagnostics the person saw and left on (the computer, its panels and versions, recent warnings, errors and log lines, scrubbed in the app by `apps/paperboard/src/main/issueDetails.ts`), at most 60,000 characters, or `""`. Answers `201 { id }`. No CORS headers: the app posts from its main process, and a JSON post from a web page needs a preflight this service never answers.
+- `POST /v1/issues`: public. Takes `application/json` with exactly `{ text, context, details }`. `text` is trimmed, 1 to 10,000 characters, with no control characters other than tabs and line breaks. `context` is exactly `appVersion`, `os`, `osVersion`, `arch` and `shell` (`window` or `browser`), each one line of at most 100 characters and held to the strict shape the app really sends (`CONTEXT_SHAPES`): a semver `appVersion`, `os` of `macOS`, `Windows` or `Linux`, an `osVersion` of letters, digits and `. _ + -` (so `6.12.57+deb13-amd64` passes), and `arch` one of Node's `process.arch` names. Anything else is a `400`, because the context lands in an agent's instructions. `details` is the diagnostics the person saw and left on (the computer, its panels and versions, recent warnings, errors and log lines, scrubbed in the app by `apps/paperboard/src/main/issueDetails.ts`), at most 60,000 characters, or `""`. Answers `201 { id }`. No CORS headers: the app posts from its main process, and a JSON post from a web page needs a preflight this service never answers.
 - `GET /dashboard/`: the dashboard page.
-- `GET /dashboard/api/issues`: every issue, newest first.
+- `GET /dashboard/api/issues`: one page of summaries (`id`, `receivedAt`, `title`, `context`, `hasDetails`), newest first, 100 at a time, as `{ issues, more }`. `?before=<ms>&beforeId=<id>` continues after that issue in `(receivedAt, id)` order, so issues sharing a millisecond are never skipped; `more` says older ones remain.
+- `GET /dashboard/api/issues/:id`: one issue in full, `{ issue }` with its text and diagnostics.
 - `GET /dashboard/api/issues/:id/prompt`: the issue as a prompt file (`paperboard-issue-<id>.txt`).
 - `DELETE /dashboard/api/issues/:id`: deletes one issue. Only from the dashboard's own origin (`Origin` must match).
 

@@ -30,6 +30,19 @@ export interface IssueContext {
 }
 
 export const CONTEXT_KEYS = ["appVersion", "os", "osVersion", "arch", "shell"] as const satisfies readonly (keyof IssueContext)[];
+/**
+ * The shape each context field takes, so what lands in an agent's
+ * instructions (prompt.ts) is never a line a person could word. The worker
+ * checks them and the app's tests check its own context against them.
+ */
+export const CONTEXT_SHAPES: Record<Exclude<keyof IssueContext, "shell">, RegExp> = {
+    appVersion: /^\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,40})?(?:\+[0-9A-Za-z.-]{1,40})?$/,
+    os: /^(?:macOS|Windows|Linux)$/,
+    // kernel and OS versions: 15.1, 10.0.26100, 6.12.57+deb13-amd64, 6.12.47+rpt-rpi-v8
+    osVersion: /^[0-9A-Za-z._+-]+$/,
+    // Node's process.arch names
+    arch: /^(?:arm|arm64|ia32|loong64|mips|mipsel|ppc|ppc64|riscv64|s390|s390x|x64)$/,
+};
 export const SHELLS = ["window", "browser"] as const satisfies readonly IssueContext["shell"][];
 
 export interface IssueSubmission {
