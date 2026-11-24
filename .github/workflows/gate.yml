@@ -51,7 +51,7 @@ jobs:
               {"name": "app", "targets": "daemon paperboard"},
               {"name": "gameserver", "targets": "gameserver"},
               {"name": "panels", "targets": "agents blocks botcreator drive terminal"},
-              {"name": "web", "targets": "paperdocs origami library arilink panelapis global"}
+              {"name": "web", "targets": "paperdocs origami library arilink panelapis issues global"}
             ]'
             platform=true
           elif ! printf '%s' "$named" | grep -qE '^[a-z-]+( [a-z-]+)*$'; then

@@ -6,9 +6,10 @@
 // origin for IPC, session cookie + Origin for HTTP). Window and updater
 // calls stay Electron-only in shelldata.ts.
 import * as path from "path";
-import connectionPool from "./papercrane/ConnectionPool";
+import connectionPool, { LOCAL_COMPUTER_NAME } from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
-import { getPaperboardDir, getFilesDir, ensureDir } from "daemon/core/paths";
+import { getPaperboardDir, getFilesDir, getLogsDir, ensureDir } from "daemon/core/paths";
+import { buildDetails, localScrubber, readLogTail, type DetailsInput } from "../issueDetails";
 import { sanitizeId } from "daemon/core/storage";
 import { logger } from "daemon/core/logger";
 import { openRemoteFolder } from "../remoteFolder";
@@ -28,9 +29,58 @@ export interface ShellHandlerDeps {
     // main's side effects of freshly saved settings: why Run on startup
     // couldn't be applied, or null
     appSettingsChanged: () => Promise<string | null>;
+    // Report an Issue: sends the text and diagnostics with what this host says about itself
+    sendIssue: (text: string, details: string) => Promise<void>;
 }
 
+// Report an Issue's diagnostics: the computer the shell shows, its panels,
+// and the end of this computer's log, scrubbed (issueDetails.ts)
+async function collectIssueDetails(): Promise<string> {
+    const computers = connectionPool.listComputers();
+    const activeId = connectionPool.getActiveId();
+    const active = computers.find((computer) => computer.id === activeId) ?? computers.find((computer) => computer.id === "local");
+    const paired = computers.filter((computer) => computer.id !== "local");
+    let panels: DetailsInput["panels"];
+    try {
+        panels = (await connectionPool.getClient(active?.id ?? "local").listPanels()).map((panel) => ({ id: panel.id, version: panel.version }));
+    } catch (err) {
+        // quiet: an unreadable panel list is itself a finding, and the details say so
+        panels = { error: err instanceof Error ? err.message : String(err) };
+    }
+    return buildDetails(
+        {
+            computer: {
+                kind: active && active.id !== "local" ? "paired" : "this",
+                os: active?.os,
+                osVersion: active?.osVersion,
+                connected: active?.status.connected ?? false,
+            },
+            pairedCount: paired.length,
+            panels,
+            log: readLogTail(getLogsDir()),
+        },
+        // every computer's name, this one's included: the app logs a custom name it was given.
+        // The default name says nothing, and "this computer" in the details is Paperboard's own wording.
+        localScrubber(
+            [...computers, ...discovery.list()]
+                .filter((computer) => computer.name !== LOCAL_COMPUTER_NAME)
+                .flatMap((computer) => [computer.name, computer.host]),
+        ),
+    );
+}
+
+// issue-details gathers held for issue-send: enough for a few open forms
+const GATHERS_KEPT = 8;
+
 export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
+    // the diagnostics the person saw. They stay here and issue-send sends
+    // exactly these, by id, so the form never carries up to 60 KB back (the
+    // browser-mode bridge refuses bodies over 64 KiB), and what's sent is
+    // what was shown.
+    // Each gather has its own id, so two forms (browser tabs) never send
+    // each other's. Only the latest few are kept: a form opens a new gather
+    // each time, and an old one's id is answered with a reopen.
+    const gathered = new Map<string, string>();
     return {
         // throws until the local daemon is verified: why it isn't, once known
         "crane-credentials": () => {
@@ -110,5 +160,21 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "launch-options": () => deps.launchOptions(),
         graphics: () => deps.graphics(),
         "app-settings-changed": () => deps.appSettingsChanged(),
+        "issue-details": async () => {
+            const text = await collectIssueDetails();
+            const id = crypto.randomUUID();
+            gathered.set(id, text);
+            // Map keeps insertion order: the oldest gather goes first
+            for (const old of [...gathered.keys()].slice(0, Math.max(0, gathered.size - GATHERS_KEPT))) gathered.delete(old);
+            return { id, text };
+        },
+        "issue-send": async ({ text, detailsId }) => {
+            if (typeof text !== "string") throw new Error("Invalid parameter: text");
+            if (detailsId !== null && typeof detailsId !== "string") throw new Error("Invalid parameter: detailsId");
+            const details = detailsId === null ? "" : gathered.get(detailsId);
+            if (details === undefined) throw new Error("The logs shown are out of date. Reopen Report an Issue and try again.");
+            await deps.sendIssue(text, details);
+            if (detailsId !== null) gathered.delete(detailsId);
+        },
     };
 }

@@ -28,6 +28,7 @@ The repo has four kinds of parts:
 - **Library** (`services/library`) is the panel store, served by Origami as a web page and inside the app.
 - **Arilink** (`services/arilink`) is a worker that provides shortlinks on https://pbd.lc.
 - **Panel APIs** (`services/panelapis`) provides web APIs for panels that need them.
+- **Issues** (`services/issues`) collects the issues people send from the app's Report an Issue, at https://issues.ariapis.com.
 - **npx** (`packages/npx`) is `npx @mileniumhq/paperboard`, which installs Paperboard or runs its server daemon.
 - **testkit** (`packages/testkit`) is the shared test harness for CI and testing.
 
@@ -54,7 +55,7 @@ bun run setup
 
 ## Issues
 
-If you find a bug, Issues are welcome and encouraged! Just submit a fairly comprehensive report based on your problem and we'll try our best to reproduce it.
+If you find a bug, Issues are welcome and encouraged! Just submit a fairly comprehensive report based on your problem and we'll try our best to reproduce it. In the app, **App Settings → Help → Report an Issue** sends what you type straight to us.
 
 **HOWEVER, if you want to avoid back and forth...**
 

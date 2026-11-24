@@ -48,7 +48,7 @@ Some rules about Git:
 Paperboard has gates relevant to each individual part of the codebase. `bun run gate [target]`
 
 - Apps: `paperboard` (desktop app), `daemon` (server daemon and its Go supervisor), `paperdocs` (docs site)
-- Services: `origami` (registry), `library` (panel store), `arilink` (pbd.lc short links), `panelapis` (panel APIs)
+- Services: `origami` (registry), `library` (panel store), `arilink` (pbd.lc short links), `panelapis` (panel APIs), `issues` (issue reports)
 - Packages: `paperapi`, `paperui`, `create-panel`, `npx` (the npx launcher), `release`, `testkit` (the shared test harness), `packages` (the packed libraries as a consumer gets them)
 - Panels: `agents`, `blocks`, `botcreator`, `gameserver`, `terminal`
 - Repo: `scripts` (root scripts), `global` (repo-wide checks), `platform` (the OS-dependent suites CI runs on every release target)

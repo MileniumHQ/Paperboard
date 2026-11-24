@@ -27,7 +27,7 @@ import connectionPool from "./papercrane/ConnectionPool";
 import { launchOptionsFromArgv } from "../../shared/launchOptions";
 import { answerPanelPermissionAsk, openSystemPrivacySettings, panelPermissionStore } from "../panelPermissionHost";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-import { fileIssueReport, issueReportSetup, openIssueReportLink, startIssueReport, steerIssueReport, stopIssueReport } from "../issueReport";
+import { issueContext, sendIssue } from "../issueSend";
 
 // native dialogs, modal to the window whose panel asked
 function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
@@ -109,6 +109,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                 graphics: currentGraphics,
                 openPath: (dir) => shell.openPath(dir),
                 appSettingsChanged: applySavedAppSettings,
+                sendIssue: (text, details) => sendIssue(text, details, issueContext("window", app.getVersion(), process.getSystemVersion())),
             }),
 
             // panel permissions: your answer to a question the window was asked,
@@ -191,14 +192,6 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             // whether this window's panels hold unsaved work, which a quit asks about
             "panels-unsaved": ({ unsaved }, event) => setShellUnsaved(event.sender, unsaved),
             "quit-answer": (answer, event) => answerShellAsk(event.sender, ["quit-ask"], answer),
-
-            // Report an issue: an agent on this computer reads the code and writes it up
-            "issue-report-setup": () => issueReportSetup(),
-            "issue-report-start": (args, event) => startIssueReport(event.sender, args),
-            "issue-report-steer": (args, event) => steerIssueReport(event.sender, args),
-            "issue-report-stop": (args, event) => stopIssueReport(event.sender, args),
-            "issue-report-file": (args, event) => fileIssueReport(event.sender, args),
-            "issue-report-open-link": (args, event) => openIssueReportLink(event.sender, args),
         },
         {
             // full quit from the settings UI: the same path as the tray/menu Quit

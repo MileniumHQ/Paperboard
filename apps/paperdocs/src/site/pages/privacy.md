@@ -1,4 +1,4 @@
-_Last updated November 20, 2026_
+_Last updated November 23, 2026_
 
 Paperboard and Origami are run by Milenium. This page says what leaves your computers when you use them, and where it goes.
 
@@ -26,7 +26,7 @@ Paperboard's use and transfer of information received from Google APIs to any ot
 
 ## Reporting an issue
 
-When you report an issue from App Settings, Paperboard downloads its own code from GitHub, and the coding agent you pick on your computer reads it. What you write goes to that agent and its provider, under their privacy policy. The issue is sent only where you choose: to GitHub through your GitHub account, to our Discord, or by your email app.
+When you report an issue from App Settings, Paperboard sends what you typed to our issues service (issues.ariapis.com), with Paperboard's version, your operating system and its version, your processor type, and whether you used the app or a browser. Unless you turn it off, it also sends the panels on the computer you're looking at and their versions, and recent lines from Paperboard's log on your computer, with folder paths, user and computer names, network addresses, emails and keys replaced before they leave. The report shows you exactly what will be sent. Only the maintainer can read it. Like our other servers, the service sees your IP address; it uses it only to limit how many issues one computer can send, and does not keep it. Issues are stored with Cloudflare until we delete them, which we do once they are dealt with. Write to us to have one deleted sooner.
 
 ## Panels
 

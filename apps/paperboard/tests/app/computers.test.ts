@@ -53,6 +53,7 @@ test("pairing a computer answers the shell with its id and nothing else", async 
             graphics: () => ({ gpu: true }),
             openPath: async () => "",
             appSettingsChanged: async () => null,
+            sendIssue: async () => undefined,
         });
         const answer = await handlers["computer-pair"]({ host: "127.0.0.2", port: 45464, code: "123456", name: "Workshop" }, undefined);
         expect(answer).toEqual({ id: "paired-1" });

@@ -114,56 +114,6 @@ export interface PanelFileTransferArgs {
     selection?: unknown;
 }
 
-/** A coding agent installed on this computer. */
-export interface IssueAgent {
-    id: string;
-    name: string;
-}
-
-export interface IssueReportSetup {
-    /** the question above the description, from the repo's trissue config */
-    prompt: string;
-    agents: IssueAgent[];
-    /** featured coding agents trissue can run, installed or not */
-    known: string[];
-    /** where else the issue can go, in the config's order; includesIssue is false when the link needs clipboard paste */
-    links: Array<{
-        label: string;
-        description?: string;
-        includesIssue: boolean;
-    }>;
-}
-
-/** Whether the issue can be filed with the GitHub CLI; null when the config files no GitHub issues. */
-export type IssueGitHub = {
-    repo: string;
-    state: "missing" | "signed-out" | "signed-in" | "error";
-    login?: string;
-    error?: string;
-} | null;
-
-export type IssueReportResult =
-    | {
-          status: "written";
-          title: string;
-          /** Markdown */
-          body: string;
-          /** the issue as one text, the way it's copied */
-          text: string;
-          github: IssueGitHub;
-      }
-    | { status: "stopped" };
-
-/** One line of what the agent did, changed in place under its id. */
-export interface IssueReportEntry {
-    reportId: string;
-    id: string;
-    kind: "thought" | "message" | "tool" | "blocked" | "steer" | "notice";
-    text: string;
-    status?: string;
-    toolKind?: string;
-}
-
 // ─── Channels ───────────────────────────────────────────────────────────────
 
 export const SHELL_CALLS = {
@@ -183,6 +133,8 @@ export const SHELL_CALLS = {
     "launch-options": { browser: true },
     graphics: { browser: true },
     "app-settings-changed": { browser: true },
+    "issue-details": { browser: true },
+    "issue-send": { browser: true },
 
     "app-update-state": {},
     "update-queue": {},
@@ -202,12 +154,6 @@ export const SHELL_CALLS = {
     "open-system-privacy": {},
     "panels-unsaved": {},
     "quit-answer": {},
-    "issue-report-setup": {},
-    "issue-report-start": {},
-    "issue-report-steer": {},
-    "issue-report-stop": {},
-    "issue-report-file": {},
-    "issue-report-open-link": {},
 } as const satisfies Record<string, { readonly browser?: true }>;
 
 export const SHELL_SENDS = {
@@ -229,7 +175,6 @@ export const SHELL_PUSHES = {
     "panel-permission-failed": true,
     "panel-permissions-changed": true,
     "quit-ask": true,
-    "issue-report-entry": true,
 } as const satisfies Record<string, true>;
 
 export type ShellCall = keyof typeof SHELL_CALLS;
@@ -273,6 +218,16 @@ export interface ShellCallContract {
     // settings saved over the daemon still need main's side effects: why
     // Run on startup couldn't be applied, or null
     "app-settings-changed": { args: void; answer: string | null };
+    // Report an Issue: the diagnostics it attaches (the computer looked at,
+    // its panels, recent log lines), scrubbed, as the person sees them, with
+    // an id for this gather
+    "issue-details": { args: void; answer: { id: string; text: string } };
+    // sends what the person typed, and the diagnostics gathered under
+    // `detailsId` (null when they left them out), to Paperboard's issues
+    // service (services/issues), with this app's version and system. The
+    // diagnostics stay in main: a body over the browser-mode bridge's cap is
+    // refused, and the id makes what's sent the very text that was shown.
+    "issue-send": { args: { text: string; detailsId: string | null }; answer: void };
 
     "app-update-state": { args: void; answer: AppUpdateState };
     "update-queue": { args: void; answer: UpdateQueueState };
@@ -296,12 +251,6 @@ export interface ShellCallContract {
     "open-system-privacy": { args: { permission: PanelPermission }; answer: void };
     "panels-unsaved": { args: { unsaved: boolean }; answer: void };
     "quit-answer": { args: { askId: string; answer: boolean }; answer: void };
-    "issue-report-setup": { args: void; answer: IssueReportSetup };
-    "issue-report-start": { args: { reportId: string; description: string; agent: string }; answer: IssueReportResult };
-    "issue-report-steer": { args: { reportId: string; text: string }; answer: void };
-    "issue-report-stop": { args: { reportId: string }; answer: void };
-    "issue-report-file": { args: { reportId: string }; answer: string };
-    "issue-report-open-link": { args: { reportId: string; index: number }; answer: void };
 }
 
 export interface ShellSendContract {
@@ -321,7 +270,6 @@ export interface ShellPushContract {
     "panel-permission-failed": PermissionFailure;
     "panel-permissions-changed": void;
     "quit-ask": { askId: string };
-    "issue-report-entry": IssueReportEntry;
 }
 
 export type CallArgs<K extends ShellCall> = ShellCallContract[K]["args"];
