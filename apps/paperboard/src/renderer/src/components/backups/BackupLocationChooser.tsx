@@ -11,11 +11,11 @@ export type BackupLocationChoice = { status: "chosen"; location: BackupLocation 
 // backup locations with how much space each has, and which one this
 // panel's backups go to. Only the shell sets the choice. It stays mounted and
 // opens per request, so PaperModal plays its own open and close.
-const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; panelName: string; sourceId?: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
+const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; panelName: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
     // read afresh each time it opens: the list, and the location this panel's backups go to now
     const read = createRead(
         async () => {
-            const [locations, status] = await Promise.all([backupLocationsApi.list(props.computerId), props.sourceId ? backupApi.forSource(props.panelId, props.sourceId, props.computerId).status() : backupApi.status(props.panelId, props.computerId)]);
+            const [locations, status] = await Promise.all([backupLocationsApi.list(props.computerId), backupApi.status(props.panelId, undefined, props.computerId)]);
             return { locations, chosen: status.location?.id ?? locations[0]?.id ?? "" };
         },
         { source: () => props.open },
@@ -48,7 +48,7 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
         const token = opening;
         await save.run("Couldn't use this location", async () => {
             try {
-                const status = await backupLocationsApi.setForPanel(props.panelId, selected(), props.computerId, props.sourceId);
+                const status = await backupLocationsApi.setForPanel(props.panelId, selected(), props.computerId);
                 if (!status.location) throw new Error("The computer did not keep the choice");
                 finish({ status: "chosen", location: status.location }, token);
             } catch (err) {

@@ -37,12 +37,12 @@ describe("panel token scoping and host-only RPCs", () => {
 
 			const calls: Array<[string, Record<string, unknown>]> = [
 				["panel:install", { panelId: "test.victim" }],
-				["backup:destinations", {}],
-				["backup:destination-add", { destination: { kind: "local", name: "x", path: dir } }],
-				["backup:destination-reconnect", { destinationId: "d1" }],
-				["backup:destination-remove", { destinationId: "d1" }],
-				["backup:destinations-recover", {}],
-				["backup:panel-destination-set", { panelId: "test.attacker", destinationId: null }],
+				["backup:locations", {}],
+				["backup:location-add", { location: { kind: "local", name: "x", path: dir } }],
+				["backup:location-reconnect", { locationId: "d1" }],
+				["backup:location-remove", { locationId: "d1" }],
+				["backup:locations-recover", {}],
+				["backup:panel-location-set", { panelId: "test.attacker", locationId: null }],
 				["ports:all", {}],
 				["ports:policy-set", { policy: "refuse" }],
 				["problems:every", {}],
@@ -75,12 +75,11 @@ describe("panel token scoping and host-only RPCs", () => {
 		});
 	});
 
-	test("a backup location request needs a requestId and the frame's own panel id, and a path-shaped sourceId is ignored", () => {
+	test("a backup location request needs a requestId and the frame's own panel id, and nothing else", () => {
 		const ok = parseBackupLocationRequest({ type: "paperboard:backup-location", requestId: "r1", panelId: "test.a" }, "test.a", false);
 		expect(ok).toEqual({ requestId: "r1", refused: null });
 		expect(parseBackupLocationRequest({ type: "paperboard:backup-location", panelId: "test.a" }, "test.a", false)).toBeNull();
 		expect(parseBackupLocationRequest({ type: "paperboard:backup-location", requestId: "r1", panelId: "test.b" }, "test.a", false)?.refused).toContain("does not match");
-		expect(parseBackupLocationRequest({ type: "paperboard:backup-location", requestId: "r1", panelId: "test.a", sourceId: "../../etc" }, "test.a", false)).toBeNull();
 	});
 });
 
@@ -209,7 +208,7 @@ describe("unreadable state is quarantined", () => {
 		}, dir);
 	});
 
-	test("a panel install or restore a crash interrupted is put back, or its leftover removed, on the next start", async () => {
+	test("a panel install a crash interrupted is put back or its leftover removed, and an interrupted restore rolled back, on the next start", async () => {
 		const dir = dataDir();
 		// a crash after parking the previous release, before the new one moved in
 		const parkedRelease = path.join(dir, "panels", ".replaced-1-test.interrupted");
@@ -219,15 +218,13 @@ describe("unreadable state is quarantined", () => {
 		await installPanelFiles(dir, { id: "test.updated", version: "2.0.0" });
 		fs.mkdirSync(path.join(dir, "panels", ".replaced-1-test.updated"));
 		fs.writeFileSync(path.join(dir, "panels", ".replaced-1-test.updated", "manifest.json"), JSON.stringify({ id: "test.updated", version: "1.0.0" }));
-		// a restore that parked the panel's data before the backup's moved in
-		fs.mkdirSync(path.join(dir, "files", ".restore-parked-1-test.interrupted"), { recursive: true });
-		fs.writeFileSync(path.join(dir, "files", ".restore-parked-1-test.interrupted", "world.dat"), "the user's world");
-		fs.writeFileSync(path.join(dir, "configs", ".restore-parked-1-test.interrupted.json"), JSON.stringify({ kept: true }));
-		// a restore whose data moved in while the panel got ready
-		fs.mkdirSync(path.join(dir, "files", "test.updated"), { recursive: true });
-		fs.writeFileSync(path.join(dir, "files", "test.updated", "world.dat"), "restored");
-		fs.mkdirSync(path.join(dir, "files", ".restore-parked-1-test.updated"));
-		fs.writeFileSync(path.join(dir, "files", ".restore-parked-1-test.updated", "world.dat"), "before the restore");
+		// a restore that swapped the backup's world in, then crashed before the panel picked it up
+		const swap = path.join(dir, "backups", ".work", "restore-1");
+		fs.mkdirSync(path.join(swap, "parked", "world"), { recursive: true });
+		fs.writeFileSync(path.join(swap, "parked", "world", "world.dat"), "the user's world");
+		fs.writeFileSync(path.join(swap, "journal.json"), JSON.stringify({ panelId: "test.interrupted", paths: ["world"], exclude: [] }));
+		fs.mkdirSync(path.join(dir, "files", "test.interrupted", "world"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "files", "test.interrupted", "world", "world.dat"), "half restored");
 
 		await withDaemon(async (daemon) => {
 			const host = await daemon.rpc();
@@ -235,10 +232,9 @@ describe("unreadable state is quarantined", () => {
 			expect(listed.panels.map((p: { id: string; version: string }) => `${p.id}@${p.version}`).sort()).toEqual(["test.interrupted@1.0.0", "test.updated@2.0.0"]);
 			await host.close();
 		}, dir);
-		expect(fs.readFileSync(path.join(dir, "files", "test.interrupted", "world.dat"), "utf8")).toBe("the user's world");
-		expect(JSON.parse(fs.readFileSync(path.join(dir, "configs", "test.interrupted.json"), "utf8"))).toEqual({ kept: true });
-		expect(fs.readFileSync(path.join(dir, "files", "test.updated", "world.dat"), "utf8")).toBe("restored");
-		expect(listTree(dir).filter((f) => /\.replaced-|\.restore-parked-/.test(f))).toEqual([]);
+		expect(fs.readFileSync(path.join(dir, "files", "test.interrupted", "world", "world.dat"), "utf8")).toBe("the user's world");
+		expect(fs.readdirSync(path.join(dir, "backups", ".work"))).toEqual([]);
+		expect(listTree(dir).filter((f) => /\.replaced-/.test(f))).toEqual([]);
 	});
 });
 

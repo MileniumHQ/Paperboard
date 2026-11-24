@@ -1,10 +1,10 @@
-import { PaperError, PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
-import { backupApi, backupProgressFraction, backupProgressText, type BackupProgress, errorMessage, PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE } from "@mileniumhq/paperapi";
+import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
+import { PAGE_BACK_MESSAGE, PAGE_BARS_MESSAGE } from "@mileniumhq/paperapi";
 import { type Component, type JSX, createEffect, createMemo, createSignal, For, on, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UNLOAD_MS } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
-import { logToMain, panelUrl } from "../../lib/shell";
+import { panelUrl } from "../../lib/shell";
 import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
 import BackupLocationChooser from "../backups/BackupLocationChooser";
 import { unsavedPanels } from "../../lib/unsavedPanels";
@@ -69,45 +69,6 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
     const [failure, setFailure] = createSignal("");
     let frame: HTMLIFrameElement | undefined;
     let generation = "";
-    // A backup or restore stops the panel's service while it copies or swaps
-    // the data. The frame says so, with how far along it is, instead of
-    // failing to reach the service; by source ("" = the panel's own data).
-    const [backups, setBackups] = createSignal<Record<string, BackupProgress>>({});
-    const held = () => Object.values(backups()).find((p) => p.servicePaused) ?? null;
-    // a failed look says so under a failure it may have explained
-    const [backupsError, setBackupsError] = createSignal("");
-    // why the backups can't be followed: a backup that starts meanwhile can't cover the page
-    const [progressLost, setProgressLost] = createSignal<string | null>(null);
-    const refreshBackups = () => backupApi.progress(panelId(), computerId()).then(
-        (list) => {
-            setBackups(Object.fromEntries(list.map((p) => [p.sourceId ?? "", p])));
-            setBackupsError("");
-        },
-        (err) => {
-            logToMain("error", `Couldn't read ${panelId()}'s running backups:`, err);
-            setBackupsError(`Couldn't check for a backup holding it: ${errorMessage(err)}`);
-        },
-    );
-    onMount(() => {
-        const off = backupApi.onProgress(panelId(), (change) => setBackups((prev) => {
-            const next = { ...prev };
-            if (change.progress) next[change.sourceId ?? ""] = change.progress;
-            else delete next[change.sourceId ?? ""];
-            return next;
-        }), computerId(), (why) => {
-            setProgressLost(why);
-            // what changed while it was lost (a backup's end) is read again
-            if (why === null) void refreshBackups();
-        });
-        onCleanup(off);
-        void refreshBackups();
-    });
-    const isHeld = () => held() !== null;
-    // the service is back: a page that lost it while held loads again. Only
-    // the hold ending triggers it, not the reload it starts.
-    createEffect(on(isHeld, (holding, wasHolding) => {
-        if (wasHolding && !holding && (failure() || !ready())) props.retry();
-    }));
     // the backup location window this frame's document asked for, answered on it
     const [chooser, setChooser] = createSignal<(ChooserRequest & { generation: string }) | null>(null);
     // only this frame's own reload token reloads it: the shell keeps every
@@ -129,8 +90,7 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             onReady: () => { clearTimeout(timer); setReady(true); setFailure(""); },
             onFailed: (message) => {
                 clearTimeout(timer);
-                // a backup that just stopped the service explains the failure
-                void refreshBackups().then(() => { if (generation === current) setFailure(message); });
+                setFailure(message);
             },
             // the panel's list had no page to go back from: this frame's page goes back
             onSwipeBack: (data) => { if (frame && props.current) swipeFromFrame(frame, data as Parameters<typeof swipeFromFrame>[1]); },
@@ -163,21 +123,12 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
             onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode(), pageBars: props.mobile }, "*"); }}
-            class={styles.frame} classList={{ [styles.panelFrame]: !props.mobile, [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) || Boolean(held()) }} />
-        <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} panelName={props.heading.name} sourceId={chooser()?.sourceId} open={chooser() !== null} onDone={(result) => {
+            class={styles.frame} classList={{ [styles.panelFrame]: !props.mobile, [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
+        <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} panelName={props.heading.name} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
             if (request && request.generation === generation) request.answer(result);
         }} />
-        {/* over the page's corner while it is lost, and gone once it is back */}
-        <Show when={progressLost()}>{(why) => (
-            <div class={styles.frameNotice}>
-                <PaperError
-                    title="Couldn't follow backups"
-                    error={`${props.computerName}: ${why()}. Paperboard keeps trying.`}
-                />
-            </div>
-        )}</Show>
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
                 heading={props.heading}
@@ -189,24 +140,14 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
                 onRetry={props.retryRestart}
             />
         )}</Show>
-        <Show when={!props.restart && held()}>{(hold) => (
-            <LoadingOverlay
-                heading={props.heading}
-                compact={props.mobile}
-                label={hold().kind === "create" ? "Backing up" : "Restoring a backup"}
-                value={backupProgressFraction(hold()) ?? undefined}
-                title={hold().kind === "create" ? "Backing up" : "Restoring a backup"}
-                detail={backupProgressText(hold())}
-            />
-        )}</Show>
-        <Show when={!props.restart && !held() && (!ready() || failure())}>
+        <Show when={!props.restart && (!ready() || failure())}>
             <LoadingOverlay
                 heading={props.heading}
                 compact={props.mobile}
                 label={failure() ? undefined : "Connecting panel…"}
                 error={failure() || undefined}
                 errorTitle={`Couldn't load ${props.heading.name}`}
-                detail={failure() ? (props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : backupsError() || undefined) : undefined}
+                detail={failure() ? (props.heading.serviceError ? `Its service stopped: ${props.heading.serviceError}` : undefined) : undefined}
                 retryLabel="Reload panel"
                 onRetry={props.retry}
             />
