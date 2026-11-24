@@ -211,7 +211,7 @@ definePanelService({
                     </tr>
                     <tr>
                         <td><PaperCode>afterRestore</PaperCode></td>
-                        <td>Required for the panel to restore. On <PaperCode>{"{ ok: true, data }"}</PaperCode> the files are the backup's: apply <PaperCode>data</PaperCode>, pick up from the files, and resume. When it throws, the original files are put back and it is called again with <PaperCode>{"{ ok: false, error }"}</PaperCode>, where the files are as they were: resume.</td>
+                        <td>Required for the panel to restore. On <PaperCode>{"{ ok: true, data }"}</PaperCode> the files are the backup's: apply <PaperCode>data</PaperCode>, pick up from the files, and resume. When it throws, the original files are put back and it is called again with <PaperCode>{"{ ok: false, error }"}</PaperCode>, where the files are as they were: resume. That second call also comes, rarely, after an <PaperCode>ok: true</PaperCode> the panel took, when the restore couldn't be finished: undo what it applied.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -290,6 +290,7 @@ async function runRoutineBackup(keep: number) {
                     <tr><td><PaperCode>The panel's beforeBackup answered something that is not a backup's contents</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The service named paths that are wrong: outside its folder, inside one another, or none and no data.</td></tr>
                     <tr><td><PaperCode>The downloaded backup does not match its record; it was not restored</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The archive was changed or damaged.</td></tr>
                     <tr><td><PaperCode>The panel could not pick up from the restored files, so they were put back</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td><PaperCode>afterRestore</PaperCode> threw on a restore that went through.</td></tr>
+                    <tr><td><PaperCode>The restore couldn't be finished, as its journal couldn't be deleted</PaperCode></td><td><PaperCode>INTERNAL</PaperCode></td><td>The files were put back after <PaperCode>afterRestore</PaperCode> took them, and it was called again with <PaperCode>ok: false</PaperCode>.</td></tr>
                     <tr><td><PaperCode>label must be at most 100 characters</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A long label.</td></tr>
                     <tr><td><PaperCode>A backup target is a short id: letters, digits, '.', '_' and '-'</PaperCode></td><td>No code</td><td>A target outside the rule. Thrown before anything is sent.</td></tr>
                 </tbody>
