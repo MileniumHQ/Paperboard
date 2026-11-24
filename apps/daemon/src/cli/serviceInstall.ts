@@ -500,12 +500,16 @@ function printWindowsSteps(steps: WindowsStep[]): void {
  * exit: a user task's daemon leaves a moment after its conhost does.
  */
 async function runWindowsStopSteps(task: string, firewallRule: string | null, steps: WindowsStep[]): Promise<string[][]> {
-    const state = windowsTaskState(task);
+    const exists = windowsTaskState(task).exists;
     const rule = firewallRule !== null && windowsFirewallRuleExists(firewallRule);
-    const applies = { "the task exists": state.exists, "it is running": state.running, "the rule exists": rule };
+    // whether it runs is read once it is disabled: until then the
+    // every-minute trigger could start it after the look
+    let state: WindowsTaskState = { exists, running: false, pid: null };
     const ran: string[][] = [];
     for (const step of steps) {
-        if (!applies[step.when]) continue;
+        if (step.when === "it is running") state = windowsTaskState(task);
+        const applies = step.when === "the task exists" ? exists : step.when === "it is running" ? state.running : rule;
+        if (!applies) continue;
         run(step.command);
         ran.push(step.command);
     }

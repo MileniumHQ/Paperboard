@@ -90,9 +90,10 @@ function parseServiceName(value: string): string {
 }
 
 function parseUserName(value: string): string {
-    // Windows names an account as Windows allows (spaces, an optional DOMAIN\); elsewhere a POSIX user name
+    // Windows names an account as Windows allows (spaces, an optional
+    // DOMAIN\, or user@domain); elsewhere a POSIX user name
     const valid = process.platform === "win32"
-        ? /^([A-Za-z0-9._-]{1,15}\\)?[^"/\\[\]:;|=,+*?<>]{1,20}$/.test(value) && value.trim() === value
+        ? (/^([A-Za-z0-9._-]{1,15}\\)?[^"/\\[\]:;|=,+*?<>@]{1,20}$/.test(value) || /^[^"/\\[\]:;|=,+*?<>@\s]{1,64}@[A-Za-z0-9.-]{1,255}$/.test(value)) && value.trim() === value
         : /^[a-z_][a-z0-9_.-]{0,31}\$?$/i.test(value);
     if (!valid) throw new InvalidArgumentError(`--run-as must be a user name, not "${value}".`);
     return value;

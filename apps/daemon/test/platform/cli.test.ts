@@ -152,13 +152,17 @@ describe("the daemon command line works headless", () => {
 
 		// A real task: only on CI's throwaway Windows runner, which is an administrator
 		if (process.env.CI) {
-			test("a --system task starts the daemon at once, starts it again after a crash, and removing it leaves its workloads running and its data in place", async () => {
+			test("a --system task starts the daemon at once, is replaced by installing again, starts it again after a crash, and removing it leaves its workloads running and its data in place", async () => {
 				const data = path.join(tempDir(), "with space");
 				const name = `pb-ci-${process.pid}`;
-				const free = net.createServer();
-				await new Promise<void>((resolve) => free.listen(0, "127.0.0.1", resolve));
-				const port = (free.address() as net.AddressInfo).port;
-				await new Promise<void>((resolve) => free.close(() => resolve()));
+				const freePort = async () => {
+					const free = net.createServer();
+					await new Promise<void>((resolve) => free.listen(0, "127.0.0.1", resolve));
+					const port = (free.address() as net.AddressInfo).port;
+					await new Promise<void>((resolve) => free.close(() => resolve()));
+					return port;
+				};
+				const port = await freePort();
 				const install = await runCrane(["install-service", "--system", "--name", name, "--data-dir", data, "--host", "127.0.0.1", "--port", String(port)], childEnv(dataDir()), 60_000);
 				let removed = false;
 				try {
@@ -170,8 +174,18 @@ describe("the daemon command line works headless", () => {
 					const [record] = await waitFor("the workload's metadata", () => workloadRecords(data).length === 1 && workloadRecords(data));
 					await rpc.close();
 
+					// installing again over the running task replaces its daemon with one on the new options
+					const newPort = await freePort();
+					const update = await runCrane(["install-service", "--system", "--name", name, "--data-dir", data, "--host", "127.0.0.1", "--port", String(newPort)], childEnv(dataDir()), 60_000);
+					expect(update.code).toBe(0);
+					expect(update.output).toContain("Updated");
+					const updated = JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")) as { pid: number; listen: { port: number } };
+					expect(updated.listen.port).toBe(newPort);
+					expect(isAlive(handshake.pid)).toBe(false);
+					expect(isAlive(record!.childPid)).toBe(true);
+
 					// Task Scheduler starts a daemon that crashed again
-					const crashed = handshake.pid;
+					const crashed = updated.pid;
 					process.kill(crashed, "SIGKILL");
 					const restarted = await waitFor("the task to start the daemon again", () => {
 						const now = JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")) as { pid: number };
