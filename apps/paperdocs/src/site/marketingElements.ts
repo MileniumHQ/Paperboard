@@ -29,8 +29,7 @@ function startOutro() {
         const current = createIconPlay(field, icons, { size: 84, avoid: copy, reduceMotion: false });
         play = current;
         current.ready.catch((error: unknown) => {
-            // quiet: the field says the toy is unavailable, and the icons stay hidden
-            if (play === current) field.dataset.playState = "unavailable";
+            // quiet: the field says the toy is unavailable, and style.css hides the icons
             console.error("Icon playground unavailable", error);
         });
     };

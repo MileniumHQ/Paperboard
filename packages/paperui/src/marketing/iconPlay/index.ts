@@ -40,7 +40,7 @@ export interface IconPlayOptions {
 }
 
 export interface IconPlay {
-    /** Settles once the icons' shapes are read, or rejects if they can't be. */
+    /** Settles once the icons' shapes are read, or rejects if they can't be (the field then says "unavailable"). */
     ready: Promise<void>;
     /** Ends the playground and hands the icons back to the page's own styles. */
     stop: () => void;
@@ -92,7 +92,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * Starts the playground on `field`, which holds the icons. Icons are
  * scattered the first time the field is on screen (so the copy has its real
  * size), and the simulation sleeps while it is off screen. The field's
- * `data-play-state` says what the icons are doing: "moving" or "resting".
+ * `data-play-state` says what the icons are doing: "moving" or "resting",
+ * or "unavailable" when their shapes couldn't be read and there is no toy.
  */
 export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], opts: IconPlayOptions): IconPlay {
     const items: Item[] = [];
@@ -483,6 +484,9 @@ export function createIconPlay(field: HTMLElement, icons: HTMLImageElement[], op
             if (items.some((item) => !atRest(item))) start();
         });
         sight.observe(field);
+    }, (error: unknown) => {
+        if (!stopped) field.dataset.playState = "unavailable";
+        throw error;
     });
 
     return { ready, stop };

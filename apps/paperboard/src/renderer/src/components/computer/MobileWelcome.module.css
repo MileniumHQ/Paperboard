@@ -100,6 +100,6 @@
     filter: drop-shadow(0 var(--paper-uigap) var(--paper-uigap-double) var(--welcome-shadow-lifted));
 }
 
-.welcome[data-play="unavailable"] .icon {
+.welcome[data-play-state="unavailable"] .icon {
     display: none;
 }

@@ -119,7 +119,12 @@
     letter-spacing: -0.02em;
 }
 
-/* ink alone: no face, no edge, the words on the surface */
+/* ink alone: no face, no edge, the words on the surface; with no edge to
+   leave room for, it sits centred and presses straight down */
+.text {
+    margin: 0;
+}
+
 .text::before {
     content: none;
 }
@@ -136,6 +141,10 @@
 }
 
 @media (hover: hover) {
+    .text:hover:not(:active) {
+        transform: none;
+    }
+
     .text:hover:not(:active) .button {
         opacity: 1;
         filter: none;

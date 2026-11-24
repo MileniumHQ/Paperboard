@@ -5,7 +5,5 @@
 export { MarketingSurface, type MarketingSurfaceProps } from "./MarketingSurface";
 export { MarketingText, type MarketingTextProps } from "./MarketingText";
 export { MarketingButton, type MarketingButtonProps, type MarketingButtonVariant } from "./MarketingButton";
-export { MarketingCard, type MarketingCardProps } from "./MarketingCard";
-export { MarketingProgress, type MarketingProgressProps } from "./MarketingProgress";
 export { createIconPlay, type IconPlay, type IconPlayOptions } from "./iconPlay";
 export { defineMarketingText, MARKETING_TEXT_TAG } from "./elements/marketingText";

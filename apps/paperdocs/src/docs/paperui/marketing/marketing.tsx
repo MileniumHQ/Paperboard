@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount } from "solid-js";
+import { For, onCleanup, onMount } from "solid-js";
 import {
     PaperCard,
     PaperCode,
@@ -7,11 +7,10 @@ import {
     PaperText,
     PaperTextList,
     getVarCss,
+    showError,
 } from "@mileniumhq/paperui";
 import {
     MarketingButton,
-    MarketingCard,
-    MarketingProgress,
     MarketingSurface,
     MarketingText,
     createIconPlay,
@@ -24,10 +23,6 @@ const centered = { display: "flex", "flex-direction": "column", "align-items": "
 const DEMO_ICONS = ["/pictures/agents.png", "/pictures/game-server.png", "/pictures/blocks.png", "/pictures/discord-bot.png", "/pictures/crane.png"];
 const DEMO_ICON_SIZE = 72;
 
-const PICKS = [
-    { name: "Game Server", banner: "/screens/gameserver-1.png", icon: "/pictures/game-server.png", accent: "#dc204c", description: "Run servers for your favorite games" },
-    { name: "Bot Creator", banner: "/screens/botcreator-1.png", icon: "/pictures/discord-bot.png", accent: "#5865f2", description: "Make Discord bots without writing code" },
-];
 
 function PropTable(props: { rows: [string, string, string, string][] }) {
     return (
@@ -67,6 +62,7 @@ function IconPlayDemo() {
             avoid: () => (copy ? [copy] : []),
             reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         });
+        play.ready.catch((err) => showError("The playground's icons couldn't be placed", err));
         onCleanup(play.stop);
     });
     return (
@@ -93,38 +89,12 @@ function IconPlayDemo() {
     );
 }
 
-function CardDemo() {
-    const [picked, setPicked] = createSignal<(typeof PICKS)[number]>();
-    return (
-        <MarketingSurface accent={picked()?.accent} style={stage(26)}>
-            <div style={centered}>
-                <PaperFlex direction="row" gap="double" wrap justify="center" fullWidth>
-                    <For each={PICKS}>
-                        {(pick) => (
-                            <div style={{ width: `calc(${getVarCss("uigap")} * 26)` }}>
-                                <MarketingCard
-                                    banner={pick.banner}
-                                    icon={pick.icon}
-                                    title={pick.name}
-                                    description={pick.description}
-                                    selected={picked() === pick}
-                                    onClick={() => setPicked(pick)}
-                                />
-                            </div>
-                        )}
-                    </For>
-                </PaperFlex>
-            </div>
-        </MarketingSurface>
-    );
-}
-
 export default function MarketingDoc() {
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header" as="h1">Marketing</PaperText>
             <PaperText preset="body" as="p">
-                PaperUI Marketing is the look of Paperboard's own pages: the website and the onboarding.
+                PaperUI Marketing is the look of Paperboard's own pages: the website and the phone's welcome.
                 It is a separate part of PaperUI with its own script and stylesheet, so an app page never carries it and a marketing page needs none of the app components.
                 Use it only for Paperboard's own first-party pages, never inside a panel.
             </PaperText>
@@ -232,45 +202,6 @@ export function Welcome(props: { onNext: () => void }) {
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" as="h2" id="card">MarketingCard</PaperText>
-            <PaperText preset="body" as="p">
-                A card to choose from: the surface itself, sunk a few shades and frosted, on a raised edge.
-                With <PaperCode>onClick</PaperCode> it is a button that sinks onto its edge when pressed and springs back.
-                The chosen card of a set takes <PaperCode>selected</PaperCode>. Pick one below to see the surface take its color.
-                A card fills its cell and its description always stands two lines tall, so a set of cards is one height whatever their words; give each the same width.
-            </PaperText>
-            <PaperCard data-docs-demo padding="double" surface="front">
-                <CardDemo />
-            </PaperCard>
-            <PropTable
-                rows={[
-                    ["title", "string", "Required", "The name."],
-                    ["banner", "string", "No default", "A screenshot's address, cut to a wide strip across the top."],
-                    ["icon", "string", "No default", "A picture's address, drawn bare above the title; under a banner it sits half over the banner's edge."],
-                    ["subtitle", "string", "No default", "A line under the title, such as who made it."],
-                    ["description", "string | JSX.Element", "No default", "A sentence on what choosing it does, kept to two lines."],
-                    ["selected", "boolean", "false", "Marks the chosen card of a set; screen readers hear it pressed."],
-                    ["onClick", "(e: MouseEvent) => void", "No default", "Makes the card a button."],
-                ]}
-            />
-
-            <PaperText preset="subheader" as="h2" id="progress">MarketingProgress</PaperText>
-            <PaperText preset="body" as="p">
-                PaperProgress drawn in the surface's light, for a pause between two screens.
-                It takes <PaperCode>value</PaperCode> from 0 to 100, or sweeps without one, and fills its container's width.
-                Name it with <PaperCode>aria-label</PaperCode>.
-            </PaperText>
-            <PaperCard data-docs-demo padding="double" surface="front">
-                <MarketingSurface style={stage(10)}>
-                    <div style={centered}>
-                        <PaperFlex direction="column" gap="double" fullWidth>
-                            <MarketingProgress value={60} aria-label="Known amount" />
-                            <MarketingProgress aria-label="Unknown amount" />
-                        </PaperFlex>
-                    </div>
-                </MarketingSurface>
-            </PaperCard>
-
             <PaperText preset="subheader" as="h2" id="icon-play">Icon playground</PaperText>
             <PaperText preset="body" as="p">
                 Paper icons to fling, as on the site's last screen and the phone's welcome.{" "}
@@ -304,7 +235,7 @@ export function Welcome(props: { onNext: () => void }) {
             />
             <PaperText preset="body" as="p">
                 It returns <PaperCode>ready</PaperCode>, which rejects if the icons' shapes can't be read, and <PaperCode>stop()</PaperCode>, which ends it and hands the icons back to the page's own styles.
-                The field's <PaperCode>data-play-state</PaperCode> is <PaperCode>moving</PaperCode> or <PaperCode>resting</PaperCode>, and a held icon has <PaperCode>data-dragging</PaperCode>.
+                The field's <PaperCode>data-play-state</PaperCode> is <PaperCode>moving</PaperCode> or <PaperCode>resting</PaperCode>, or <PaperCode>unavailable</PaperCode> when there is no toy (hide the icons then), and a held icon has <PaperCode>data-dragging</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="without-solid">Without Solid</PaperText>
@@ -320,8 +251,8 @@ export function Welcome(props: { onNext: () => void }) {
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>Under reduced motion the icons stay where they are put, the progress bar stops sweeping, and presses and color changes snap.</li>
-                <li>A surface's accent recolors every component inside it: the text's inner edge, the brand button's face and edge, and the cards.</li>
+                <li>Under reduced motion the icons stay where they are put, and presses and color changes snap.</li>
+                <li>A surface's accent recolors every component inside it: the text's inner edge and the brand button's face and edge.</li>
                 <li>The grain is part of each component, so there is nothing else to load.</li>
             </PaperTextList>
         </PaperFlex>

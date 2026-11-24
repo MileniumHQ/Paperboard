@@ -50,7 +50,7 @@ export function MarketingButton(props: ParentProps<MarketingButtonProps>) {
                 rel={local.rel}
                 disabled={local.href ? undefined : local.disabled}
                 aria-disabled={inertLink() ? "true" : undefined}
-                onClick={local.onClick}
+                onClick={inertLink() ? undefined : local.onClick}
                 class={cx(styles.button, styles.icons, local.size === "large" ? styles.large : styles.medium)}
             >
                 {local.children}

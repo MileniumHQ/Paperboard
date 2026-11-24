@@ -47,9 +47,8 @@ export default function MobileWelcome(props: {
             },
             onTap: () => haptic("light"),
         });
-        // without the toy the icons stay hidden; the page still works
         play.ready.catch((err) => {
-            if (field) field.dataset.play = "unavailable";
+            // quiet: the field says the toy is unavailable and hides the icons; the page still works
             logToMain("warn", "The welcome's icons couldn't be placed:", err);
         });
         onCleanup(play.stop);

@@ -913,11 +913,10 @@ body {
     }
 }
 
-/* Host wrappers for the landing's custom elements. The landing markup is
-   rendered by Solid (src/site/landing/Landing.tsx), which hands the
-   BgOverlay/StyledText/PaperButton markup to these wrappers as innerHTML; the
-   scripts in public/js still upgrade the tags. The wrappers carry the
-   element-level placement the old element selectors held. */
+/* The host wrapper for the landing's one remaining custom element. The
+   landing markup is rendered by Solid (src/site/landing/Landing.tsx), which
+   hands the BgOverlay markup to it as innerHTML; public/js/bg-overlay.js
+   upgrades the tag. The wrapper carries the element's placement. */
 .bg-overlay-host {
     position: fixed;
     inset: 0;
@@ -1322,6 +1321,11 @@ body {
         touch-action: auto;
         will-change: auto;
     }
+}
+
+/* without the toy (the icons' shapes couldn't be read) they'd pile up in a corner */
+[data-play-state="unavailable"] .play-icon {
+    display: none;
 }
 
 .play-icon[data-dragging] {
