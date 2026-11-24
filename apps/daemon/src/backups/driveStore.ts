@@ -6,7 +6,7 @@
 import * as crypto from "crypto";
 import { logger } from "../core/logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
-import { BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
+import { BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, targetFolder, type BackupRecord, type BackupStore, type BackupUsage, type BytesProgress } from "./types";
 
 export interface DriveEndpoints {
     tokenUrl: string;
@@ -38,8 +38,8 @@ export interface DriveCredentials {
 // dropped when the destination is removed
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
-export function forgetDriveToken(destinationId: string): void {
-    tokenCache.delete(destinationId);
+export function forgetDriveToken(locationId: string): void {
+    tokenCache.delete(locationId);
 }
 
 export function panelKey(panelId: string): string {
@@ -52,7 +52,7 @@ function quote(value: string): string {
 
 export class DriveBackupStore implements BackupStore {
     constructor(
-        private readonly destinationId: string,
+        private readonly locationId: string,
         private readonly settings: DriveSettings,
         private readonly credentials: DriveCredentials,
         private readonly endpoints: DriveEndpoints = GOOGLE_ENDPOINTS,
@@ -61,7 +61,7 @@ export class DriveBackupStore implements BackupStore {
     }
 
     private async accessToken(): Promise<string> {
-        const cached = tokenCache.get(this.destinationId);
+        const cached = tokenCache.get(this.locationId);
         if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
         const res = await httpRequest(this.endpoints.tokenUrl, {
             method: "POST",
@@ -79,7 +79,7 @@ export class DriveBackupStore implements BackupStore {
         }
         const body = JSON.parse(expectOk(res, "Refreshing the Google sign-in").body.toString("utf8"));
         if (typeof body.access_token !== "string") throw new Error("Google sent no access token");
-        tokenCache.set(this.destinationId, { token: body.access_token, expiresAt: Date.now() + Number(body.expires_in ?? 3600) * 1000 });
+        tokenCache.set(this.locationId, { token: body.access_token, expiresAt: Date.now() + Number(body.expires_in ?? 3600) * 1000 });
         return body.access_token;
     }
 
@@ -138,15 +138,19 @@ export class DriveBackupStore implements BackupStore {
         const about = JSON.parse(expectOk(await this.api("/about?fields=storageQuota"), "Reading Google Drive storage").body.toString("utf8"));
         const limit = Number(about.storageQuota?.limit);
         const usage = Number(about.storageQuota?.usage ?? 0);
-        const files = await this.files(`${this.inFolder()} and appProperties has { key='pbFormat' and value='1' }`, "size");
+        // the folder is Paperboard's own: everything in it is a backup or its record
+        const files = await this.files(this.inFolder(), "size");
         return {
             used: files.reduce((sum, f) => sum + (Number(f.size) || 0), 0),
             available: Number.isFinite(limit) ? Math.max(0, limit - usage) : null,
         };
     }
 
-    async list(panelId: string): Promise<BackupRecord[]> {
-        const files = await this.files(`${this.inFolder()} and appProperties has { key='pbPanel' and value=${quote(panelKey(panelId))} }`, "id, description");
+    async list(panelId: string, target: string | null): Promise<BackupRecord[]> {
+        const files = await this.files(
+            `${this.inFolder()} and appProperties has { key='pbFormat' and value='2' } and appProperties has { key='pbPanel' and value=${quote(panelKey(panelId))} } and appProperties has { key='pbTarget' and value=${quote(targetFolder(target))} }`,
+            "id, description",
+        );
         const records: BackupRecord[] = [];
         const unreadable: string[] = [];
         for (const file of files.slice(0, MAX_LISTED_BACKUPS * 2)) {
@@ -158,7 +162,7 @@ export class DriveBackupStore implements BackupStore {
                 parsed = null;
             }
             if (!parsed) unreadable.push(String(file.id));
-            else if (parsed.panelId === panelId) records.push(parsed);
+            else if (parsed.panelId === panelId && parsed.target === target) records.push(parsed);
         }
         if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);
@@ -171,7 +175,7 @@ export class DriveBackupStore implements BackupStore {
             parents: [this.settings.folderId],
             mimeType: "application/gzip",
             description: JSON.stringify(record),
-            appProperties: { pbFormat: "1", pbPanel: panelKey(record.panelId), pbBackup: record.id },
+            appProperties: { pbFormat: "2", pbPanel: panelKey(record.panelId), pbTarget: targetFolder(record.target), pbBackup: record.id },
         };
         const session = expectOk(
             await this.api(

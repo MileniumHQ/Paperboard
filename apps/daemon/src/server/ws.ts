@@ -96,7 +96,7 @@ export function setupWebSocketServer(
     // the traffic tap behind `paperapi monitor`; inert until a host subscribes
     const monitor = new TrafficMonitor((listener) => engine.onLifecycle(listener), sendBounded);
     const events = new EventSubscriptions(monitor);
-    // a running backup stops its panel's service: the shell says why, and how far along it is
+    // a running backup's steps reach its panel and the shell
     const offBackupProgress = backupServiceFor(engine).onProgress((change) => events.deliver(BACKUP_PROGRESS_EVENT, change, null));
     // a panel's problems changed: the shell shows them by its name, and its page may follow its own
     const offProblems = problemsFor(engine).onChange((panelId, problems) => events.deliver(PROBLEMS_EVENT, { panelId, problems }, panelId));

@@ -1,24 +1,17 @@
 // Shapes shared by the backup service and its stores. A backup is one
-// gzipped tar of a panel's file storage and config document, plus a record
-// describing it. Stores keep the record beside the archive; the record is
-// read back as untrusted data and checked before anything is restored.
+// gzipped tar of files from a panel's storage (and the JSON the panel handed
+// over), plus a record describing it. Stores keep the record beside the
+// archive; the record is read back as untrusted data and checked before
+// anything is restored.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { BACKUP_LABEL_MAX } from "@mileniumhq/paperapi/protocol";
+import { isBackupPath, isBackupTarget, type BackupRecord } from "@mileniumhq/paperapi/backups";
 
-export interface BackupRecord {
-    format: 1;
-    id: string;
-    panelId: string;
-    sourceId?: string;
-    /** ISO timestamp */
-    createdAt: string;
-    /** archive bytes */
-    size: number;
-    /** archive sha256, hex */
-    sha256: string;
-    panelVersion: string | null;
-    label: string | null;
-}
+// the record and progress shapes are PaperAPI's: the daemon sends them as they are
+export type { BackupContents, BackupCopied, BackupProgress, BackupProgressChange, BackupRecord, BackupStep, RestoreEnded } from "@mileniumhq/paperapi/backups";
+
+/** a backup's paths: at most this many, so its record stays small */
+export const MAX_BACKUP_PATHS = 64;
 
 export interface BackupUsage {
     /** bytes Paperboard backups take at this location */
@@ -30,15 +23,18 @@ export interface BackupUsage {
 /** called with the bytes handled so far */
 export type BytesProgress = (done: number) => void;
 
-// the progress shapes are PaperAPI's: the daemon sends them as they are
-export type { BackupEnded, BackupProgress, BackupProgressChange, BackupStep } from "@mileniumhq/paperapi/backups";
+/** the folder (or key, or tag) a store files a panel target's backups under */
+export function targetFolder(target: string | null): string {
+    // a target id starts with a letter or digit, so this is never one
+    return target ?? "_panel";
+}
 
 export interface BackupStore {
     /** proves the location is reachable with its credentials */
     check(): Promise<void>;
     usage(): Promise<BackupUsage>;
-    /** newest first, at most MAX_LISTED_BACKUPS */
-    list(panelId: string): Promise<BackupRecord[]>;
+    /** the target's backups, newest first, at most MAX_LISTED_BACKUPS */
+    list(panelId: string, target: string | null): Promise<BackupRecord[]>;
     /** onProgress hears the archive bytes sent so far */
     put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void>;
     /** writes the archive to destPath; onProgress hears the bytes received so far */
@@ -77,29 +73,35 @@ export function newBackupId(now = new Date(), random = Math.floor(Math.random() 
     return `${stamp}-${random.toString(16).padStart(6, "0").slice(-6)}`;
 }
 
+const paths = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.length <= MAX_BACKUP_PATHS && value.every(isBackupPath);
+
 /** a record read back from a store; null when it is not one of ours */
 export function parseBackupRecord(raw: unknown): BackupRecord | null {
     if (!raw || typeof raw !== "object") return null;
     const r = raw as Record<string, unknown>;
-    if (r.format !== 1) return null;
-    if (r.sourceId !== undefined && (typeof r.sourceId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(r.sourceId))) return null;
+    if (r.format !== 2) return null;
     if (typeof r.id !== "string" || !BACKUP_ID_RE.test(r.id)) return null;
     if (!isPanelId(r.panelId)) return null;
+    if (r.target !== null && !isBackupTarget(r.target)) return null;
     if (typeof r.createdAt !== "string" || Number.isNaN(Date.parse(r.createdAt))) return null;
     if (typeof r.size !== "number" || !Number.isSafeInteger(r.size) || r.size < 0 || r.size > BACKUP_ARCHIVE_MAX_BYTES) return null;
     if (typeof r.sha256 !== "string" || !SHA256_RE.test(r.sha256)) return null;
     if (r.panelVersion !== null && (typeof r.panelVersion !== "string" || r.panelVersion.length > 64)) return null;
     if (r.label !== null && (typeof r.label !== "string" || r.label.length > BACKUP_LABEL_MAX)) return null;
+    if (!paths(r.paths) || !paths(r.exclude)) return null;
     return {
-        format: 1,
+        format: 2,
         id: r.id,
         panelId: r.panelId,
-        ...(typeof r.sourceId === "string" ? { sourceId: r.sourceId } : {}),
+        target: r.target,
         createdAt: r.createdAt,
         size: r.size,
         sha256: r.sha256,
         panelVersion: r.panelVersion as string | null,
         label: r.label as string | null,
+        paths: [...r.paths],
+        exclude: [...r.exclude],
     };
 }
 

@@ -9,10 +9,18 @@ import { DEFAULT_LISTEN_PORT } from "../cli/cli";
 import { isPanelId, requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 import type { PaperCraneAuth } from "../security/auth";
 import type { MonitorLifecycle, MonitorServiceRecord } from "@mileniumhq/paperapi/monitorProtocol";
-import type { BackupEnded } from "../backups/types";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 type ServiceChange = Omit<MonitorServiceRecord, "type" | "at" | "panel">;
+
+/** the hooks a backup or restore asks a panel's service, by message name */
+export type BackupHook = "before-backup" | "after-backup" | "before-restore" | "after-restore";
+const BACKUP_HOOK_FLAGS = {
+    "before-backup": "beforeBackup",
+    "after-backup": "afterBackup",
+    "before-restore": "beforeRestore",
+    "after-restore": "afterRestore",
+} as const satisfies Record<BackupHook, keyof RunningService>;
 
 interface RunningService {
     process: cp.ChildProcess;
@@ -27,19 +35,18 @@ interface RunningService {
     timedOut?: boolean;
     crashCount: number;
     startedAt: number;
-    /** the service said, when it became ready, that it gets ready for backups */
+    /** the backup hooks the service said it has when it became ready */
     beforeBackup?: boolean;
-    beforeRestore?: boolean;
-    /** ... and that it hears backups and restores end */
     afterBackup?: boolean;
+    beforeRestore?: boolean;
     afterRestore?: boolean;
     /** ... and that it stops its own processes for an update, and starts them after */
     beforeUpdate?: boolean;
     afterUpdate?: boolean;
     /** ... and that it hears how many of its panel's pages are open */
     pagesChanged?: boolean;
-    /** the one backup, restore or update it is getting ready for now */
-    backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
+    /** the one hook it is answering now: a backup's, a restore's or an update's */
+    asking?: { requestId: string; settle: (error: Error | null, result?: unknown) => void };
     /** the end of what it wrote to stderr: why it exited, when it says */
     stderrTail: string;
 }
@@ -203,10 +210,10 @@ export class PanelServicesManager {
         }, 20_000);
         entry.readyTimer.unref?.();
         child.on("message", (message: any) => {
-            if (["paperboard:before-backup-done", "paperboard:before-restore-done", "paperboard:before-update-done"].includes(message?.type)) {
-                const pending = entry.backupPrepare;
+            if (typeof message?.type === "string" && message.type.startsWith("paperboard:") && message.type.endsWith("-done")) {
+                const pending = entry.asking;
                 if (pending && message.requestId === pending.requestId) {
-                    pending.settle(message.error ? new Error(String(message.error).slice(0, 500)) : null);
+                    pending.settle(message.error ? new Error(String(message.error).slice(0, 500)) : null, message.result);
                 }
                 return;
             }
@@ -245,7 +252,7 @@ export class PanelServicesManager {
             const asked = entry.stopped && !entry.timedOut;
             const reason = asked ? undefined : exitReason(entry.stderrTail) ?? (entry.timedOut ? "did not report ready within 20s" : undefined);
             this.announce(id, asked ? { state: "stopped", code } : { state: "exited", code, ...(reason ? { error: reason } : {}) });
-            entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready`));
+            entry.asking?.settle(new Error(`Service ${id} exited before it answered`));
             resolveExit();
             rejectReady(new Error(`Service ${id} exited before it was ready (code ${code})${reason ? `: ${reason}` : ""}`));
             if (entry.stopped || this.services.get(id) !== entry) return;
@@ -266,16 +273,23 @@ export class PanelServicesManager {
         });
         return true;
     }
-    /**
-     * Asks a ready service that handles it (its definition has beforeBackup)
-     * to get ready for a copy of its data: a game server writes its world
-     * out and stops writing. Resolves false when the service does not take
-     * part, rejects when it failed or did not answer in time.
-     */
-    public async prepareForBackup(id: string, sourceId?: string, timeoutMs = 300_000, operation: "backup" | "restore" = "backup"): Promise<boolean> {
+    /** the backup hooks the panel's ready service has; null when it is not running or ready */
+    public backupHooks(id: string): ReadonlySet<BackupHook> | null {
         const entry = this.services.get(requirePanelId(id));
-        if (!entry || entry.stopped || entry.state !== "ready" || !(operation === "backup" ? entry.beforeBackup : entry.beforeRestore)) return false;
-        return this.askToPrepare(id, entry, operation, { sourceId }, timeoutMs);
+        if (!entry || entry.stopped || entry.state !== "ready") return null;
+        return new Set((Object.keys(BACKUP_HOOK_FLAGS) as BackupHook[]).filter((hook) => entry[BACKUP_HOOK_FLAGS[hook]]));
+    }
+
+    /**
+     * Asks the panel's ready service one of its backup hooks and resolves
+     * with its answer. Rejects when the service is not running or ready,
+     * does not have the hook, failed, or did not answer in time.
+     */
+    public async askBackupHook(id: string, hook: BackupHook, payload: Record<string, unknown>, timeoutMs = 300_000): Promise<unknown> {
+        const entry = this.services.get(requirePanelId(id));
+        if (!entry || entry.stopped || entry.state !== "ready") throw new Error("The panel's service stopped");
+        if (!entry[BACKUP_HOOK_FLAGS[hook]]) throw new Error(`The panel's service has no ${BACKUP_HOOK_FLAGS[hook]}`);
+        return this.ask(id, entry, hook, payload, timeoutMs);
     }
     /**
      * Asks a ready service that handles it (its definition has
@@ -286,7 +300,8 @@ export class PanelServicesManager {
     public async prepareForUpdate(id: string, processes: string[], timeoutMs = 120_000): Promise<boolean> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry || entry.stopped || entry.state !== "ready" || !entry.beforeUpdate) return false;
-        return this.askToPrepare(id, entry, "update", { processes }, timeoutMs);
+        await this.ask(id, entry, "before-update", { processes }, timeoutMs);
+        return true;
     }
     /** Tells a ready service that hears it (afterUpdate) how an update that stopped its processes ended. */
     public tellUpdateEnded(id: string, ended: { processes: string[]; ok: boolean; error?: string }): boolean {
@@ -297,43 +312,30 @@ export class PanelServicesManager {
         });
         return true;
     }
-    private async askToPrepare(id: string, entry: RunningService, operation: "backup" | "restore" | "update", payload: Record<string, unknown>, timeoutMs: number): Promise<boolean> {
-        if (entry.backupPrepare) throw new Error(`Service ${id} is already getting ready for something else`);
+    private async ask(id: string, entry: RunningService, hook: BackupHook | "before-update", payload: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+        if (entry.asking) throw new Error(`Service ${id} is already answering for something else`);
         const requestId = crypto.randomUUID();
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-            await new Promise<void>((resolve, reject) => {
+            return await new Promise<unknown>((resolve, reject) => {
                 let settled = false;
-                const settle = (error: Error | null) => {
+                const settle = (error: Error | null, result?: unknown) => {
                     if (settled) return;
                     settled = true;
                     if (error) reject(error);
-                    else resolve();
+                    else resolve(result ?? null);
                 };
-                entry.backupPrepare = { requestId, settle };
-                timer = setTimeout(() => settle(new Error(`Service ${id} did not get ready for the ${operation} within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+                entry.asking = { requestId, settle };
+                timer = setTimeout(() => settle(new Error(`Service ${id} did not answer ${hook} within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
                 timer.unref?.();
-                entry.process.send({ type: `paperboard:before-${operation}`, requestId, ...payload }, (err) => { if (err) settle(err); });
+                entry.process.send({ type: `paperboard:${hook}`, requestId, ...payload }, (err) => { if (err) settle(err); });
             });
         } finally {
             clearTimeout(timer);
             // set inside the promise above, which narrowing does not see
-            const current = entry.backupPrepare as RunningService["backupPrepare"];
-            if (current?.requestId === requestId) entry.backupPrepare = undefined;
+            const current = entry.asking as RunningService["asking"];
+            if (current?.requestId === requestId) entry.asking = undefined;
         }
-        return true;
-    }
-    /**
-     * Tells a ready service that hears it (its definition has afterBackup or
-     * afterRestore) how a backup or restore of its data ended. A service
-     * that is stopped, not ready yet, or doesn't take part is not told.
-     */
-    public tellBackupEnded(id: string, operation: "backup" | "restore", ended: BackupEnded): void {
-        const entry = this.services.get(requirePanelId(id));
-        if (!entry || entry.stopped || entry.state !== "ready" || !(operation === "backup" ? entry.afterBackup : entry.afterRestore)) return;
-        entry.process.send({ type: `paperboard:after-${operation}`, ended }, (err) => {
-            if (err) logger.error(`[services] ${id} was not told its ${operation} ended`, err);
-        });
     }
     /**
      * One of the panel's pages is open, on `connection` (its page's own),

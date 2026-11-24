@@ -2,7 +2,7 @@ import { blocksApi } from "./blocks";
 import { getPanelId } from "./ipc";
 import { STATE_EVENT, STATE_KEY_VALUE, STATE_VALUE, WIDGET_CHOICES_COMMAND, callBlockId, eventBlockId } from "./serviceCalls";
 import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
-import type { BackupEnded, BackupRecord } from "./backups";
+import type { BackupContents, BackupCopied, BackupRecord, RestoreEnded } from "./backups";
 import { isRecord } from "./records";
 import { readValue, typed } from "./protocol";
 import { errorMessage } from "./errors";
@@ -105,29 +105,35 @@ export interface DefinePanelServiceOptions<
     >;
     onInit?: (ctx: ContextOf<TState, C>) => void | Promise<void>;
     /**
-     * Gets the service ready for a backup of its panel's data, which starts
-     * once this resolves: the service is then stopped, the data copied, and
-     * the service started again. Use it to write out what is in memory and
-     * to stop a process the service runs from writing (a game server's
-     * save-off); undo that when the service starts again. Throwing refuses
-     * the backup. Without it the service is simply stopped for the copy.
-     * options.sourceId identifies the named source being copied (including
-     * a legacy source). It is absent for a whole-panel backup.
+     * Gets ready for a backup of `target` (null for the panel as a whole)
+     * and says what it holds. Stop what would write over the copy (a game
+     * server's save-off), then resolve with the files: they are copied as
+     * they are, and afterBackup hears when you can carry on. Throwing
+     * refuses the backup; undo what you began first. A panel without it
+     * cannot be backed up.
      */
-    beforeBackup?: (ctx: ContextOf<TState, C>, options: { sourceId?: string }) => void | Promise<void>;
-    /** Called before replacing data, while the service can still stop its owned processes. */
-    beforeRestore?: (ctx: ContextOf<TState, C>, options: { sourceId?: string }) => void | Promise<void>;
+    beforeBackup?: (ctx: ContextOf<TState, C>, options: { target: string | null }) => BackupContents | Promise<BackupContents>;
     /**
-     * Hears each backup of the panel's data end, whoever started it (the
-     * panel, a routine backup, the shell): with the record when it was
-     * made, or why it failed. It is called once the service runs again, so
-     * a backup that stopped the service is heard by the service that
-     * started after it. A backup that ends while the service is stopped or
-     * not ready is not heard. sourceId is as in beforeBackup.
+     * The copy beforeBackup made ready is done, or failed: carry on (a game
+     * server's save-on). The backup is uploaded after this resolves; a
+     * failure here fails the backup.
      */
-    afterBackup?: (ctx: ContextOf<TState, C>, ended: BackupEnded) => void | Promise<void>;
-    /** The same as afterBackup, for a restore; backup is the record restored. */
-    afterRestore?: (ctx: ContextOf<TState, C>, ended: BackupEnded) => void | Promise<void>;
+    afterBackup?: (ctx: ContextOf<TState, C>, copied: BackupCopied) => void | Promise<void>;
+    /**
+     * Stops what uses `target`'s files before a restore swaps them for
+     * the backup's (a game server stops). Throwing refuses the restore;
+     * undo what you began first.
+     */
+    beforeRestore?: (ctx: ContextOf<TState, C>, options: { target: string | null; backup: BackupRecord }) => void | Promise<void>;
+    /**
+     * The restore beforeRestore made ready ended: the files are the
+     * backup's and `data` is what beforeBackup handed over, or the restore
+     * failed and the files are as they were. Pick up from them either way
+     * (a game server applies its settings and starts again). Throwing on
+     * ok puts the files back as they were and calls this again with the
+     * failure. A panel without it cannot restore its backups.
+     */
+    afterRestore?: (ctx: ContextOf<TState, C>, ended: RestoreEnded) => void | Promise<void>;
     /**
      * Stops processes the panel runs so Paperboard can update what they run
      * from: the panel itself, or a runtime package such as Java. It is
@@ -164,10 +170,16 @@ export interface UpdateEnded {
 
 type Blocks = ReturnType<typeof blocksApi.panel>;
 
-// how a backup, restore or update ended, as the daemon tells a service
-const BACKUP_ENDED: Shape<BackupEnded> = shape.either(
-    shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(true), backup: typed<BackupRecord>() }),
-    shape.object({ sourceId: shape.optional(shape.text()), ok: shape.oneOf(false), error: shape.text() }),
+// what the daemon asks a service around a backup or restore
+const TARGET: Shape<string | null> = shape.nullable(shape.text());
+const BACKUP_COPIED: Shape<BackupCopied> = shape.either(
+    shape.object({ target: TARGET, ok: shape.oneOf(true) }),
+    shape.object({ target: TARGET, ok: shape.oneOf(false), error: shape.text() }),
+);
+const RESTORE_START: Shape<{ target: string | null; backup: BackupRecord }> = shape.object({ target: TARGET, backup: typed<BackupRecord>() });
+const RESTORE_ENDED: Shape<RestoreEnded> = shape.either(
+    shape.object({ target: TARGET, backup: typed<BackupRecord>(), ok: shape.oneOf(true), data: typed<unknown>() }),
+    shape.object({ target: TARGET, backup: typed<BackupRecord>(), ok: shape.oneOf(false), error: shape.text() }),
 );
 const PAGES_OPEN: Shape<number> = shape.read((value) => {
     if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("a count of pages, a whole number from 0");
@@ -487,7 +499,7 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
             if (typeof requestId !== "string") return;
             const done = `${type}-done`;
             void (async () => run(message))().then(
-                () => process.send?.({ type: done, requestId }),
+                (result) => process.send?.({ type: done, requestId, result: result ?? null }),
                 (err) => process.send?.({ type: done, requestId, error: errorMessage(err) }),
             );
         });
@@ -503,17 +515,16 @@ function answerTheDaemon(panelId: string, options: AnyOptions, ctx: ServiceConte
     };
 
     const { beforeBackup, beforeRestore, afterBackup, afterRestore, beforeUpdate, afterUpdate, onPagesChanged } = options;
-    const sourceOf = (m: Record<string, unknown>) => ({ sourceId: typeof m.sourceId === "string" ? m.sourceId : undefined });
-    if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, sourceOf(m)));
-    if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, sourceOf(m)));
+    if (beforeBackup) answer("paperboard:before-backup", (m) => beforeBackup(ctx, { target: readValue(TARGET, m.target, "target") }));
+    if (afterBackup) answer("paperboard:after-backup", (m) => afterBackup(ctx, readValue(BACKUP_COPIED, m.copied, "copied")));
+    if (beforeRestore) answer("paperboard:before-restore", (m) => beforeRestore(ctx, readValue(RESTORE_START, m.restore, "restore")));
+    if (afterRestore) answer("paperboard:after-restore", (m) => afterRestore(ctx, readValue(RESTORE_ENDED, m.ended, "ended")));
     if (beforeUpdate) {
         answer("paperboard:before-update", (m) => beforeUpdate(ctx, {
             processes: Array.isArray(m.processes) ? m.processes.filter((p: unknown): p is string => typeof p === "string") : [],
         }));
     }
     if (afterUpdate) hear("paperboard:after-update", "an update", (m) => afterUpdate(ctx, readValue(UPDATE_ENDED, m.ended, "ended")));
-    if (afterBackup) hear("paperboard:after-backup", "a backup", (m) => afterBackup(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
-    if (afterRestore) hear("paperboard:after-restore", "a restore", (m) => afterRestore(ctx, readValue(BACKUP_ENDED, m.ended, "ended")));
     if (onPagesChanged) {
         process.on("message", (message: unknown) => {
             if (!isRecord(message) || message.type !== "paperboard:pages") return;

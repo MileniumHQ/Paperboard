@@ -300,7 +300,6 @@ function daemonLifecycle(parts: DaemonParts) {
         };
         step("saving the paired tokens", () => auth.flushTokenStore());
         step("closing the token store", () => auth.dispose());
-        step("stopping routine backups", () => backupServiceFor(engine).dispose());
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
@@ -418,15 +417,19 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             lifecycle.arm();
             if (options.exitWithParent) followParent();
 
+            // a restore a crash interrupted is rolled back before any panel reads its files
+            try {
+                backupServiceFor(engine).recoverAtStartup();
+            } catch (err) {
+                logger.error("[Paperboard Server] an interrupted restore could not be rolled back; its files stay in backups/.work:", err);
+            }
+
             // Start background services for installed panels
             try {
                 panelServices.init(localPort, auth);
             } catch (err) {
                 logger.error("[Paperboard Server] no panel service started: the panels folder could not be read:", err);
             }
-
-            // routine backups run while the daemon does, app open or not
-            backupServiceFor(engine).startScheduler();
 
             // this instance owns the port now: safe to sweep interrupted
             // artifacts (never before — see sweepStartupOrphans)

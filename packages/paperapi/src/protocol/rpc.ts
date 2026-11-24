@@ -2,7 +2,7 @@
 // daemon before its handler runs) and its typed result.
 import { shape, type ObjectOf, type ObjectShape, type Shape } from "../shape";
 import type { WidgetDeclaration } from "../widgetManifest";
-import type { BackupLocation, BackupLocationUsage, BackupProgress, BackupRecord, BackupSchedule, BackupSource, NewBackupLocation } from "../backups";
+import type { BackupLocation, BackupLocationUsage, BackupProgress, BackupRecord, NewBackupLocation } from "../backups";
 import type { PortClaim, PortPolicy } from "../ports";
 import type { PanelProblem } from "../problemShape";
 import type { GpuInfo, UsageReport } from "../system";
@@ -19,8 +19,10 @@ export const BACKUP_LABEL_MAX = 100;
 /** How a workload's input is encoded on its way in. */
 export const INPUT_ENCODINGS = ["utf8", "utf16le"] as const;
 /** The computer's own folder, the backup location every computer has. */
-export const LOCAL_DESTINATION_ID = "local";
-const DESTINATION_ID_RE = /^d-[0-9a-f]{12}$/;
+export const LOCAL_LOCATION_ID = "local";
+/** what a backup target may be called: a panel's own id for it */
+export const BACKUP_TARGET_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const LOCATION_ID_RE = /^d-[0-9a-f]{12}$/;
 // single-frame write cap: 16 MiB of parsed content is far past any
 // legitimate panel state file; larger blobs ride file:download, which
 // streams with its own cap instead of living twice in one JSON frame
@@ -30,8 +32,8 @@ const CALL_TIMEOUT_MAX_MS = 60_000;
 // per-socket broadcast interest is bounded
 const MAX_EVENT_SUBS = 512;
 
-export function isDestinationId(value: unknown): value is string {
-    return typeof value === "string" && (value === LOCAL_DESTINATION_ID || DESTINATION_ID_RE.test(value));
+export function isLocationId(value: unknown): value is string {
+    return typeof value === "string" && (value === LOCAL_LOCATION_ID || LOCATION_ID_RE.test(value));
 }
 
 /** An installed panel, as the daemon lists it. */
@@ -69,12 +71,10 @@ export interface TerminalShell {
     name: string;
 }
 
-/** A panel's backups as the daemon answers them: PaperAPI names the destination its location. */
+/** Where a panel's backups go, and its target's running backup, as the daemon answers them. */
 export interface BackupStatusAnswer {
-    destination: BackupLocation | null;
-    running: "create" | "restore" | null;
+    location: BackupLocation | null;
     progress: BackupProgress | null;
-    schedule: BackupSchedule | null;
 }
 
 export interface RpcIdentityPart {
@@ -147,8 +147,12 @@ const blockSchema = (): Shape<BlockSchema> => ({
     check: (v, at) => (v && typeof v === "object" ? null : `a block needs a "${at}" object`),
 });
 
-const destinationId = (): Shape<string> => ({
-    check: (value, at) => (isDestinationId(value) ? null : `Invalid ${at}: ${JSON.stringify(value)}`),
+const locationId = (): Shape<string> => ({
+    check: (value, at) => (isLocationId(value) ? null : `Invalid ${at}: ${JSON.stringify(value)}`),
+});
+
+const backupTarget = (): Shape<string> => ({
+    check: (value, at) => (typeof value === "string" && BACKUP_TARGET_RE.test(value) ? null : `Invalid ${at}: ${JSON.stringify(value)}`),
 });
 
 // The event names a socket wants: a list of at most MAX_EVENT_SUBS.
@@ -163,13 +167,11 @@ const eventNames = (): Shape<string[]> => {
     return reading;
 };
 
-// a call that names its panel's backups: the panel, and which of its sources
+// a call that names a panel's backups: the panel, and which of its targets
 const backupOf = {
     panelId: panelId(),
-    sourceId: shape.optional(text(64)),
+    target: shape.optional(backupTarget()),
 };
-// a call made from inside a block names it, so its answer survives a stopped service
-const duringCall = opt(text(64));
 
 export interface RpcDefinition {
     readonly params: ObjectShape;
@@ -286,24 +288,22 @@ export const RPC = {
     "secrets:purge": { params: object({ panelId: panelId() }) },
 
     // backups
-    "backup:source-define": { params: object({ panelId: panelId(), source: typed<BackupSource>() }) },
-    "backup:destinations": { params: nothing, host: true },
-    "backup:destinations-problem": { params: nothing, host: true },
-    "backup:destinations-recover": { params: nothing, host: true },
-    "backup:destination-usage": { params: object({ destinationId: destinationId() }), host: true },
-    "backup:destination-add": { params: object({ destination: typed<NewBackupLocation>() }), host: true },
-    "backup:destination-reconnect": {
-        params: object({ destinationId: destinationId(), clientId: anyText(), clientSecret: anyText(), refreshToken: anyText() }),
+    "backup:locations": { params: nothing, host: true },
+    "backup:locations-problem": { params: nothing, host: true },
+    "backup:locations-recover": { params: nothing, host: true },
+    "backup:location-usage": { params: object({ locationId: locationId() }), host: true },
+    "backup:location-add": { params: object({ location: typed<NewBackupLocation>() }), host: true },
+    "backup:location-reconnect": {
+        params: object({ locationId: locationId(), clientId: anyText(), clientSecret: anyText(), refreshToken: anyText() }),
         host: true,
     },
-    "backup:destination-remove": { params: object({ destinationId: destinationId() }), host: true },
-    "backup:panel-destination-set": { params: object({ ...backupOf, destinationId: shape.nullable(destinationId()) }), host: true },
+    "backup:location-remove": { params: object({ locationId: locationId() }), host: true },
+    "backup:panel-location-set": { params: object({ panelId: panelId(), locationId: shape.nullable(locationId()) }), host: true },
     "backup:status": { params: object(backupOf) },
     "backup:progress": { params: object({ panelId: panelId() }) },
-    "backup:create": { params: object({ ...backupOf, label: opt(text(BACKUP_LABEL_MAX)), duringCall }) },
+    "backup:create": { params: object({ ...backupOf, label: opt(text(BACKUP_LABEL_MAX)) }) },
     "backup:list": { params: object(backupOf) },
-    "backup:restore": { params: object({ ...backupOf, backupId: text(64), duringCall }) },
-    "backup:schedule-set": { params: object({ ...backupOf, schedule: typed<unknown>() }) },
+    "backup:restore": { params: object({ ...backupOf, backupId: text(64) }) },
     "backup:delete": { params: object({ ...backupOf, backupId: text(64) }) },
 
     // ports
@@ -409,21 +409,19 @@ export interface RpcResults {
     "secrets:list": { keys: string[] };
     "secrets:purge": { purged: number };
 
-    "backup:source-define": Ack;
-    "backup:destinations": { destinations: BackupLocation[] };
-    "backup:destinations-problem": { problem?: string | null };
-    "backup:destinations-recover": { keptAs: string };
-    "backup:destination-usage": BackupLocationUsage;
-    "backup:destination-add": BackupLocation;
-    "backup:destination-reconnect": BackupLocation;
-    "backup:destination-remove": Ack;
-    "backup:panel-destination-set": BackupStatusAnswer;
+    "backup:locations": { locations: BackupLocation[] };
+    "backup:locations-problem": { problem?: string | null };
+    "backup:locations-recover": { keptAs: string };
+    "backup:location-usage": BackupLocationUsage;
+    "backup:location-add": BackupLocation;
+    "backup:location-reconnect": BackupLocation;
+    "backup:location-remove": Ack;
+    "backup:panel-location-set": BackupStatusAnswer;
     "backup:status": BackupStatusAnswer;
     "backup:progress": { progress: BackupProgress[] };
     "backup:create": BackupRecord;
     "backup:list": { backups: BackupRecord[] };
     "backup:restore": BackupRecord;
-    "backup:schedule-set": BackupStatusAnswer;
     "backup:delete": Ack;
 
     "ports:claim": PortClaim;
