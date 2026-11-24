@@ -37,6 +37,10 @@ export class DiscoveryService extends EventEmitter {
     public start(): void {
         if (this.started) return;
         this.started = true;
+        this.openBrowser();
+    }
+
+    private openBrowser(): void {
         try {
             this.mdns = this.openMdns();
             this.browser = this.mdns.find({ type: PAPERCRANE_MDNS_TYPE });
@@ -125,6 +129,7 @@ export class DiscoveryService extends EventEmitter {
             );
             return;
         }
+        this.confirming?.seen.add(key);
         const entry: DiscoveredEntry = {
             id: key,
             name:
@@ -132,11 +137,11 @@ export class DiscoveryService extends EventEmitter {
                 String(service?.name || key).replace(/\._[^.]+\._tcp\.?$/, ""),
             host,
             port,
-            // the name it advertises its addresses under; a daemon that
-            // advertises a bare hostname has no .local name to dial
+            // the .local name it says it answers to (a hint: kept only once
+            // its certificate answers there); an older daemon sends none
             mdnsName:
-                typeof service?.host === "string" && /\.local\.?$/i.test(service.host)
-                    ? service.host.replace(/\.$/, "")
+                typeof service?.txt?.mdns === "string" && /^[A-Za-z0-9-]{1,63}\.local$/i.test(service.txt.mdns)
+                    ? service.txt.mdns
                     : undefined,
             version:
                 typeof service?.txt?.ver === "string"
@@ -222,24 +227,44 @@ export class DiscoveryService extends EventEmitter {
     }
 
     private lastRediscover = 0;
+    // a fresh look under way: the computers it has seen again, and when it
+    // drops the ones it hasn't
+    private confirming: { seen: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
 
     /**
-     * A paired computer stopped answering: browse again from scratch. The
-     * browser keeps each computer it has seen at its first addresses, so a
-     * computer that moved to a new IP under the same name is only seen
-     * there by a fresh look. At most once every 30 seconds.
+     * A paired computer stopped answering: look again with a fresh browser.
+     * A browser keeps each computer at the addresses it first saw, so one
+     * that moved to a new IP under the same name is only seen there by a
+     * fresh look. The list stays as it is meanwhile; after a few seconds,
+     * the computers the fresh look didn't see again are dropped. At most once
+     * every 30 seconds.
      */
     public rediscover(): void {
         if (!this.started || Date.now() - this.lastRediscover < 30_000) return;
         this.lastRediscover = Date.now();
-        logger.debug("[Discovery] a paired computer is unreachable; browsing again");
-        this.stop();
-        // a computer that is gone isn't listed again; one still there is, by the fresh look
-        this.emitChange();
-        this.start();
+        logger.debug("[Discovery] a paired computer is unreachable; looking again");
+        if (this.confirming) clearTimeout(this.confirming.timer);
+        const confirming = {
+            seen: new Set<string>(),
+            timer: setTimeout(() => {
+                if (this.confirming !== confirming) return;
+                this.confirming = null;
+                let dropped = false;
+                for (const key of [...this.services.keys()]) {
+                    if (confirming.seen.has(key)) continue;
+                    this.services.delete(key);
+                    dropped = true;
+                }
+                if (dropped) this.emitChange();
+            }, 5_000),
+        };
+        confirming.timer.unref?.();
+        this.confirming = confirming;
+        this.closeBrowser();
+        this.openBrowser();
     }
 
-    public stop(): void {
+    private closeBrowser(): void {
         try {
             this.browser?.stop();
         } catch (err) {
@@ -252,6 +277,12 @@ export class DiscoveryService extends EventEmitter {
         }
         this.browser = null;
         this.mdns = null;
+    }
+
+    public stop(): void {
+        this.closeBrowser();
+        if (this.confirming) clearTimeout(this.confirming.timer);
+        this.confirming = null;
         this.services.clear();
         this.started = false;
     }

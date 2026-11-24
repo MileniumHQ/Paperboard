@@ -40,7 +40,6 @@ export interface ComputerInfo {
     /** the IP it last answered at, dialed alongside a .local host */
     address?: string;
     port: number;
-    machineId?: string;
     /** the address other machines reach this computer at (local computer only) */
     networkAddress?: string;
     /** what the host reaches this computer through (such as a relay),

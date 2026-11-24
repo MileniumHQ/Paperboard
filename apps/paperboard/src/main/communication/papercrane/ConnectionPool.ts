@@ -11,6 +11,7 @@ import { getLocalDir } from "daemon/core/paths";
 import { logger } from "daemon/core/logger";
 import { certFingerprint, pinnedRequest } from "daemon/security/pinnedTls";
 import { readTlsCert } from "daemon/security/tlsIdentity";
+import { remoteHosts } from "daemon/system/remotes";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -25,8 +26,6 @@ export interface StoredComputer {
     /** the IP it last answered at, dialed alongside a .local host (absent when host is the IP) */
     address?: string;
     port: number;
-    /** the daemon's stable machine id, which the shared computer list keys on */
-    machineId?: string;
     token?: string;
     // remote daemon certificate, pinned at pairing (remote computers only)
     cert?: string;
@@ -93,11 +92,6 @@ function isPlaintextAnswer(err: any): boolean {
 /** a name the computer answers to over mDNS, as opposed to an IP or a DNS name */
 function isMdnsName(host: string): boolean {
     return /\.local$/i.test(host);
-}
-
-/** every address a paired computer is dialed at, its .local name first */
-function hostsOf(comp: StoredComputer): string[] {
-    return comp.address && comp.address !== comp.host ? [comp.host, comp.address] : [comp.host];
 }
 
 /** where a paired computer might be now; each is believed only once its pinned certificate answers there */
@@ -207,13 +201,9 @@ export class ConnectionPool extends EventEmitter {
     // detection a newer daemon learned, shows without pairing again. Its
     // .local name is learned the same way, so a computer paired by IP moves
     // to its name once the name answers here.
-    private refreshFacts(id: string, facts: OsFacts & { mdnsName?: string; machineId?: string }) {
+    private refreshFacts(id: string, facts: OsFacts & { mdnsName?: string }) {
         const comp = this.computers.get(id);
         if (comp && facts.mdnsName) void this.follow(id, { name: facts.mdnsName });
-        if (comp && facts.machineId && comp.machineId !== facts.machineId) {
-            comp.machineId = facts.machineId;
-            this.saveLearned("machine id");
-        }
         // a daemon too old to answer with facts keeps what pairing recorded
         if (!comp || !facts.os) return;
         const next = osFactsOf(facts);
@@ -230,13 +220,13 @@ export class ConnectionPool extends EventEmitter {
         catch (err) { logger.warn(`[ConnectionPool] a computer's ${what} were not saved:`, err); } // quiet: memory holds them, and the next sign-in or sighting saves them again
     }
 
-    /** whether the computer with this pinned certificate answers at host:port */
-    private async healthAt(host: string, port: number, cert: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    /** why the computer with this pinned certificate doesn't answer at host:port, or null when it does */
+    private async healthAt(host: string, port: number, cert: string): Promise<string | null> {
         try {
             const res = await pinnedRequest(`https://${bracketHost(host)}:${port}/health`, cert, { timeoutMs: 3000 });
-            return res.ok ? { ok: true } : { ok: false, error: `Something other than the Paperboard server daemon answered (HTTP ${res.status})` };
+            return res.ok ? null : `Something other than the Paperboard server daemon answered (HTTP ${res.status})`;
         } catch (err) {
-            return { ok: false, error: classifyProbeError(err) };
+            return classifyProbeError(err);
         }
     }
 
@@ -258,8 +248,8 @@ export class ConnectionPool extends EventEmitter {
         this.sightings.set(id, token);
         const cert = comp.cert;
         const [nameOk, addressOk] = await Promise.all([
-            name ? this.healthAt(name, port, cert).then((r) => r.ok) : false,
-            address ? this.healthAt(address, port, cert).then((r) => r.ok) : false,
+            name ? this.healthAt(name, port, cert).then((why) => why === null) : false,
+            address ? this.healthAt(address, port, cert).then((why) => why === null) : false,
         ]);
         // a newer sighting, a re-pairing or a removal came first
         if (this.sightings.get(id) !== token || this.computers.get(id) !== comp || comp.cert !== cert) return;
@@ -281,9 +271,9 @@ export class ConnectionPool extends EventEmitter {
         comp.host = host;
         comp.address = known;
         comp.port = port;
-        logger.info(`[ConnectionPool] ${comp.name} is now reached at ${hostsOf(comp).join(" or ")}, port ${port}`);
+        logger.info(`[ConnectionPool] ${comp.name} is now reached at ${remoteHosts(comp).join(" or ")}, port ${port}`);
         this.saveLearned("new address");
-        this.clients.get(id)?.retarget(hostsOf(comp), port);
+        this.clients.get(id)?.retarget(remoteHosts(comp), port);
         this.emit("change");
     }
 
@@ -317,10 +307,9 @@ export class ConnectionPool extends EventEmitter {
             return status.connected ? { reachable: true } : { reachable: false, error: status.error ?? "This computer's Paperboard Server isn't answering" };
         }
         if (!comp.cert) return { reachable: false, error: `${comp.host} has no pinned certificate. Remove this computer and pair it again` };
-        const answers = await Promise.all(hostsOf(comp).map((h) => this.healthAt(h, comp.port, comp.cert!)));
+        const why = await Promise.all(remoteHosts(comp).map((h) => this.healthAt(h, comp.port, comp.cert!)));
         // the first address's reason: the name it is known by, when it has one
-        const failed = answers.find((a) => !a.ok);
-        return !failed || answers.some((a) => a.ok) ? { reachable: true } : { reachable: false, error: failed.error };
+        return why.includes(null) ? { reachable: true } : { reachable: false, error: why[0]! };
     }
 
     // never a default id: operations must not land on the wrong machine.
@@ -336,13 +325,13 @@ export class ConnectionPool extends EventEmitter {
                 // a paired computer that dropped may have moved: look for it again
                 if (id !== "local" && !status.connected) this.emit("unreachable", id);
             });
-            if (id !== "local") client.on("facts", (facts: OsFacts & { mdnsName?: string; machineId?: string }) => this.refreshFacts(id, facts));
+            if (id !== "local") client.on("facts", (facts: OsFacts & { mdnsName?: string }) => this.refreshFacts(id, facts));
             this.clients.set(id, client);
             if (id === "local") {
                 // credentials resolved internally via handshake/embedded
                 client.connect("127.0.0.1").catch((err) => logger.debug("[ConnectionPool] local connect failed:", err));
             } else {
-                client.connect(hostsOf(comp), comp.port, comp.token, comp.cert).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
+                client.connect(remoteHosts(comp), comp.port, comp.token, comp.cert).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
             }
         }
         return client;
@@ -470,14 +459,13 @@ export class ConnectionPool extends EventEmitter {
             const id = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             // its .local name, when that name leads to this same certificate
             // from here; else the address it was paired at
-            const named = pairRes.mdnsName && pairRes.mdnsName !== host && (await this.healthAt(pairRes.mdnsName, checked.port, cert)).ok;
+            const named = pairRes.mdnsName && pairRes.mdnsName !== host && (await this.healthAt(pairRes.mdnsName, checked.port, cert)) === null;
             const comp: StoredComputer = {
                 id,
                 name: name || pairRes.hostname || host,
                 host: named ? pairRes.mdnsName! : host,
                 ...(named ? { address: host } : {}),
                 port: checked.port,
-                ...(pairRes.machineId ? { machineId: pairRes.machineId } : {}),
                 token: pairRes.token,
                 cert,
                 ...osFactsOf(pairRes),
