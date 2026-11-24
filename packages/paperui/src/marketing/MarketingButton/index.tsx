@@ -20,12 +20,17 @@ export interface MarketingButtonProps {
     onClick?: (e: MouseEvent) => void;
     class?: string;
     "aria-label"?: string;
+    /** data attributes land on the link or button itself, for a page's own script */
+    [data: `data-${string}`]: string | undefined;
 }
 
 /** A raised paper button for Paperboard's own pages. Icons (svg or img) sit beside the label. */
 export function MarketingButton(props: ParentProps<MarketingButtonProps>) {
     const [local, rest] = splitProps(props, ["variant", "size", "href", "target", "rel", "disabled", "onClick", "class", "children"]);
     const variant = () => local.variant ?? "brand";
+    // a disabled link drops its href: without one it is not a link, so it
+    // can't be followed or focused, and aria-disabled says why
+    const inertLink = () => Boolean(local.href && local.disabled);
     return (
         <span
             class={cx(
@@ -40,11 +45,11 @@ export function MarketingButton(props: ParentProps<MarketingButtonProps>) {
                 component={local.href ? "a" : "button"}
                 {...rest}
                 type={local.href ? undefined : "button"}
-                href={local.href}
+                href={inertLink() ? undefined : local.href}
                 target={local.target}
                 rel={local.rel}
                 disabled={local.href ? undefined : local.disabled}
-                aria-disabled={local.href && local.disabled ? "true" : undefined}
+                aria-disabled={inertLink() ? "true" : undefined}
                 onClick={local.onClick}
                 class={cx(styles.button, styles.icons, local.size === "large" ? styles.large : styles.medium)}
             >

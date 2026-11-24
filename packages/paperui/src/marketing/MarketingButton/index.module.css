@@ -1,17 +1,21 @@
 /* PaperEffect's raised paper, printed with the grain: the face sits on a
-   deeper edge, lifts a little on hover and sinks onto the edge when held. */
+   deeper edge, lifts a little on hover and sinks onto the edge when held.
+   A page recolours the brand button where it sits through
+   --marketing-button-face, -ink and -deep (white paper on a panel's colour),
+   tightens a medium one through --marketing-button-padding and -gap, and
+   rounds it into a pill through --marketing-button-radius. */
 .effect {
     --edge: 5px;
     --lift: -2px;
-    --face: var(--marketing-accent);
-    --deep: color-mix(in srgb, var(--marketing-accent) 70%, var(--paper-marketing-ink));
-    --ink: var(--paper-on-color);
+    --face: var(--marketing-button-face, var(--marketing-accent));
+    --deep: var(--marketing-button-deep, color-mix(in srgb, var(--marketing-accent) 70%, var(--paper-marketing-ink)));
+    --ink: var(--marketing-button-ink, var(--paper-on-color));
     position: relative;
     isolation: isolate;
     display: inline-flex;
     width: fit-content;
     margin: 0 var(--edge) var(--edge) 0;
-    border-radius: 12px;
+    border-radius: var(--marketing-button-radius, 12px);
     transition: transform 0.35s var(--marketing-ease-spring);
 }
 
@@ -85,7 +89,8 @@
 }
 
 .medium {
-    padding: 12px 28px;
+    padding: var(--marketing-button-padding, 12px 28px);
+    gap: var(--marketing-button-gap, 10px);
     font-size: 18px;
 }
 
@@ -102,9 +107,16 @@
         0 16px 34px -14px color-mix(in srgb, var(--marketing-accent) 24%, var(--paper-marketing-ink));
 }
 
+/* ink-black paper on an even darker edge, set in mono: the way to the code */
 .black {
-    --face: color-mix(in srgb, var(--paper-marketing-ink) 88%, var(--paper-on-color));
-    --deep: var(--paper-marketing-ink);
+    --face: color-mix(in srgb, var(--paper-marketing-ink) 60%, black);
+    --deep: color-mix(in srgb, var(--paper-marketing-ink) 24%, black);
+    --ink: var(--paper-on-color);
+}
+
+.black .button {
+    font-family: "SUSE Mono", ui-monospace, monospace;
+    letter-spacing: -0.02em;
 }
 
 /* ink alone: no face, no edge, the words on the surface */
@@ -144,6 +156,14 @@
 .disabled {
     opacity: 0.45;
     pointer-events: none;
+}
+
+/* on a phone the large call to action must not dwarf the lettering above it */
+@media (max-width: 600px) {
+    .large {
+        padding: 12px 26px;
+        font-size: 18px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

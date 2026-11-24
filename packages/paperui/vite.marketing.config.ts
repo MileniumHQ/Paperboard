@@ -5,9 +5,10 @@ import path from "path";
 import { writeFileSync } from "fs";
 
 // PaperUI Marketing builds on its own, after the main library, into the same
-// dist: its own script (marketing.es.js) and its own stylesheet
-// (marketing.css), so a page of the app never carries the site's look and
-// the site never needs the app's components.
+// dist: its own script (marketing.es.js), its framework-free elements
+// (marketing-elements.es.js) and its own stylesheet (marketing.css), so a page
+// of the app never carries the site's look and the site never needs the app's
+// components.
 export default defineConfig({
     base: "./",
     plugins: [
@@ -17,7 +18,10 @@ export default defineConfig({
             entryRoot: "src",
             include: ["src/marketing", "src/utils/cx.ts", "src/utils/style.ts"],
             // one entry file for the subpath export, over the per-file types
-            afterBuild: () => writeFileSync(path.resolve(import.meta.dirname, "dist/marketing.d.ts"), 'export * from "./marketing/index";\n'),
+            afterBuild: () => {
+                writeFileSync(path.resolve(import.meta.dirname, "dist/marketing.d.ts"), 'export * from "./marketing/index";\n');
+                writeFileSync(path.resolve(import.meta.dirname, "dist/marketing-elements.d.ts"), 'export * from "./marketing/elements/index";\n');
+            },
         }),
     ],
     build: {
@@ -25,8 +29,11 @@ export default defineConfig({
         cssCodeSplit: false,
         emptyOutDir: false,
         lib: {
-            entry: { marketing: path.resolve(import.meta.dirname, "src/marketing/index.ts") },
-            fileName: (format) => `marketing.${format === "es" ? "es.js" : "cjs"}`,
+            entry: {
+                marketing: path.resolve(import.meta.dirname, "src/marketing/index.ts"),
+                "marketing-elements": path.resolve(import.meta.dirname, "src/marketing/elements/index.ts"),
+            },
+            fileName: (format, entry) => `${entry}.${format === "es" ? "es.js" : "cjs"}`,
             formats: ["es", "cjs"],
         },
         rollupOptions: {

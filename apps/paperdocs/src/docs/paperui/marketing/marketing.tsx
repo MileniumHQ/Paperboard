@@ -1,4 +1,4 @@
-import { createSignal, For } from "solid-js";
+import { createSignal, For, onCleanup, onMount } from "solid-js";
 import {
     PaperCard,
     PaperCode,
@@ -11,23 +11,18 @@ import {
 import {
     MarketingButton,
     MarketingCard,
-    MarketingIconField,
     MarketingProgress,
     MarketingSurface,
     MarketingText,
+    createIconPlay,
 } from "@mileniumhq/paperui/marketing";
 
-// A demo surface is a stage of its own, a fixed height so the icons have room to land.
+// A demo surface is a stage of its own, a fixed height so the icons have room to play.
 const stage = (rows: number) => ({ "min-height": `calc(${getVarCss("uigap")} * ${rows})`, "border-radius": getVarCss("border-radius") });
 const centered = { display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: getVarCss("uigap-double"), padding: getVarCss("uigap-double") } as const;
 
-const DEMO_ICONS = [
-    { src: "/paperboard.png", x: 0.5, y: 0.2 },
-    { src: "/pictures/agents.png", x: 0.14, y: 0.3 },
-    { src: "/pictures/game-server.png", x: 0.86, y: 0.28 },
-    { src: "/pictures/blocks.png", x: 0.2, y: 0.78 },
-    { src: "/pictures/discord-bot.png", x: 0.8, y: 0.8 },
-];
+const DEMO_ICONS = ["/pictures/agents.png", "/pictures/game-server.png", "/pictures/blocks.png", "/pictures/discord-bot.png", "/pictures/crane.png"];
+const DEMO_ICON_SIZE = 72;
 
 const PICKS = [
     { name: "Game Server", banner: "/screens/gameserver-1.png", icon: "/pictures/game-server.png", accent: "#dc204c", description: "Run servers for your favorite games" },
@@ -61,23 +56,38 @@ function PropTable(props: { rows: [string, string, string, string][] }) {
     );
 }
 
-function IconFieldDemo() {
-    const [run, setRun] = createSignal(0);
-    const [leaving, setLeaving] = createSignal(false);
+function IconPlayDemo() {
+    let field: HTMLDivElement | undefined;
+    let copy: HTMLDivElement | undefined;
+    const icons: HTMLImageElement[] = [];
+    onMount(() => {
+        if (!field || !copy) throw new Error("The playground demo did not render");
+        const play = createIconPlay(field, icons, {
+            size: DEMO_ICON_SIZE,
+            avoid: () => (copy ? [copy] : []),
+            reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        });
+        onCleanup(play.stop);
+    });
     return (
-        <MarketingSurface style={stage(32)}>
-            <For each={[run()]}>{() => <MarketingIconField icons={DEMO_ICONS} size={84} followAfter={1} leaving={leaving()} />}</For>
-            <div style={{ ...centered, "min-height": `calc(${getVarCss("uigap")} * 32)` }}>
-                <MarketingButton
-                    onClick={() => {
-                        if (leaving()) {
-                            setLeaving(false);
-                            setRun((n) => n + 1);
-                        } else setLeaving(true);
-                    }}
-                >
-                    {leaving() ? "Throw them in again" : "Send them off"}
-                </MarketingButton>
+        <MarketingSurface style={stage(26)}>
+            <div ref={field} style={{ position: "relative", "min-height": `calc(${getVarCss("uigap")} * 26)`, ...centered }}>
+                <div ref={copy}>
+                    <MarketingText as="p" text="Fling one" size={56} />
+                </div>
+                <For each={DEMO_ICONS}>
+                    {(src) => (
+                        <img
+                            ref={(el) => icons.push(el)}
+                            src={src}
+                            alt=""
+                            draggable={false}
+                            width={DEMO_ICON_SIZE}
+                            height={DEMO_ICON_SIZE}
+                            style={{ position: "absolute", top: 0, left: 0, cursor: "grab", "touch-action": "none" }}
+                        />
+                    )}
+                </For>
             </div>
         </MarketingSurface>
     );
@@ -164,14 +174,16 @@ export function Welcome(props: { onNext: () => void }) {
             <PaperText preset="subheader" as="h2" id="text">MarketingText</PaperText>
             <PaperText preset="body" as="p">
                 Display lettering: white Nunito with an accent-tinted inner edge, a soft drop and the grain.
-                The words stay in the element for screen readers, and the drawing shrinks to fit a narrow container.
+                Screen readers hear the words, and the drawing shrinks to fit a narrow container.
                 Use it for one heading per screen, not for body copy.
+                It draws the <PaperCode>{"<marketing-text>"}</PaperCode> element, which a page without Solid uses directly (see <PaperCode>Without Solid</PaperCode> below).
             </PaperText>
             <PropTable
                 rows={[
                     ["text", "string", "Required", "The words."],
                     ["size", "number", "Required", "Font size in pixels; the shadows and grain scale with it."],
                     ["as", '"h1" | "h2" | "h3" | "p" | "span"', '"span"', "The element that carries the words."],
+                    ["fluid", "boolean", "false", "The page sets the font size instead, so a heading's wrapped lines share one size."],
                 ]}
             />
 
@@ -198,9 +210,27 @@ export function Welcome(props: { onNext: () => void }) {
                     ["size", '"medium" | "large"', '"medium"', "Large for the one action a screen leads to."],
                     ["onClick", "(e: MouseEvent) => void", "No default", "Called on a press."],
                     ["href", "string", "No default", "Makes the button a link; target and rel pass through."],
-                    ["disabled", "boolean", "false", "Fades the button and ignores presses."],
+                    ["disabled", "boolean", "false", "Fades the button and ignores presses; a disabled link drops its href."],
                 ]}
             />
+            <PaperText preset="body" as="p">
+                A page recolors and reshapes the buttons where they sit with these properties, such as white paper on a panel's color:
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Property</th>
+                        <th>Default</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><PaperCode>--marketing-button-face</PaperCode></td><td>The surface's accent</td></tr>
+                    <tr><td><PaperCode>--marketing-button-ink</PaperCode></td><td>White</td></tr>
+                    <tr><td><PaperCode>--marketing-button-deep</PaperCode></td><td>The accent sunk toward the ink</td></tr>
+                    <tr><td><PaperCode>--marketing-button-radius</PaperCode></td><td><PaperCode>12px</PaperCode></td></tr>
+                    <tr><td><PaperCode>--marketing-button-padding</PaperCode>, <PaperCode>--marketing-button-gap</PaperCode></td><td>A medium button's own</td></tr>
+                </tbody>
+            </PaperTable>
 
             <PaperText preset="subheader" as="h2" id="card">MarketingCard</PaperText>
             <PaperText preset="body" as="p">
@@ -241,40 +271,56 @@ export function Welcome(props: { onNext: () => void }) {
                 </MarketingSurface>
             </PaperCard>
 
-            <PaperText preset="subheader" as="h2" id="icon-field">MarketingIconField</PaperText>
+            <PaperText preset="subheader" as="h2" id="icon-play">Icon playground</PaperText>
             <PaperText preset="body" as="p">
-                The site's bouncing icons as a layer over the surface.
-                The first icon floats in alone; after <PaperCode>followAfter</PaperCode> seconds the rest are thrown in, bounce off the edges and each other, and glide to their resting places, leaning the way the site's icons do.
-                Setting <PaperCode>leaving</PaperCode> sends them up off the top, nearest the bottom centre first, and <PaperCode>onLeft</PaperCode> runs once they are gone.
-                The layer takes no clicks, so whatever sits under it stays usable.
+                Paper icons to fling, as on the site's last screen and the phone's welcome.{" "}
+                <PaperCode>createIconPlay</PaperCode> scatters the icons around the copy the first time the field is on screen; a dragged icon is tossed and bounces off the edges, the copy and the other icons by their visible shapes, and a tap spins one in place.
+                Icons never cover the copy, and the simulation sleeps while the field is off screen.
+                Give the field <PaperCode>position: relative</PaperCode>, and the icons <PaperCode>position: absolute</PaperCode> at the top left, at <PaperCode>size</PaperCode> pixels square.
             </PaperText>
             <PaperCard data-docs-demo padding="double" surface="front">
-                <IconFieldDemo />
+                <IconPlayDemo />
             </PaperCard>
             <PaperCode block language="tsx">
-{`<MarketingIconField
-    icons={[
-        { src: "/paperboard.png", x: 0.5, y: 0.2 },
-        { src: "/pictures/agents.png", x: 0.15, y: 0.3 },
-        { src: "/pictures/game-server.png", x: 0.85, y: 0.3 },
-    ]}
-    leaving={leaving()}
-    onLeft={() => setStage("loading")}
-/>`}
+{`onMount(() => {
+    const play = createIconPlay(field, icons, {
+        size: 72,
+        avoid: () => [copy],
+        reduceMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+        onTap: () => haptic("light"),
+    });
+    play.ready.catch((err) => showError("The icons couldn't be placed", err));
+    onCleanup(play.stop);
+});`}
             </PaperCode>
             <PropTable
                 rows={[
-                    ["icons", "MarketingIcon[]", "Required", "Each icon's src and resting place, x and y as fractions of the field."],
-                    ["size", "number", "120", "Icon size in pixels."],
-                    ["followAfter", "number", "2.1", "Seconds after the first icon before the rest are thrown in."],
-                    ["leaving", "boolean", "false", "Sends every icon up off the field."],
-                    ["onLeft", "() => void", "No default", "Called once every icon has left."],
+                    ["size", "number", "Required", "Each icon's size in pixels."],
+                    ["avoid", "() => Element[]", "Required", "The copy the icons are scattered around and bounce off."],
+                    ["reduceMotion", "boolean", "Required", "No tossing or spinning: icons stay where they are put."],
+                    ["onImpact", "() => void", "No default", "An icon hit an edge or another icon hard, for a haptic."],
+                    ["onTap", "() => void", "No default", "An icon was tapped rather than dragged."],
                 ]}
             />
+            <PaperText preset="body" as="p">
+                It returns <PaperCode>ready</PaperCode>, which rejects if the icons' shapes can't be read, and <PaperCode>stop()</PaperCode>, which ends it and hands the icons back to the page's own styles.
+                The field's <PaperCode>data-play-state</PaperCode> is <PaperCode>moving</PaperCode> or <PaperCode>resting</PaperCode>, and a held icon has <PaperCode>data-dragging</PaperCode>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="without-solid">Without Solid</PaperText>
+            <PaperText preset="body" as="p">
+                A page that runs no framework, such as the prerendered site, imports <PaperCode>@mileniumhq/paperui/marketing/elements</PaperCode>: no components and no stylesheet, only <PaperCode>defineMarketingText()</PaperCode> and <PaperCode>createIconPlay</PaperCode>.
+                Load it as a classic script in the head, so each heading is drawn as the parser reaches it, and write the lettering as an element.{" "}
+                <PaperCode>fluid</PaperCode> takes the size from the page's <PaperCode>font-size</PaperCode>.
+                Buttons are plain markup, so a server-rendered <PaperCode>MarketingButton</PaperCode> needs no script.
+            </PaperText>
+            <PaperCode block language="html">
+{`<marketing-text size="48" text="Paperboard">Paperboard</marketing-text>`}
+            </PaperCode>
 
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperTextList>
-                <li>Under reduced motion the icons appear at rest and fade when they leave, the progress bar stops sweeping, and presses and color changes snap.</li>
+                <li>Under reduced motion the icons stay where they are put, the progress bar stops sweeping, and presses and color changes snap.</li>
                 <li>A surface's accent recolors every component inside it: the text's inner edge, the brand button's face and edge, and the cards.</li>
                 <li>The grain is part of each component, so there is nothing else to load.</li>
             </PaperTextList>

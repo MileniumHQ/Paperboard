@@ -32,6 +32,11 @@
             "require": "./dist/marketing.cjs"
         },
         "./style.css": "./dist/paperui.css",
+        "./marketing/elements": {
+            "types": "./dist/marketing-elements.d.ts",
+            "import": "./dist/marketing-elements.es.js",
+            "require": "./dist/marketing-elements.cjs"
+        },
         "./marketing.css": "./dist/marketing.css",
         "./panel.css": "./dist/panel.css",
         "./tokens.css": "./dist/tokens.css",
