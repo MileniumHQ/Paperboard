@@ -185,6 +185,7 @@ describe("ssh config", () => {
     test("a file that includes itself, a bad port or an unknown token is an error that names it", () => {
         expect(() => resolveSshTarget("x", { sshDir: sshDir("Include config\n"), localUser: "me" })).toThrow("Include goes deeper");
         expect(() => resolveSshTarget("x", { sshDir: sshDir("Port twenty\n"), localUser: "me" })).toThrow('Port "twenty"');
+        expect(() => resolveSshTarget("x", { sshDir: sshDir('IdentityFile "unclosed\n'), localUser: "me" })).toThrow(`~${path.sep}.ssh${path.sep}config:1: a quote isn't closed`);
         expect(() => resolveSshTarget("x", { sshDir: sshDir("IdentityFile ~/.ssh/%C\n"), localUser: "me" })).toThrow("%C");
     });
 });

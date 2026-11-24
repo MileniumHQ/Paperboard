@@ -2,10 +2,11 @@
 // does, for the settings setting up a computer needs: HostName, User, Port,
 // IdentityFile, the known_hosts files and HostKeyAlias. Lines for other
 // keywords are skipped unread. Of those, ProxyJump, ProxyCommand and
-// CertificateFile do change how ssh connects, and aren't followed. Host blocks match the name the person typed (an
-// alias), first value wins, IdentityFile adds up, and Include pulls other
-// files in where it stands. Match blocks need state this doesn't have
-// (exec, user, address), so their contents are skipped as a whole.
+// CertificateFile do change how ssh connects, and aren't followed. Host
+// blocks match the name the person typed (an alias), first value wins,
+// IdentityFile adds up, and Include pulls other files in where it stands.
+// Match blocks need state this doesn't have (exec, user, address), so
+// their contents are skipped as a whole.
 import * as fs from "fs";
 import * as path from "path";
 import { errorCode } from "@mileniumhq/paperapi/errors";
@@ -89,12 +90,15 @@ function readSettings(host: string, sshDir: string): RawSettings {
 }
 
 function applyFile(file: string, host: string, sshDir: string, settings: RawSettings, depth: number): void {
-    if (depth > MAX_INCLUDE_DEPTH) throw new Error(`${file}: Include goes deeper than ${MAX_INCLUDE_DEPTH} files; is a file including itself?`);
+    // named as people write it: ~/.ssh/config
+    const home = path.dirname(sshDir);
+    const shown = file.startsWith(home + path.sep) ? `~${file.slice(home.length)}` : file;
+    if (depth > MAX_INCLUDE_DEPTH) throw new Error(`${shown}: Include goes deeper than ${MAX_INCLUDE_DEPTH} files; is a file including itself?`);
     const text = fs.readFileSync(file, "utf8");
     // lines before the first Host or Match apply to every host
     let applies = true;
     text.split(/\r?\n/).forEach((line, index) => {
-        const parsed = parseLine(line, `${file}:${index + 1}`);
+        const parsed = parseLine(line, `${shown}:${index + 1}`);
         if (!parsed) return;
         const [keyword, args] = parsed;
         if (keyword === "host") {

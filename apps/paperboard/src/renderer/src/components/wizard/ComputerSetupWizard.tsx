@@ -76,10 +76,13 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // whether SSH answers there too: then the computer is set up over SSH
     const ssh = createRead(({ host }) => computerSetupApi.sshCheck(host), { source: checking });
     const sshAvailable = () => !ssh.loading() && ssh.error() === null && ssh.value()?.ssh === true;
-    // a check that can't run (an ssh config it can't read) says why, or SSH setup would just not be offered
-    createEffect(on(ssh.error, (err) => {
-        if (err !== null) showError("Couldn't check for SSH", err);
-    }));
+    // a check that can't run (an ssh config it can't read) says why where the
+    // address is, for as long as it holds, or SSH setup would just not be offered
+    const SshProblem: Component = () => (
+        <Show when={ssh.error()}>
+            {(err) => <PaperError title="Couldn't check for SSH" error={err()} />}
+        </Show>
+    );
     // a computer picked from the nearby list counts as reachable while it is checked
     const [picked, setPicked] = createSignal(false);
     const answered = () => !probe.loading() && (probe.value() !== undefined || probe.error() !== null);
@@ -453,6 +456,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                         </PaperFlex>
+                        <SshProblem />
                     </PaperFlex>
                 </PaperFlex>
             </PaperWizardStep>
@@ -567,6 +571,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 </PaperText>
                             </Show>
                         </PaperFlex>
+                        <SshProblem />
 
                         <PaperFlex direction="column" gap="half">
                             <PaperInput
