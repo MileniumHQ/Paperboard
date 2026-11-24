@@ -19,7 +19,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { EXIT, type ServiceTarget } from "./cli";
-import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 
 export interface InstallRequest {
     target: ServiceTarget;
@@ -46,6 +46,8 @@ interface Plan {
     logs: string[];
     // how to read the PID the manager started, for the readiness check
     mainPid: () => number | null;
+    // the file whose last lines a failed start shows
+    logFile?: string;
     notes: string[];
 }
 
@@ -277,6 +279,7 @@ function launchdPlan(request: InstallRequest, execStart: (dataDir?: string) => s
         commands: [["launchctl", "bootstrap", domain, file]],
         dataDir,
         logs: [`tail -f ${logFile}`, `launchctl print ${domain}/${label}`],
+        logFile,
         mainPid: () => {
             const printed = tryRun(["launchctl", "print", `${domain}/${label}`]);
             const pid = Number(/^\s*pid = (\d+)/m.exec(printed.stdout)?.[1]);
@@ -298,11 +301,60 @@ function launchdLoaded(domain: string, label: string): boolean {
 // a program that answers the service control manager, which papercrane is
 // not. A user task runs while that user is signed in (like a LaunchAgent); a
 // --system task starts at boot with nobody signed in, as an account whose
-// password is never stored (S4U).
+// password is never stored (S4U). Every question to Task Scheduler goes
+// through its COM interface, whose answers don't depend on the language
+// Windows is in (schtasks /Query prints a translated status).
+
+/** a PowerShell string literal */
+function psString(text: string): string {
+    return `'${text.replace(/'/g, "''")}'`;
+}
+
+function powershell(script: string, what: string): string {
+    const result = tryRun(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference = 'Stop'; ${script}`]);
+    if (result.status !== 0) throw new Error(`Could not ${what}: ${`${result.stderr}${result.stdout}`.trim() || `PowerShell exited with ${result.status}`}`);
+    return result.stdout.trim();
+}
 
 function isWindowsAdmin(): boolean {
-    // `net session` answers only an elevated administrator
-    return tryRun(["net", "session"]).status === 0;
+    // the token itself, which no service (like the Server service `net session` needs) can hide
+    return powershell(
+        "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)",
+        "check whether this terminal runs as an administrator",
+    ) === "True";
+}
+
+interface WindowsTaskState {
+    exists: boolean;
+    running: boolean;
+    // the daemon the running task started, once it is up
+    pid: number | null;
+}
+
+/**
+ * Whether a task exists and runs, and the PID of the papercrane it runs: the
+ * task's running instance names the process it started (conhost), and the
+ * daemon is the process of this program below it.
+ */
+function windowsTaskState(task: string, exe: string | null): WindowsTaskState {
+    const cut = task.lastIndexOf("\\");
+    const folder = cut > 0 ? task.slice(0, cut) : "\\";
+    const name = task.slice(cut + 1);
+    const answer = powershell([
+        "$service = New-Object -ComObject Schedule.Service; $service.Connect()",
+        // a missing task or folder (0x80070002, 0x80070003) is an answer; any other failure is not
+        `try { $task = $service.GetFolder(${psString(folder)}).GetTask(${psString(name)}) } catch { $e = if ($_.Exception.InnerException) { $_.Exception.InnerException } else { $_.Exception }; if ($e.HResult -in -2147024894, -2147024893) { '{"exists":false,"running":false,"pid":null}'; exit 0 }; throw }`,
+        "$running = @($task.GetInstances(0))",
+        "if ($running.Count -eq 0) { '{\"exists\":true,\"running\":false,\"pid\":null}'; exit 0 }",
+        ...(exe === null ? ["'{\"exists\":true,\"running\":true,\"pid\":null}'; exit 0"] : []),
+        "$engine = [int]$running[0].EnginePID",
+        "$all = @(Get-CimInstance Win32_Process); $byId = @{}; foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }",
+        `$daemon = $all | Where-Object { $_.ExecutablePath -eq ${psString(exe ?? "")} } | Where-Object { $p = $_; $found = $false; for ($i = 0; $i -lt 4 -and $p; $i++) { if ([int]$p.ProcessId -eq $engine) { $found = $true; break }; $p = $byId[[int]$p.ParentProcessId] }; $found } | Select-Object -First 1`,
+        // ($pid is PowerShell's own, read-only)
+        "$daemonPid = if ($daemon) { [string]$daemon.ProcessId } else { 'null' }",
+        "'{\"exists\":true,\"running\":true,\"pid\":' + $daemonPid + '}'",
+    ].join("; "), `ask Task Scheduler about ${task}`);
+    return JSON.parse(answer) as WindowsTaskState;
 }
 
 /** an account as Task Scheduler names it: DOMAIN\user */
@@ -384,9 +436,15 @@ export function taskSchedulerXml(options: {
     ].join("\r\n");
 }
 
-/** the task's path in Task Scheduler, under a Paperboard folder */
-function windowsTaskName(name: string): string {
-    return `\\Paperboard\\${name}`;
+/**
+ * The task's path in Task Scheduler, whose names are one namespace for the
+ * whole computer: a system task is \\Paperboard\\<name>, and each account's
+ * user task has a folder of its own, so no two installs replace each other.
+ */
+function windowsTaskName(scope: "user" | "system", name: string): string {
+    if (scope === "system") return `\\Paperboard\\${name}`;
+    const account = os.userInfo().username.replace(/[\\/:*?"<>|]/g, "_");
+    return `\\Paperboard\\${account}\\${name}`;
 }
 
 function windowsTaskFile(scope: "user" | "system", name: string): string {
@@ -400,31 +458,11 @@ function windowsFirewallRule(name: string): string {
     return `Paperboard server daemon (${name})`;
 }
 
-function windowsTaskRunning(task: string): boolean {
-    const query = tryRun(["schtasks", "/Query", "/TN", task, "/FO", "CSV", "/NH"]);
-    return query.status === 0 && /"Running"/i.test(query.stdout);
-}
-
 function windowsFirewallRuleExists(rule: string): boolean {
     return tryRun(["netsh", "advfirewall", "firewall", "show", "rule", `name=${rule}`]).status === 0;
 }
 
-// the daemon the task started: the PID in this data directory's handshake,
-// when that process is this papercrane
-function windowsDaemonPid(dataDir: string, exe: string): number | null {
-    let pid: number;
-    try {
-        pid = Number(JSON.parse(fs.readFileSync(path.join(dataDir, "local", "crane.json"), "utf8"))?.pid);
-    } catch (err) {
-        if (errorCode(err) === "ENOENT") return null;
-        throw new Error(`${path.join(dataDir, "local", "crane.json")} could not be read: ${errorMessage(err)}`);
-    }
-    if (!Number.isInteger(pid) || pid <= 0) return null;
-    const running = tryRun(["powershell", "-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).Path`]);
-    return running.stdout.trim().toLowerCase() === exe.toLowerCase() ? pid : null;
-}
-
-function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => string[]): Plan & { task: string; firewallRule: string | null } {
+function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => string[]): Plan & { task: string; exe: string; firewallRule: string | null } {
     const { target } = request;
     const account = windowsAccount(target.scope === "system" ? request.runAs : undefined);
     const otherAccount = target.scope === "system" && request.runAs !== undefined && account.toLowerCase() !== windowsAccount(undefined).toLowerCase();
@@ -433,7 +471,18 @@ function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => s
     }
     const dataDir = request.serve.dataDir ?? path.join(os.homedir(), ".paperboard");
     const [command, ...args] = execStart(target.scope === "system" ? dataDir : request.serve.dataDir);
-    const task = windowsTaskName(target.name);
+    const task = windowsTaskName(target.scope, target.name);
+    // the other scope's task of this name would run a second daemon
+    const other = windowsTaskName(target.scope === "user" ? "system" : "user", target.name);
+    if (!target.dryRun && windowsTaskState(other, command!).exists) {
+        throw new Error(target.scope === "user"
+            ? `A system service named ${target.name} is installed. Remove it first: from a terminal opened with Run as administrator, run papercrane uninstall-service --system${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`
+            : `You have a user service named ${target.name}. Remove it first: papercrane uninstall-service${target.name !== "papercrane" ? ` --name ${target.name}` : ""}`);
+    }
+    // conhost --headless gives the daemon a console with no window: a console
+    // program started at sign-in would otherwise open one on the desktop,
+    // and closing it would stop the daemon
+    const conhost = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "conhost.exe");
     const firewallRule = target.scope === "system" ? windowsFirewallRule(target.name) : null;
     const notes = target.scope === "user"
         ? [
@@ -445,10 +494,11 @@ function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => s
     return {
         unit: task,
         task,
+        exe: command!,
         firewallRule,
         file: windowsTaskFile(target.scope, target.name),
         encoding: "utf16le",
-        contents: taskSchedulerXml({ scope: target.scope, account, command: command!, args, dataDir }),
+        contents: taskSchedulerXml({ scope: target.scope, account, command: conhost, args: ["--headless", command!, ...args], dataDir }),
         commands: [
             ["schtasks", "/Create", "/TN", task, "/XML", windowsTaskFile(target.scope, target.name), "/F"],
             ...(firewallRule
@@ -457,8 +507,9 @@ function windowsPlan(request: InstallRequest, execStart: (dataDir?: string) => s
             ["schtasks", "/Run", "/TN", task],
         ],
         dataDir,
-        logs: [path.join(dataDir, "logs"), `schtasks /Query /TN ${task} /V /FO LIST`],
-        mainPid: () => windowsDaemonPid(dataDir, command!),
+        logs: [path.join(dataDir, "logs", "paperboard.log"), `schtasks /Query /TN ${task} /V /FO LIST`],
+        logFile: path.join(dataDir, "logs", "paperboard.log"),
+        mainPid: () => windowsTaskState(task, command!).pid,
         notes,
     };
 }
@@ -505,7 +556,7 @@ function recentLogs(plan: Plan, request: { target: ServiceTarget }): string {
         const out = tryRun(journal);
         return `${out.stdout}${out.stderr}`.trim();
     }
-    const log = /tail -f (.*)$/.exec(plan.logs[0])?.[1];
+    const log = plan.logFile;
     if (log && fs.existsSync(log)) return fs.readFileSync(log, "utf8").split("\n").slice(-20).join("\n").trim();
     return "";
 }
@@ -570,7 +621,9 @@ export async function installService(request: InstallRequest): Promise<number> {
     }
     if (process.platform === "win32") {
         const win = plan as ReturnType<typeof windowsPlan>;
-        if (windowsTaskRunning(win.task)) {
+        // an update replaces the running daemon: /Create under a running
+        // instance would leave the old one running with its old options
+        if (windowsTaskState(win.task, win.exe).running) {
             const end = ["schtasks", "/End", "/TN", win.task];
             run(end);
             ran.push(end);
@@ -644,12 +697,15 @@ export async function uninstallService(target: ServiceTarget): Promise<number> {
         stop = [[...ctl, "disable", "--now", unit]];
         after = [[...ctl, "daemon-reload"]];
     } else if (process.platform === "win32") {
-        const task = windowsTaskName(target.name);
+        const task = windowsTaskName(target.scope, target.name);
         file = windowsTaskFile(target.scope, target.name);
-        stop = !target.dryRun && !windowsTaskRunning(task) ? [] : [["schtasks", "/End", "/TN", task]];
+        // the task and its firewall rule go before the file that marks the
+        // install, so a failed step can be run again
+        const state = target.dryRun ? { exists: true, running: true } : windowsTaskState(task, null);
         const rule = windowsFirewallRule(target.name);
-        after = [
-            ["schtasks", "/Delete", "/TN", task, "/F"],
+        stop = [
+            ...(state.running ? [["schtasks", "/End", "/TN", task]] : []),
+            ...(state.exists ? [["schtasks", "/Delete", "/TN", task, "/F"]] : []),
             ...(target.scope === "system" && (target.dryRun || windowsFirewallRuleExists(rule))
                 ? [["netsh", "advfirewall", "firewall", "delete", "rule", `name=${rule}`]]
                 : []),
