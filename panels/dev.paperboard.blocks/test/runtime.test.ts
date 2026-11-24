@@ -235,6 +235,27 @@ describe("backups", () => {
         expect((await s.call.loadFlows({ project: id })).workspace.blocks?.blocks).toHaveLength(1);
     });
 
+    test("a restore it took that then can't be kept puts the projects back as the files are", async () => {
+        const s = setup();
+        await s.ready;
+        await s.make("Mine", flows(onRun(say("one"))));
+        const original = { index: structuredClone(s.files.get("projects.json")) };
+        await s.runtime.backup.beforeRestore(null);
+        s.files.set("projects.json", { version: 1, projects: [{ id: "p-old", name: "Old", enabled: true, createdAt: 1, editedAt: 1 }] });
+        s.files.set("projects/p-old.json", flows(onRun(say("old"))));
+        await s.runtime.backup.restored();
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Old"]);
+        // the daemon couldn't finish the restore: the files go back, and it says so
+        s.files.set("projects.json", original.index);
+        await s.runtime.backup.resume();
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Mine"]);
+        expect(s.runtime.backup.paused()).toBe(false);
+        // the next restore that fails part way doesn't read again
+        await s.runtime.backup.beforeRestore(null);
+        await s.runtime.backup.resume();
+        expect(s.state().projects.map((p) => p.name)).toEqual(["Mine"]);
+    });
+
     test("a target is refused, as Blocks backs up as a whole", async () => {
         const s = setup();
         await s.ready;
