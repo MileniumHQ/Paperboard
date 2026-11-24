@@ -28,6 +28,8 @@ import { certFingerprint } from "../security/pinnedTls";
 import { logger } from "../core/logger";
 import { PanelServicesManager } from "../panels/panelServices";
 import { backupServiceFor } from "../rpc/backups";
+import { problemsFor } from "../rpc/problems";
+import { clipProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { readDaemonStatus } from "../cli/localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFile";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -417,11 +419,23 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             lifecycle.arm();
             if (options.exitWithParent) followParent();
 
-            // a restore a crash interrupted is rolled back before any panel reads its files
+            // a restore a crash interrupted is rolled back before any panel reads its
+            // files; a panel whose files could not be put back says so, and its
+            // service stays stopped rather than run on them half swapped
             try {
-                backupServiceFor(engine).recoverAtStartup();
+                for (const failed of backupServiceFor(engine).recoverAtStartup()) {
+                    const message = `${failed.error}. Its original files are kept at ${failed.kept}, and its service stays stopped until Paperboard starts again and tries once more.`;
+                    if (failed.panelId === null) {
+                        // quiet: a journal no one can read names no panel to tell; the log is all there is
+                        logger.error(`[Paperboard Server] an interrupted restore could not be read or undone: ${message}`);
+                        continue;
+                    }
+                    problemsFor(engine).report(failed.panelId, { key: "paperboard:interrupted-restore", title: "An interrupted restore couldn't be undone", message: clipProblemReport({ title: "", message }).message });
+                    panelServices.holdBack(failed.panelId, `An interrupted restore couldn't be undone: ${message}`);
+                }
             } catch (err) {
-                logger.error("[Paperboard Server] an interrupted restore could not be rolled back; its files stay in backups/.work:", err);
+                // quiet: no panel is running yet to show it; any interrupted restore stays in backups/.work for the next start
+                logger.error("[Paperboard Server] interrupted restores could not be looked for; any stay in backups/.work:", err);
             }
 
             // Start background services for installed panels

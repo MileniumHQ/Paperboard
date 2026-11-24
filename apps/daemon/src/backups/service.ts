@@ -21,9 +21,10 @@ import { hashFile } from "../core/storage";
 import { logger } from "../core/logger";
 import { createBackupArchive, extractBackupArchive, type ArchiveContents } from "./archive";
 import { BackupLocations, conflict, notFound } from "./locations";
-import { recoverRestores, swapIn } from "./restore";
+import { recoverRestores, swapIn, type UnrecoveredRestore } from "./restore";
 import { GOOGLE_ENDPOINTS, type DriveEndpoints } from "./driveStore";
-import { BACKUP_ID_RE, MAX_BACKUP_PATHS, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore } from "./types";
+import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
+import { BACKUP_ID_RE, MAX_BACKUP_PATHS, backupPathsProblem, newBackupId, type BackupProgress, type BackupProgressChange, type BackupRecord, type BackupStep, type BackupStore } from "./types";
 import { isBackupPath } from "@mileniumhq/paperapi/backups";
 import { BACKUP_LABEL_MAX } from "@mileniumhq/paperapi/protocol";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -56,17 +57,10 @@ export function backupContents(answer: unknown): ArchiveContents {
     const refuse = (why: string) => new Error(`The panel's beforeBackup answered something that is not a backup's contents: ${why}`);
     if (!answer || typeof answer !== "object") throw refuse("it is not an object");
     const { paths, exclude = [], skip = [], data = null } = answer as Record<string, unknown>;
-    const list = (value: unknown, name: string): string[] => {
-        if (!Array.isArray(value) || value.length > MAX_BACKUP_PATHS) throw refuse(`${name} must list at most ${MAX_BACKUP_PATHS} paths`);
-        for (const entry of value) if (!isBackupPath(entry)) throw refuse(`${JSON.stringify(entry)} in ${name} is not a path in the panel's storage`);
-        if (new Set(value).size !== value.length) throw refuse(`${name} lists a path twice`);
-        return value as string[];
-    };
-    const inside = (child: string, parent: string) => parent === "" || child.startsWith(`${parent}/`);
-    const named = list(paths, "paths");
-    for (const a of named) for (const b of named) if (a !== b && inside(a, b)) throw refuse(`${a} is inside ${b === "" ? "the whole storage" : b}, which it also names`);
-    const left = list(exclude, "exclude");
-    for (const e of left) if (e === "" || !named.some((p) => inside(e, p))) throw refuse(`${JSON.stringify(e)} in exclude is not under one of its paths`);
+    const problem = backupPathsProblem(paths, exclude);
+    if (problem) throw refuse(problem);
+    const named = paths as string[];
+    const left = exclude as string[];
     if (!Array.isArray(skip) || skip.length > MAX_BACKUP_PATHS || skip.some((n) => typeof n !== "string" || !isBackupPath(n) || n === "" || n.includes("/"))) {
         throw refuse("skip must list file names");
     }
@@ -82,6 +76,8 @@ export class BackupService {
     /** the running backups and restores, by panel and target */
     private readonly running = new Map<string, BackupProgress & { sentAt: number }>();
     private readonly progressListeners = new Set<(change: BackupProgressChange) => void>();
+    /** one panel's copies and swaps run one after another, whatever their target */
+    private readonly panelTurns = new Map<string, SerialQueue>();
 
     constructor(
         private readonly engine: PaperCraneEngine,
@@ -93,9 +89,17 @@ export class BackupService {
         this.workDir = path.join(root, ".work");
     }
 
-    /** startup only, before panel services start: rolls back a restore a crash interrupted */
-    recoverAtStartup(): void {
-        recoverRestores(this.workDir, (panelId) => this.engine.resolveAppFilesDir(panelId));
+    /** startup only, before panel services start: rolls back each restore a crash
+     * interrupted, and gives the ones that could not be */
+    recoverAtStartup(): UnrecoveredRestore[] {
+        return recoverRestores(this.workDir, (panelId) => this.engine.resolveAppFilesDir(panelId));
+    }
+
+    /** runs fn when the panel's earlier copies and swaps are done, holding its operation lock */
+    private turn<T>(panelId: string, fn: () => Promise<T>): Promise<T> {
+        let queue = this.panelTurns.get(panelId);
+        if (!queue) this.panelTurns.set(panelId, (queue = new SerialQueue()));
+        return queue.run(() => this.engine.withPanelOperation(panelId, fn));
     }
 
     // ─── Progress ───────────────────────────────────────────────────────
@@ -129,7 +133,7 @@ export class BackupService {
     }
 
     /** runs one backup or restore of a target, reporting its steps; one at a time per target */
-    private async job(panelId: string, target: string | null, kind: "create" | "restore", run: (report: Report) => Promise<BackupRecord>): Promise<BackupRecord> {
+    private async job(panelId: string, target: string | null, kind: "create" | "restore", first: BackupStep, run: (report: Report) => Promise<BackupRecord>): Promise<BackupRecord> {
         const id = key(panelId, target);
         const current = this.running.get(id);
         if (current) throw conflict(`A backup ${current.kind === "create" ? "is being made" : "is being restored"} for this ${target === null ? "panel" : "target"}`);
@@ -142,7 +146,7 @@ export class BackupService {
             this.running.set(id, { ...progress, sentAt: due ? now : previous!.sentAt });
             if (due) this.emit({ panelId, target, progress });
         };
-        report("preparing");
+        report(first);
         try {
             fs.mkdirSync(this.workDir, { recursive: true });
             return await run(report);
@@ -161,11 +165,11 @@ export class BackupService {
         const hooks = this.engine.backupHooks(panelId);
         if (!hooks?.has("before-backup")) throw conflict(hooks ? "This panel's service has no beforeBackup, so it can't be backed up" : "The panel's service is not running, so it can't be backed up");
         const store = this.locations.storeFor(panelId);
-        return this.job(panelId, target, "create", async (report) => {
+        return this.job(panelId, target, "create", "preparing", async (report) => {
             const id = newBackupId();
             const archive = path.join(this.workDir, `${id}.pbbackup`);
             try {
-                const made = await this.engine.withPanelOperation(panelId, async () => {
+                const made = await this.turn(panelId, async () => {
                     const panelVersion = this.engine.installedPanelVersion(panelId);
                     const answer = await this.engine.askBackupHook(panelId, "before-backup", { target });
                     // from here the panel is ready for a copy: it hears how the copy went, whatever happens
@@ -229,7 +233,7 @@ export class BackupService {
         const hooks = this.engine.backupHooks(panelId);
         if (!hooks?.has("after-restore")) throw conflict(hooks ? "This panel's service has no afterRestore, so it can't restore its backups" : "The panel's service is not running, so it can't restore its backups");
         const store = this.locations.storeFor(panelId);
-        return this.job(panelId, target, "restore", async (report) => {
+        return this.job(panelId, target, "restore", "downloading", async (report) => {
             const record = await this.find(store, panelId, target, backupId);
             const installed = this.engine.installedPanelVersion(panelId);
             if (isNewerVersion(record.panelVersion, installed)) {
@@ -246,7 +250,7 @@ export class BackupService {
                 }
                 report("unpacking");
                 const { filesDir, data } = await extractBackupArchive(archive, staging);
-                await this.engine.withPanelOperation(panelId, async () => {
+                await this.turn(panelId, async () => {
                     report("preparing");
                     if (this.engine.backupHooks(panelId)?.has("before-restore")) {
                         await this.engine.askBackupHook(panelId, "before-restore", { restore: { target, backup: record } });
@@ -267,6 +271,7 @@ export class BackupService {
                     } catch (err) {
                         return failed(err);
                     }
+                    report("resuming");
                     try {
                         await this.engine.askBackupHook(panelId, "after-restore", { ended: { target, backup: record, ok: true, data } });
                     } catch (err) {

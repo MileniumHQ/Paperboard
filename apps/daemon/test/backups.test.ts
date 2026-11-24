@@ -3,13 +3,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as tarLib from "tar";
 import { PaperCraneEngine } from "../src/engine/index";
-import { BackupService } from "../src/backups/service";
+import { BackupService, backupContents } from "../src/backups/service";
 import { createBackupArchive, extractBackupArchive } from "../src/backups/archive";
 import { recoverRestores, swapIn } from "../src/backups/restore";
 import { LocalBackupStore } from "../src/backups/localStore";
 import { S3BackupStore, signS3Request } from "../src/backups/s3Store";
 import { DriveBackupStore } from "../src/backups/driveStore";
-import { newBackupId, type BackupRecord } from "../src/backups/types";
+import { backupPathsProblem, newBackupId, parseBackupRecord, type BackupRecord } from "../src/backups/types";
 import { tarGz } from "testkit/archive";
 import { fakeDrive, fakeS3 } from "testkit/cloud";
 import { killWorkloads, startCrane } from "testkit/crane";
@@ -104,6 +104,37 @@ describe("a panel's service runs its own backups", () => {
 		expect((await panel.fail("backup:restore", { panelId: "test.saver", target: "w1", backupId: record.id })).code).toBe("CONFLICT");
 		expect(fs.readFileSync(path.join(storage, "world", "level.dat"), "utf8")).toBe("keep me");
 		await panel.close();
+		await host.close();
+	});
+
+	test("backups of two targets of one panel take turns instead of refusing each other", async () => {
+		const dir = dataDir();
+		const log = path.join(tempDir(), "hooks.log");
+		const gate = path.join(tempDir(), "gate");
+		// the first target's beforeBackup holds until the test opens the gate
+		const contents = `await (async () => {
+			if (target === "t1") while (!fs.existsSync(${JSON.stringify(gate)})) await new Promise((r) => setTimeout(r, 20));
+			return { paths: [target] };
+		})()`;
+		await installPanelFiles(dir, { id: "test.turns", service: hookedService(log, contents) });
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		await readyService(host, "test.turns");
+		for (const target of ["t1", "t2"]) await host.ok("file:write", { appId: "test.turns", targetPath: `${target}/a.txt`, content: target });
+		await host.ok("backup:panel-location-set", { panelId: "test.turns", locationId: "local" });
+
+		const first = host.call("backup:create", { panelId: "test.turns", target: "t1" });
+		await waitFor("t1's beforeBackup", async () => lines(log).includes("before-backup t1"));
+		const second = host.call("backup:create", { panelId: "test.turns", target: "t2" });
+		await waitFor("t2's queued backup", async () => (await host.ok("backup:status", { panelId: "test.turns", target: "t2" })).progress !== null);
+		expect((await host.ok("backup:status", { panelId: "test.turns", target: "t2" })).progress).toMatchObject({ kind: "create", step: "preparing" });
+		expect(lines(log)).not.toContain("before-backup t2");
+
+		fs.writeFileSync(gate, "");
+		const [made1, made2] = await Promise.all([first, second]);
+		expect([made1.error, made2.error]).toEqual([undefined, undefined]);
+		expect([made1.result.target, made2.result.target]).toEqual(["t1", "t2"]);
+		expect(lines(log).filter((l) => l.startsWith("before-backup"))).toEqual(["before-backup t1", "before-backup t2"]);
 		await host.close();
 	});
 
@@ -253,14 +284,108 @@ describe("backup archives and restores never reach past the panel's files", () =
 		fs.writeFileSync(path.join(staged, "servers", "x", "world.dat"), "backup");
 		fs.writeFileSync(path.join(work, "leftover.pbbackup"), "x");
 
-		swapIn(work, "test.crash", storage, staged, { paths: ["servers/x"], exclude: ["servers/x/install"] });
+		fs.mkdirSync(path.join(staged, "notes"), { recursive: true });
+		fs.writeFileSync(path.join(staged, "notes", "new.txt"), "only in the backup");
+
+		swapIn(work, "test.crash", storage, staged, { paths: ["servers/x", "notes"], exclude: ["servers/x/install"] });
 		expect(fs.readFileSync(path.join(storage, "servers", "x", "world.dat"), "utf8")).toBe("backup");
 		expect(fs.readFileSync(path.join(storage, "servers", "x", "install", "game.bin"), "utf8")).toBe("game");
+		expect(fs.existsSync(path.join(storage, "notes", "new.txt"))).toBe(true);
 		// the daemon died here, before afterRestore and the commit
-		recoverRestores(work, () => storage);
+		expect(recoverRestores(work, () => storage)).toEqual([]);
 		expect(fs.readFileSync(path.join(storage, "servers", "x", "world.dat"), "utf8")).toBe("live");
 		expect(fs.readFileSync(path.join(storage, "servers", "x", "install", "game.bin"), "utf8")).toBe("game");
+		// a path the storage didn't have goes again
+		expect(fs.existsSync(path.join(storage, "notes"))).toBe(false);
 		expect(fs.readdirSync(work)).toEqual([]);
+	});
+
+	test("once a restore is committed, a crash in its cleanup keeps the restored files", async () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.mkdirSync(path.join(storage, "world"), { recursive: true });
+		fs.writeFileSync(path.join(storage, "world", "level.dat"), "live");
+		const staged = tempDir();
+		fs.mkdirSync(path.join(staged, "world"), { recursive: true });
+		fs.writeFileSync(path.join(staged, "world", "level.dat"), "backup");
+
+		const swap = swapIn(work, "test.commit", storage, staged, { paths: ["world"], exclude: [] });
+		const cleaned = swap.commit();
+		// the journal is gone before commit returns: a crash from here keeps the backup's files
+		const ended = fs.readdirSync(work);
+		expect(ended).toEqual([expect.stringMatching(/^ended-/)]);
+		await cleaned;
+		expect(fs.readdirSync(work)).toEqual([]);
+		// a daemon that died before the cleanup leaves the ended swap, with the originals parked in it
+		fs.mkdirSync(path.join(work, ended[0]!, "parked", "world"), { recursive: true });
+		fs.writeFileSync(path.join(work, ended[0]!, "parked", "world", "level.dat"), "live");
+		expect(recoverRestores(work, () => storage)).toEqual([]);
+		expect(fs.readFileSync(path.join(storage, "world", "level.dat"), "utf8")).toBe("backup");
+		expect(fs.readdirSync(work)).toEqual([]);
+	});
+
+	test("a whole-storage restore never moves what it leaves out, and rolls back without it", async () => {
+		const storage = tempDir();
+		const work = tempDir();
+		fs.mkdirSync(path.join(storage, "servers", "other"), { recursive: true });
+		fs.writeFileSync(path.join(storage, "servers", "other", "world.dat"), "running sibling");
+		fs.writeFileSync(path.join(storage, "level.dat"), "live");
+		const staged = tempDir();
+		fs.writeFileSync(path.join(staged, "level.dat"), "backup");
+		const sibling = fs.statSync(path.join(storage, "servers")).ino;
+
+		const swap = swapIn(work, "test.whole", storage, staged, { paths: [""], exclude: ["servers"] });
+		expect(fs.statSync(path.join(storage, "servers")).ino).toBe(sibling);
+		expect(fs.readFileSync(path.join(storage, "level.dat"), "utf8")).toBe("backup");
+		swap.rollback();
+		expect(fs.statSync(path.join(storage, "servers")).ino).toBe(sibling);
+		expect(fs.readFileSync(path.join(storage, "level.dat"), "utf8")).toBe("live");
+		expect(fs.readFileSync(path.join(storage, "servers", "other", "world.dat"), "utf8")).toBe("running sibling");
+	});
+
+	test("each interrupted restore is recovered on its own, and one that can't be is named, not thrown", async () => {
+		const work = tempDir();
+		const good = tempDir();
+		fs.writeFileSync(path.join(good, "a.txt"), "live");
+		const staged = tempDir();
+		fs.writeFileSync(path.join(staged, "a.txt"), "backup");
+		swapIn(work, "test.good", good, staged, { paths: ["a.txt"], exclude: [] });
+		// a second swap whose journal names a panel whose storage can't be reached
+		fs.mkdirSync(path.join(work, "restore-broken", "parked"), { recursive: true });
+		fs.writeFileSync(path.join(work, "restore-broken", "parked", "b.txt"), "original");
+		fs.writeFileSync(path.join(work, "restore-broken", "journal.json"), JSON.stringify({ panelId: "test.broken", units: [{ path: "b.txt", existed: true }], exclude: [] }));
+		fs.mkdirSync(path.join(work, "restore-unreadable"));
+		fs.writeFileSync(path.join(work, "restore-unreadable", "journal.json"), "{damaged");
+
+		const failed = recoverRestores(work, (panelId) => {
+			if (panelId === "test.broken") throw new Error("no storage for test.broken");
+			return good;
+		});
+		expect(failed.map((f) => [f.panelId, f.error])).toEqual(expect.arrayContaining([["test.broken", "no storage for test.broken"], [null, expect.any(String)]]));
+		expect(failed).toHaveLength(2);
+		expect(fs.readFileSync(path.join(good, "a.txt"), "utf8")).toBe("live");
+		// what could not be undone is kept where the problem says
+		expect(fs.readFileSync(path.join(work, "restore-broken", "parked", "b.txt"), "utf8")).toBe("original");
+	});
+
+	test("paths and excludes that a swap can't keep apart are refused, from a panel and from a store's record", () => {
+		const refused: Array<[string[], string[]]> = [
+			[["a", "a"], []],
+			[["a", "a/b"], []],
+			[["", "a"], []],
+			[["s"], ["s/a/b", "s/a"]],
+			[["s"], [""]],
+			[["s"], ["s"]],
+			[["s"], ["t/x"]],
+		];
+		for (const [paths, exclude] of refused) {
+			expect({ paths, exclude, refused: backupPathsProblem(paths, exclude) !== null }).toEqual({ paths, exclude, refused: true });
+			expect(() => backupContents({ paths, exclude })).toThrow();
+			const record = { format: 2, id: newBackupId(), panelId: "test.paths", target: null, createdAt: new Date().toISOString(), size: 1, sha256: "a".repeat(64), panelVersion: null, label: null, paths, exclude };
+			expect(parseBackupRecord(record)).toBeNull();
+		}
+		expect(backupPathsProblem([""], ["servers", "cache/tmp"])).toBeNull();
+		expect(backupPathsProblem(["servers/a"], ["servers/a/install"])).toBeNull();
 	});
 });
 

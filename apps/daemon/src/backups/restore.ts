@@ -1,9 +1,15 @@
 // Swapping a backup's files into a panel's storage. Each of the backup's
-// paths is parked whole in the daemon's work folder and the backup's copy
-// moved in; what the backup left out (its exclude) moves back from the
-// parked copy, so a restore never touches it. A journal beside the parked
-// copies names the swap until it is committed: a crash in between is rolled
-// back at the next start (recoverRestores), the way a failed restore is.
+// paths is a unit swapped whole: parked in the daemon's work folder, the
+// backup's copy moved in, and what the backup left out (its exclude) moved
+// back from the parked copy, so a restore never loses it. A path that is
+// the whole storage ("") is swapped one top-level entry at a time, so an
+// excluded entry there never moves at all (a running sibling keeps its
+// folder).
+//
+// A journal beside the parked copies names the swap until it is committed,
+// and committing ends it with one rename before anything is deleted. A
+// crash before that is rolled back at the next start (recoverRestores), the
+// way a failed restore is; a crash after it keeps the restored files.
 // Every step is a rename, so the swap and its rollback are quick.
 import * as fs from "fs";
 import * as path from "path";
@@ -13,45 +19,70 @@ import { writeFileAtomicSync } from "../core/storage";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { requirePanelId } from "@mileniumhq/paperapi/panelIdentity";
 
+interface Unit {
+    /** a path in the panel's storage, swapped whole */
+    path: string;
+    /** whether the storage had it before the swap; one it didn't goes on rollback */
+    existed: boolean;
+}
+
 interface Journal {
     panelId: string;
-    paths: string[];
+    units: Unit[];
     exclude: string[];
 }
 
 const JOURNAL = "journal.json";
 const PARKED = "parked";
+/** a swap folder's name while its journal stands; anything else in the work folder is left over */
+const SWAPPING = "restore-";
 
-/** the excluded paths under `named` ("" holds them all) */
-const under = (named: string, exclude: string[]) => exclude.filter((e) => named === "" || e.startsWith(`${named}/`));
+const under = (child: string, parent: string) => child.startsWith(`${parent}/`);
 
-const at = (root: string, relative: string) => (relative === "" ? root : path.join(root, ...relative.split("/")));
+const at = (root: string, relative: string) => path.join(root, ...relative.split("/"));
 
 function move(from: string, to: string): void {
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.renameSync(from, to);
 }
 
-/** puts every parked path back as it was, from whatever point the swap reached */
+/** the units a backup's paths swap: each path, or for "" each top-level entry either side has that isn't excluded */
+function unitsOf(storageDir: string, stagedFiles: string, contents: { paths: string[]; exclude: string[] }): Unit[] {
+    const names = (dir: string) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
+    const units = contents.paths.flatMap((named) =>
+        named === "" ? [...new Set([...names(storageDir), ...names(stagedFiles)])].filter((name) => !contents.exclude.includes(name)) : [named],
+    );
+    return units.map((unit) => ({ path: unit, existed: fs.existsSync(at(storageDir, unit)) }));
+}
+
+/** puts every unit back as it was, from whatever point the swap reached, last first */
 function undo(storageDir: string, dir: string, journal: Journal): void {
     const parked = path.join(dir, PARKED);
-    for (const named of journal.paths) {
-        const original = at(parked, named);
+    for (const unit of [...journal.units].reverse()) {
+        const live = at(storageDir, unit.path);
+        if (!unit.existed) {
+            fs.rmSync(live, { recursive: true, force: true });
+            continue;
+        }
+        const original = at(parked, unit.path);
         // never parked: the live copy is still the original
         if (!fs.existsSync(original)) continue;
         // what the backup left out went back to live: it returns to the original first
-        for (const excluded of under(named, journal.exclude)) {
-            const live = at(storageDir, excluded);
-            if (fs.existsSync(live) && !fs.existsSync(at(parked, excluded))) move(live, at(parked, excluded));
+        for (const excluded of journal.exclude.filter((e) => under(e, unit.path))) {
+            if (fs.existsSync(at(storageDir, excluded)) && !fs.existsSync(at(parked, excluded))) move(at(storageDir, excluded), at(parked, excluded));
         }
-        fs.rmSync(at(storageDir, named), { recursive: true, force: true });
-        move(original, at(storageDir, named));
+        fs.rmSync(live, { recursive: true, force: true });
+        move(original, live);
     }
     fs.rmSync(dir, { recursive: true, force: true });
 }
 
 export interface RestoreSwap {
-    /** keeps the backup's files; the parked originals go */
+    /**
+     * Keeps the backup's files. The journal ends before this returns its
+     * promise, so a crash from then on keeps them; the promise settles once
+     * the parked originals are gone, and never rejects.
+     */
     commit(): Promise<void>;
     /** puts the original files back */
     rollback(): void;
@@ -61,11 +92,13 @@ export interface RestoreSwap {
  * Swaps `stagedFiles` (a backup's files/ folder) into the panel's storage
  * for each of the backup's paths. Returns once the backup's files are in
  * place; a failure on the way puts the originals back before it throws.
+ * The paths and excludes must be as checkBackupPaths allows.
  */
 export function swapIn(workDir: string, panelId: string, storageDir: string, stagedFiles: string, contents: { paths: string[]; exclude: string[] }): RestoreSwap {
-    const dir = path.join(workDir, `restore-${randomUUID()}`);
+    const id = randomUUID();
+    const dir = path.join(workDir, `${SWAPPING}${id}`);
     const parked = path.join(dir, PARKED);
-    const journal: Journal = { panelId: requirePanelId(panelId), paths: contents.paths, exclude: contents.exclude };
+    const journal: Journal = { panelId: requirePanelId(panelId), units: unitsOf(storageDir, stagedFiles, contents), exclude: contents.exclude };
     fs.mkdirSync(dir, { recursive: true });
     writeFileAtomicSync(path.join(dir, JOURNAL), JSON.stringify(journal));
     const rollback = () => {
@@ -76,13 +109,12 @@ export function swapIn(workDir: string, panelId: string, storageDir: string, sta
         }
     };
     try {
-        for (const named of contents.paths) {
-            const live = at(storageDir, named);
-            if (fs.existsSync(live)) move(live, at(parked, named));
-            const staged = at(stagedFiles, named);
+        for (const unit of journal.units) {
+            const live = at(storageDir, unit.path);
+            if (unit.existed) move(live, at(parked, unit.path));
+            const staged = at(stagedFiles, unit.path);
             if (fs.existsSync(staged)) move(staged, live);
-            else if (named === "") fs.mkdirSync(live, { recursive: true });
-            for (const excluded of under(named, contents.exclude)) {
+            for (const excluded of contents.exclude.filter((e) => under(e, unit.path))) {
                 const original = at(parked, excluded);
                 if (!fs.existsSync(original)) continue;
                 // a backup holds nothing it left out; an archive that does is not trusted with it
@@ -90,6 +122,8 @@ export function swapIn(workDir: string, panelId: string, storageDir: string, sta
                 move(original, at(storageDir, excluded));
             }
         }
+        // the storage itself stays, even when the backup had nothing in it
+        fs.mkdirSync(storageDir, { recursive: true });
     } catch (err) {
         try {
             rollback();
@@ -98,39 +132,69 @@ export function swapIn(workDir: string, panelId: string, storageDir: string, sta
         }
         throw err;
     }
-    return { commit: () => fs.promises.rm(dir, { recursive: true, force: true }), rollback };
+    return {
+        commit: () => {
+            // one rename ends the journal: from here a crash keeps the restored files
+            const ended = path.join(workDir, `ended-${id}`);
+            fs.renameSync(dir, ended);
+            return fs.promises.rm(ended, { recursive: true, force: true }).catch((err) => {
+                // quiet: the files are restored; the next start sweeps the parked originals
+                logger.warn(`[backups] the originals a restore replaced are left in ${ended} until the next start:`, err);
+            });
+        },
+        rollback,
+    };
+}
+
+/** an interrupted restore that could not be rolled back: its panel's files are half swapped */
+export interface UnrecoveredRestore {
+    /** null when even its journal can't be read */
+    panelId: string | null;
+    /** where its parked originals are kept */
+    kept: string;
+    error: string;
 }
 
 /**
  * Startup only, by the daemon that owns the data dir, before panel services
- * start: a restore a crash interrupted is rolled back, its panel's files
- * put back as they were, and what other backups left in the work folder
- * (archives, unpacked copies) goes.
+ * start: each restore a crash interrupted is rolled back on its own, its
+ * panel's files put back as they were, and what other backups left in the
+ * work folder (archives, unpacked copies, ended swaps) goes. Resolves with
+ * the restores that could not be rolled back, for their panels to say so.
  */
-export function recoverRestores(workDir: string, storageOf: (panelId: string) => string): void {
+export function recoverRestores(workDir: string, storageOf: (panelId: string) => string): UnrecoveredRestore[] {
     let entries: string[];
     try {
         entries = fs.readdirSync(workDir);
     } catch (err) {
-        if (errorCode(err) === "ENOENT") return;
+        if (errorCode(err) === "ENOENT") return [];
         throw err;
     }
+    const failed: UnrecoveredRestore[] = [];
     for (const name of entries) {
         const dir = path.join(workDir, name);
-        if (!name.startsWith("restore-")) {
+        if (!name.startsWith(SWAPPING)) {
             fs.rmSync(dir, { recursive: true, force: true });
             continue;
         }
-        let journal: Journal;
+        let text: string;
         try {
-            journal = JSON.parse(fs.readFileSync(path.join(dir, JOURNAL), "utf8"));
+            text = fs.readFileSync(path.join(dir, JOURNAL), "utf8");
         } catch (err) {
             // the journal is written before anything is parked: without one, nothing was
             if (errorCode(err) !== "ENOENT") throw err;
             fs.rmSync(dir, { recursive: true, force: true });
             continue;
         }
-        undo(storageOf(requirePanelId(journal.panelId)), dir, journal);
-        logger.warn(`[backups] put ${journal.panelId}'s files back after an interrupted restore`);
+        let panelId: string | null = null;
+        try {
+            const journal = JSON.parse(text) as Journal;
+            panelId = requirePanelId(journal.panelId);
+            undo(storageOf(panelId), dir, journal);
+            logger.warn(`[backups] put ${panelId}'s files back after an interrupted restore`);
+        } catch (err) {
+            failed.push({ panelId, kept: path.join(dir, PARKED), error: errorMessage(err) });
+        }
     }
+    return failed;
 }

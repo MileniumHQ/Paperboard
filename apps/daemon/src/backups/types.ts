@@ -73,8 +73,31 @@ export function newBackupId(now = new Date(), random = Math.floor(Math.random() 
     return `${stamp}-${random.toString(16).padStart(6, "0").slice(-6)}`;
 }
 
-const paths = (value: unknown): value is string[] =>
-    Array.isArray(value) && value.length <= MAX_BACKUP_PATHS && value.every(isBackupPath);
+/**
+ * Why a backup's paths and excludes can't be swapped safely; null when they
+ * can. A restore swaps each path whole and moves each exclude back, so: no
+ * path repeats or holds another, and each exclude sits strictly under one
+ * path and inside no other exclude. What a panel names and what a store's
+ * record says are both checked by it.
+ */
+export function backupPathsProblem(paths: unknown, exclude: unknown): string | null {
+    const list = (value: unknown, name: string): string | null => {
+        if (!Array.isArray(value) || value.length > MAX_BACKUP_PATHS) return `${name} must list at most ${MAX_BACKUP_PATHS} paths`;
+        const bad = value.find((entry) => !isBackupPath(entry));
+        if (bad !== undefined) return `${JSON.stringify(bad)} in ${name} is not a path in the panel's storage`;
+        if (new Set(value).size !== value.length) return `${name} lists a path twice`;
+        return null;
+    };
+    const problem = list(paths, "paths") ?? list(exclude, "exclude");
+    if (problem) return problem;
+    const inside = (child: string, parent: string) => child !== parent && (parent === "" || child.startsWith(`${parent}/`));
+    const named = paths as string[];
+    const left = exclude as string[];
+    for (const a of named) for (const b of named) if (inside(a, b)) return `${a} is inside ${b === "" ? "the whole storage" : b}, which it also names`;
+    for (const e of left) if (e === "" || !named.some((p) => inside(e, p))) return `${JSON.stringify(e)} in exclude is not under one of its paths`;
+    for (const a of left) for (const b of left) if (inside(a, b)) return `${a} in exclude is inside ${b}, which it also leaves out`;
+    return null;
+}
 
 /** a record read back from a store; null when it is not one of ours */
 export function parseBackupRecord(raw: unknown): BackupRecord | null {
@@ -89,7 +112,7 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
     if (typeof r.sha256 !== "string" || !SHA256_RE.test(r.sha256)) return null;
     if (r.panelVersion !== null && (typeof r.panelVersion !== "string" || r.panelVersion.length > 64)) return null;
     if (r.label !== null && (typeof r.label !== "string" || r.label.length > BACKUP_LABEL_MAX)) return null;
-    if (!paths(r.paths) || !paths(r.exclude)) return null;
+    if (backupPathsProblem(r.paths, r.exclude) !== null) return null;
     return {
         format: 2,
         id: r.id,
@@ -100,8 +123,8 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
         sha256: r.sha256,
         panelVersion: r.panelVersion as string | null,
         label: r.label as string | null,
-        paths: [...r.paths],
-        exclude: [...r.exclude],
+        paths: [...(r.paths as string[])],
+        exclude: [...(r.exclude as string[])],
     };
 }
 

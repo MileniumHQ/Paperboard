@@ -115,6 +115,8 @@ export class PanelServicesManager {
     // why each panel's service last failed or exited unasked, until it is
     // ready again: the panel list carries it, so the shell can say why
     private failures = new Map<string, string>();
+    /** panels whose service may not start while this daemon runs, and why */
+    private readonly heldBack = new Map<string, string>();
     // each panel's open pages: the connection each says it is open on, until it closes
     private pages = new Map<string, Set<PageConnection>>();
     constructor(private baseDir = getPaperboardDir()) {}
@@ -169,8 +171,14 @@ export class PanelServicesManager {
         if (!fs.existsSync(file)) return null;
         return validatePanelManifest(JSON.parse(fs.readFileSync(file, "utf8")), id);
     }
+    /** Keeps the panel's service from starting while this daemon runs, for `why`: its files can't be trusted. */
+    public holdBack(panelId: string, why: string): void {
+        this.heldBack.set(requirePanelId(panelId), why);
+    }
     public startService(panelId: string, crashCount = 0): boolean {
         const id = requirePanelId(panelId);
+        const held = this.heldBack.get(id);
+        if (held) throw new Error(held);
         const existing = this.services.get(id);
         if (existing && !existing.stopped && existing.state !== "failed") return true;
         if (existing && !existing.stopped && existing.process.exitCode === null && existing.process.signalCode === null) {

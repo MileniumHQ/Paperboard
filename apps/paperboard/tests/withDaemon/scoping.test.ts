@@ -222,7 +222,7 @@ describe("unreadable state is quarantined", () => {
 		const swap = path.join(dir, "backups", ".work", "restore-1");
 		fs.mkdirSync(path.join(swap, "parked", "world"), { recursive: true });
 		fs.writeFileSync(path.join(swap, "parked", "world", "world.dat"), "the user's world");
-		fs.writeFileSync(path.join(swap, "journal.json"), JSON.stringify({ panelId: "test.interrupted", paths: ["world"], exclude: [] }));
+		fs.writeFileSync(path.join(swap, "journal.json"), JSON.stringify({ panelId: "test.interrupted", units: [{ path: "world", existed: true }], exclude: [] }));
 		fs.mkdirSync(path.join(dir, "files", "test.interrupted", "world"), { recursive: true });
 		fs.writeFileSync(path.join(dir, "files", "test.interrupted", "world", "world.dat"), "half restored");
 
