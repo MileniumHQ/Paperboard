@@ -74,7 +74,13 @@ export async function startServer(options: ServerOptions = {}): Promise<TestServ
                     channel.pipe(child.stdin);
                     child.stdout.pipe(channel, { end: false });
                     child.stderr.pipe(channel.stderr, { end: false });
-                    channel.on("close", () => child.kill("SIGKILL"));
+                    // as sshd without a terminal: the command sees its stdin end and
+                    // no signal; one that stays on is stopped so no test leaves it running
+                    channel.on("close", () => {
+                        child.stdin.end();
+                        const stop = setTimeout(() => child.kill("SIGKILL"), 5_000);
+                        child.once("close", () => clearTimeout(stop));
+                    });
                     child.on("close", (code) => {
                         channel.exit(code ?? 1);
                         channel.end();

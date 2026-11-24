@@ -5,7 +5,6 @@
 // connection before any credential is sent. The password is used for this
 // one connection and is never stored or logged.
 import * as fs from "fs";
-import * as path from "path";
 import { Client, utils, type AnyAuthMethod, type AuthenticationType, type ClientChannel, type ConnectConfig, type KeyboardInteractiveCallback, type NextAuthHandler, type ParsedKey, type Prompt, type ServerHostKeyAlgorithm } from "ssh2";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { appendKnownHost, checkHostKey, fingerprintOf, knownHostName, knownKeyTypes, readKnownHosts } from "./knownHosts";
@@ -62,7 +61,11 @@ export interface SshSession {
     readonly hostKeyFingerprint: string;
     /** runs one command; stdin (if any) is written then closed. Rejects only on transport failure, never on a non-zero exit. */
     exec(command: string, options?: { stdin?: Buffer | string; timeoutMs?: number }): Promise<SshExecResult>;
-    /** runs a long command, calling onLine for each stdout line as it arrives; cancel() closes the channel */
+    /**
+     * runs a long command, calling onLine for each stdout line as it arrives.
+     * Its stdin stays open until cancel(), which ends it and closes the
+     * channel: a command can take its stdin ending as being told to stop.
+     */
     stream(command: string, onLine: (line: string) => void): { done: Promise<SshExecResult>; cancel(): void };
     close(): void;
 }
@@ -102,8 +105,11 @@ export async function openSsh(options: OpenSshOptions): Promise<SshSession> {
     const target = resolveWithOverrides(options.host, options, { port: options.port, user: options.username });
     const { hostName, port, user: username } = target;
     const where = port === 22 ? hostName : `${hostName}:${port}`;
-    const knownHostsFile = path.join(options.sshDir, "known_hosts");
-    const known = readKnownHosts(knownHostsFile);
+    // every file ssh reads; a new key is written to the person's first
+    const knownFiles = [...target.knownHosts.user, ...target.knownHosts.global];
+    const readKnown = () => knownFiles.map(readKnownHosts).join("\n");
+    const knownHostsFile = target.knownHosts.user[0];
+    const known = readKnown();
     const methods = authMethods(username, systemAgent(options.agent), loadKeys(target.identityFiles), options.password);
     const preferred = knownKeyTypes(known, hostName, port).flatMap((type) => HOST_KEY_ALGORITHMS[type] ?? []) as ServerHostKeyAlgorithm[];
 
@@ -124,16 +130,17 @@ export async function openSsh(options: OpenSshOptions): Promise<SshSession> {
             const fingerprint = fingerprintOf(key);
             hostKeyFingerprint = fingerprint;
             try {
-                const check = checkHostKey(readKnownHosts(knownHostsFile), hostName, port, key);
+                const check = checkHostKey(readKnown(), hostName, port, key);
                 if (check.kind === "known") return true;
                 if (check.kind === "new") {
-                    appendKnownHost(knownHostsFile, hostName, port, key);
+                    // with UserKnownHostsFile none, nothing is written down: ssh would ask every time too
+                    if (knownHostsFile !== undefined) appendKnownHost(knownHostsFile, hostName, port, key);
                     return true;
                 }
                 const reason = check.kind === "revoked"
                     ? `The host key of ${where} (${fingerprint}) is marked revoked in known_hosts`
                     : `The host key of ${where} changed: known_hosts has a different ${check.knownTypes.join("/")} key, and it presented ${fingerprint}`;
-                refusal = new SshHostKeyChanged(`${reason}. Setup stopped, so nothing was sent. If the computer was reinstalled, remove its line from ${knownHostsFile} (ssh-keygen -R ${knownHostName(hostName, port)}) and try again.`, fingerprint);
+                refusal = new SshHostKeyChanged(`${reason}. Setup stopped, so nothing was sent. If the computer was reinstalled, remove its line from ${knownFiles.filter((file) => readKnownHosts(file) !== "").join(" or ")} (ssh-keygen -R ${knownHostName(hostName, port)}) and try again.`, fingerprint);
             } catch (err) {
                 // quiet: the error is the connection's outcome, rejected below
                 refusal = err instanceof Error ? err : new Error(errorMessage(err));
@@ -253,6 +260,8 @@ function connectFailure(where: string, err: Error & { level?: string }, timeoutM
     return new Error(`Couldn't connect to ${where} over SSH: ${errorMessage(err)}`);
 }
 
+const HELD = Symbol("stdin held open");
+
 function createSession(client: Client, host: string, where: string, username: string, hostKeyFingerprint: string): SshSession {
     let lost: Error | undefined;
     const pending = new Set<(err: Error) => void>();
@@ -264,7 +273,8 @@ function createSession(client: Client, host: string, where: string, username: st
     client.on("close", () => loseConnection(new Error(`The SSH connection to ${where} closed`)));
 
     // runs a command on its own channel; resolves on the channel's close with what it said
-    const run = (command: string, stdin: Buffer | string | undefined, onStdout: ((chunk: Buffer) => void) | undefined, timeoutMs: number | undefined) => {
+    // stdin HELD stays open until cancel()
+    const run = (command: string, stdin: Buffer | string | undefined | typeof HELD, onStdout: ((chunk: Buffer) => void) | undefined, timeoutMs: number | undefined) => {
         let channel: ClientChannel | undefined;
         let closeChannel = false;
         const done = new Promise<SshExecResult>((resolve, reject) => {
@@ -314,11 +324,12 @@ function createSession(client: Client, host: string, where: string, username: st
                     // a channel closed by a dropped connection didn't finish; the connection's close reports that
                     setImmediate(() => settle(lost));
                 });
-                opened.end(stdin);
+                if (stdin !== HELD) opened.end(stdin);
             });
         });
         const cancel = () => {
             closeChannel = true;
+            channel?.end();
             channel?.close();
         };
         return { done, cancel };
@@ -340,7 +351,7 @@ function createSession(client: Client, host: string, where: string, username: st
                 partial = lines.pop() ?? "";
                 for (const line of lines) onLine(line.replace(/\r$/, ""));
             };
-            const running = run(command, undefined, (chunk) => emit(decoder.decode(chunk, { stream: true })), undefined);
+            const running = run(command, HELD, (chunk) => emit(decoder.decode(chunk, { stream: true })), undefined);
             const done = running.done.then((result) => {
                 emit(decoder.decode());
                 if (partial !== "") onLine(partial.replace(/\r$/, ""));

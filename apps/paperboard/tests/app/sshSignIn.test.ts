@@ -62,6 +62,22 @@ describe("host keys", () => {
         expect(fs.readFileSync(knownHosts(sshDir), "utf8")).toBe(written);
     });
 
+    // Inventory: Security — a host key pinned only in a known_hosts file the ssh config names is checked too, never taken for new.
+    test("a key pinned in another known_hosts file ssh reads stops a different one, and nothing is written down", async () => {
+        const sshDir = path.join(tempDir("pb-ssh-home-"), ".ssh");
+        fs.mkdirSync(sshDir, { recursive: true });
+        const server = await startServer();
+        const pinned = path.join(sshDir, "..", "system_known_hosts");
+        // another key for that address, as a system file would hold it: the server is an impostor
+        fs.writeFileSync(pinned, `[127.0.0.1]:${server.port} ssh-ed25519 ${parsed(newHostKey()).getPublicSSH().toString("base64")}\n`);
+        fs.writeFileSync(path.join(sshDir, "config"), `GlobalKnownHostsFile ${pinned}\n`);
+        const err = await failure(open(server, sshDir, { password: PASSWORD }));
+        expect(err).toBeInstanceOf(SshHostKeyChanged);
+        expect(err.message).toContain(pinned);
+        expect(server.attempts).toEqual([]);
+        expect(fs.existsSync(knownHosts(sshDir))).toBe(false);
+    });
+
     test("a known_hosts line without a trailing newline gets one before the new host", async () => {
         const sshDir = tempDir("pb-ssh-dir-");
         fs.writeFileSync(knownHosts(sshDir), "other.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl");

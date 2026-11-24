@@ -1,6 +1,7 @@
 // Reading the person's OpenSSH client config (`~/.ssh/config`) the way `ssh`
 // does, for the few settings setting up a computer needs: HostName, User,
-// Port and IdentityFile. Host blocks match the name the person typed (an
+// Port, IdentityFile and the known_hosts files. Lines for other keywords
+// are skipped unread, as they don't change where or how it connects. Host blocks match the name the person typed (an
 // alias), first value wins, IdentityFile adds up, and Include pulls other
 // files in where it stands. Match blocks need state this doesn't have
 // (exec, user, address), so their contents are skipped as a whole.
@@ -18,6 +19,8 @@ export interface SshTarget {
     user: string;
     /** absolute paths of the keys to try, in order: the config's, else the defaults that exist */
     identityFiles: string[];
+    /** where host keys are looked up: the person's files (a new key is added to the first) and the system's, read only */
+    knownHosts: { user: string[]; global: string[] };
 }
 
 export interface SshConfigOptions {
@@ -30,7 +33,17 @@ interface RawSettings {
     user?: string;
     port?: string;
     identityFiles: string[];
+    userKnownHosts?: string[];
+    globalKnownHosts?: string[];
 }
+
+// ssh's own defaults for the system's known_hosts
+const GLOBAL_KNOWN_HOSTS = process.platform === "win32"
+    ? [path.join(process.env.ProgramData ?? "C:\\ProgramData", "ssh", "ssh_known_hosts")]
+    : ["/etc/ssh/ssh_known_hosts", "/etc/ssh/ssh_known_hosts2"];
+
+// the keywords read here; any other line is passed over, as ssh's own options
+const READ = new Set(["host", "match", "hostname", "user", "port", "identityfile", "include", "userknownhostsfile", "globalknownhostsfile"]);
 
 const MAX_INCLUDE_DEPTH = 16;
 
@@ -54,7 +67,13 @@ export function resolveWithOverrides(
     const identityFiles = raw.identityFiles.length > 0
         ? raw.identityFiles.map((file) => absolute(expandTokens(expandTilde(file, home), tokens, "IdentityFile"), options.sshDir))
         : DEFAULT_IDENTITY_FILES.map((name) => path.join(options.sshDir, name)).filter((file) => fs.existsSync(file));
-    return { hostName, port, user, identityFiles };
+    const files = (list: string[] | undefined, fallback: string[], keyword: string) =>
+        list === undefined ? fallback : list.includes("none") ? [] : list.map((file) => absolute(expandTokens(expandTilde(file, home), tokens, keyword), options.sshDir));
+    const knownHosts = {
+        user: files(raw.userKnownHosts, [path.join(options.sshDir, "known_hosts"), path.join(options.sshDir, "known_hosts2")], "UserKnownHostsFile"),
+        global: files(raw.globalKnownHosts, GLOBAL_KNOWN_HOSTS, "GlobalKnownHostsFile"),
+    };
+    return { hostName, port, user, identityFiles, knownHosts };
 }
 
 function readSettings(host: string, sshDir: string): RawSettings {
@@ -97,6 +116,12 @@ function applyFile(file: string, host: string, sshDir: string, settings: RawSett
             case "identityfile":
                 settings.identityFiles.push(value);
                 break;
+            case "userknownhostsfile":
+                settings.userKnownHosts ??= args;
+                break;
+            case "globalknownhostsfile":
+                settings.globalKnownHosts ??= args;
+                break;
             case "include":
                 for (const pattern of args) {
                     for (const included of expandGlob(absolute(expandTilde(pattern, path.dirname(sshDir)), sshDir))) {
@@ -112,11 +137,13 @@ function applyFile(file: string, host: string, sshDir: string, settings: RawSett
 function parseLine(line: string, where: string): [string, string[]] | undefined {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("#")) return undefined;
-    const match = /^([A-Za-z]+)(?:\s*=\s*|\s+)(.*)$/.exec(trimmed);
+    const match = /^([A-Za-z][A-Za-z0-9]*)(?:\s*=\s*|\s+|$)(.*)$/.exec(trimmed);
     if (!match) throw new Error(`${where}: can't read "${trimmed}" (expected a keyword and a value)`);
+    const keyword = match[1].toLowerCase();
+    if (!READ.has(keyword)) return undefined;
     const args = splitArgs(match[2], where);
     if (args.length === 0) throw new Error(`${where}: ${match[1]} has no value`);
-    return [match[1].toLowerCase(), args];
+    return [keyword, args];
 }
 
 function splitArgs(text: string, where: string): string[] {

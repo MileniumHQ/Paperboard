@@ -102,7 +102,7 @@ describe("ssh config", () => {
             "Host proxy-*",
             "    HostName %h.internal",
         ].join("\n"));
-        expect(resolveSshTarget("nas", { sshDir: dir, localUser: "me" })).toEqual({
+        expect(resolveSshTarget("nas", { sshDir: dir, localUser: "me" })).toMatchObject({
             hostName: "192.168.1.20",
             port: 2222,
             user: "admin",
@@ -114,12 +114,41 @@ describe("ssh config", () => {
 
     test("an unknown host connects as typed, on 22, as the local user, with the default keys that exist", () => {
         const dir = sshDir("", { id_rsa: "key", id_ed25519: "key" });
-        expect(resolveSshTarget("box.local", { sshDir: dir, localUser: "me" })).toEqual({
+        expect(resolveSshTarget("box.local", { sshDir: dir, localUser: "me" })).toMatchObject({
             hostName: "box.local",
             port: 22,
             user: "me",
             identityFiles: [path.join(dir, "id_ed25519"), path.join(dir, "id_rsa")],
+            knownHosts: { user: [path.join(dir, "known_hosts"), path.join(dir, "known_hosts2")] },
         });
+    });
+
+    test("lines for options Paperboard doesn't read are passed over, digits in their names too", () => {
+        const dir = sshDir([
+            "ForwardX11 yes",
+            "PKCS11Provider /usr/lib/opensc-pkcs11.so",
+            "Compression",
+            "Host nas",
+            "    ForwardX11Trusted yes",
+            "    HostName 192.168.1.20",
+        ].join("\n"));
+        expect(resolveSshTarget("nas", { sshDir: dir, localUser: "me" }).hostName).toBe("192.168.1.20");
+    });
+
+    test("the known_hosts files come from the config when it names them, and none means none", () => {
+        const dir = sshDir([
+            "Host pinned",
+            "    UserKnownHostsFile ~/.ssh/team_hosts %d/other_hosts",
+            "    GlobalKnownHostsFile /srv/ssh/known",
+            "Host loose",
+            "    UserKnownHostsFile none",
+        ].join("\n"));
+        const home = path.dirname(dir);
+        expect(resolveSshTarget("pinned", { sshDir: dir, localUser: "me" }).knownHosts).toEqual({
+            user: [path.join(dir, "team_hosts"), path.join(home, "other_hosts")],
+            global: ["/srv/ssh/known"],
+        });
+        expect(resolveSshTarget("loose", { sshDir: dir, localUser: "me" }).knownHosts.user).toEqual([]);
     });
 
     test("the first value wins, negation excludes, and Match blocks are skipped whole", () => {
