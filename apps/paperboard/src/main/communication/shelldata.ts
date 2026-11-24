@@ -109,7 +109,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                 graphics: currentGraphics,
                 openPath: (dir) => shell.openPath(dir),
                 appSettingsChanged: applySavedAppSettings,
-                sendIssue: (text) => sendIssue(text, issueContext("window", app.getVersion(), process.getSystemVersion())),
+                sendIssue: (text, details) => sendIssue(text, details, issueContext("window", app.getVersion(), process.getSystemVersion())),
             }),
 
             // panel permissions: your answer to a question the window was asked,

@@ -8,7 +8,8 @@
 import * as path from "path";
 import connectionPool from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
-import { getPaperboardDir, getFilesDir, ensureDir } from "daemon/core/paths";
+import { getPaperboardDir, getFilesDir, getLogsDir, ensureDir } from "daemon/core/paths";
+import { buildDetails, localScrubber, readLogTail, type DetailsInput } from "../issueDetails";
 import { sanitizeId } from "daemon/core/storage";
 import { logger } from "daemon/core/logger";
 import { openRemoteFolder } from "../remoteFolder";
@@ -28,8 +29,38 @@ export interface ShellHandlerDeps {
     // main's side effects of freshly saved settings: why Run on startup
     // couldn't be applied, or null
     appSettingsChanged: () => Promise<string | null>;
-    // Report an Issue: sends the text with what this host says about itself
-    sendIssue: (text: string) => Promise<void>;
+    // Report an Issue: sends the text and diagnostics with what this host says about itself
+    sendIssue: (text: string, details: string) => Promise<void>;
+}
+
+// Report an Issue's diagnostics: the computer the shell shows, its panels,
+// and the end of this computer's log, scrubbed (issueDetails.ts)
+async function collectIssueDetails(): Promise<string> {
+    const computers = connectionPool.listComputers();
+    const activeId = connectionPool.getActiveId();
+    const active = computers.find((computer) => computer.id === activeId) ?? computers.find((computer) => computer.id === "local");
+    const paired = computers.filter((computer) => computer.id !== "local");
+    let panels: DetailsInput["panels"];
+    try {
+        panels = (await connectionPool.getClient(active?.id ?? "local").listPanels()).map((panel) => ({ id: panel.id, version: panel.version }));
+    } catch (err) {
+        // quiet: an unreadable panel list is itself a finding, and the details say so
+        panels = { error: err instanceof Error ? err.message : String(err) };
+    }
+    return buildDetails(
+        {
+            computer: {
+                kind: active && active.id !== "local" ? "paired" : "this",
+                os: active?.os,
+                osVersion: active?.osVersion,
+                connected: active?.status.connected ?? false,
+            },
+            pairedCount: paired.length,
+            panels,
+            log: readLogTail(getLogsDir()),
+        },
+        localScrubber([...paired, ...discovery.look()].flatMap((computer) => [computer.name, computer.host])),
+    );
 }
 
 export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<BrowserShellCall, unknown> {
@@ -111,9 +142,11 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "launch-options": () => deps.launchOptions(),
         graphics: () => deps.graphics(),
         "app-settings-changed": () => deps.appSettingsChanged(),
-        "issue-send": ({ text }) => {
+        "issue-details": () => collectIssueDetails(),
+        "issue-send": ({ text, details }) => {
             if (typeof text !== "string") throw new Error("Invalid parameter: text");
-            return deps.sendIssue(text);
+            if (typeof details !== "string") throw new Error("Invalid parameter: details");
+            return deps.sendIssue(text, details);
         },
     };
 }

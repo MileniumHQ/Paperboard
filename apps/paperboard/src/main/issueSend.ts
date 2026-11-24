@@ -1,8 +1,8 @@
 // Report an Issue: what the person typed goes to Paperboard's issues service
-// (services/issues), with the app's version and the system it runs on.
-// Nothing else about the person or the computer is sent. Kept free of
-// Electron imports so it's tested against a local server.
-import { ISSUES_ORIGIN, MAX_TEXT_LENGTH, SUBMIT_PATH, type IssueContext, type IssueError } from "issues/shared";
+// (services/issues), with the app's version and the system it runs on, and
+// the scrubbed diagnostics they saw (issueDetails.ts) unless they left them
+// out. Kept free of Electron imports so it's tested against a local server.
+import { ISSUES_ORIGIN, MAX_DETAILS_LENGTH, MAX_TEXT_LENGTH, SUBMIT_PATH, type IssueContext, type IssueError } from "issues/shared";
 
 const OS_NAMES: Partial<Record<NodeJS.Platform, string>> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 const TIMEOUT_MS = 15_000;
@@ -14,16 +14,18 @@ export function issueContext(shell: IssueContext["shell"], appVersion: string, s
     return { appVersion, os, osVersion: systemVersion, arch: process.arch, shell };
 }
 
-export async function sendIssue(text: string, context: IssueContext, origin: string = ISSUES_ORIGIN): Promise<void> {
+/** `details` is the diagnostics the person saw (issue-details), or "" when they left them out. */
+export async function sendIssue(text: string, details: string, context: IssueContext, origin: string = ISSUES_ORIGIN): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) throw new Error("Say what went wrong first.");
     if (trimmed.length > MAX_TEXT_LENGTH) throw new Error(`An issue holds at most ${MAX_TEXT_LENGTH.toLocaleString("en")} characters.`);
+    if (details.length > MAX_DETAILS_LENGTH) throw new Error("The diagnostics are over the issues service's limit.");
     let res: Response;
     try {
         res = await fetch(new URL(SUBMIT_PATH, origin), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: trimmed, context }),
+            body: JSON.stringify({ text: trimmed, context, details }),
             signal: AbortSignal.timeout(TIMEOUT_MS),
         });
     } catch (err) {

@@ -54,7 +54,7 @@ function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
             graphics: () => ({ gpu: true }),
             openPath: (dir) => shell.openPath(dir),
             appSettingsChanged: applySavedAppSettings,
-            sendIssue: (text) => sendIssue(text, issueContext("browser", app.getVersion(), process.getSystemVersion())),
+            sendIssue: (text, details) => sendIssue(text, details, issueContext("browser", app.getVersion(), process.getSystemVersion())),
         });
         browserSessions ??= new BrowserSessions(path.join(getLocalDir(), "browser-sessions.json"));
         const port = browserPort();

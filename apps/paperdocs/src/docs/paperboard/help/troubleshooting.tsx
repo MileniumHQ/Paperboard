@@ -232,7 +232,11 @@ export default function TroubleshootingDoc() {
                 It goes straight to Paperboard's maintainer.
             </PaperText>
             <PaperTextList>
-                <li>Paperboard sends what you typed, its version, your operating system and its version, and whether you used the app or a browser. Nothing else from your computer is sent.</li>
+                <li>Paperboard sends what you typed, its version, your operating system and its version, and whether you used the app or a browser.</li>
+                <li>
+                    With <b>Include logs and panel versions</b> on, it also sends the panels on the computer you're looking at and their versions, and recent warnings, errors and lines from
+                    this computer's log. Paths, user and computer names, network addresses, emails and keys are replaced first. <b>See what's sent</b> shows exactly that text. Turn it off to send only what you typed.
+                </li>
                 <li>
                     Nothing comes back through the app. To follow up, open an issue on{" "}
                     <PaperLink href="https://github.com/MileniumHQ/Paperboard/issues">GitHub</PaperLink> or ask in the{" "}
