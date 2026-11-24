@@ -6,6 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { WebSocket } from "ws";
 import { isAllowedOrigin } from "../src/server/ws";
+import { mdnsHostName } from "../src/server/hostname";
 import { pinnedTlsOptions } from "../src/security/pinnedTls";
 import { dataDir } from "testkit/fs";
 import { startCrane } from "testkit/crane";
@@ -67,7 +68,7 @@ describe("HTTP and WebSocket authorities are allowlisted", () => {
 		await allowed.close();
 	});
 
-	test("over pinned TLS the machine's own hostname and interface addresses are served", async () => {
+	test("over pinned TLS the machine's own hostname, its .local name and interface addresses are served", async () => {
 		const daemon = await startDaemon({ host: "0.0.0.0" });
 		const identity = JSON.parse(fs.readFileSync(path.join(daemon.dataDir, "local", fs.readdirSync(path.join(daemon.dataDir, "local")).find((f) => f.startsWith("tls"))!), "utf8"));
 		const ownIp = Object.values(os.networkInterfaces()).flat().find((e) => e && e.family === "IPv4" && !e.internal)?.address ?? "127.0.0.1";
@@ -85,6 +86,8 @@ describe("HTTP and WebSocket authorities are allowlisted", () => {
 			});
 		expect(await statusFor(os.hostname())).toBe(200);
 		expect(await statusFor(ownIp)).toBe(200);
+		const mdns = mdnsHostName();
+		if (mdns) expect(await statusFor(mdns)).toBe(200);
 		expect(await statusFor("evil.example")).toBe(421);
 	});
 

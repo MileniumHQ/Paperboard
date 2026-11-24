@@ -46,6 +46,7 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         }),
 
         "computer-probe": ({ host, port }) => connectionPool.probe(host, port),
+        "computer-reach": ({ id }) => connectionPool.reach(id),
         // the shell goes to the computer it paired; its token and pinned
         // certificate stay in main, which dials it
         "computer-pair": async ({ host, port, code, name }) => ({ id: (await connectionPool.pairComputer(host, port, code, name)).id }),

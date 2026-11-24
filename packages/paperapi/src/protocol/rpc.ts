@@ -93,7 +93,13 @@ export interface RpcOsFacts {
     operator?: RpcIdentityPart;
 }
 
-export interface RpcSystemFacts extends RpcOsFacts {
+// the .local name a computer says it answers to: a hint, kept only once its
+// pinned certificate answers there; absent from an older daemon
+export interface RpcNetworkFacts {
+    mdnsName?: string;
+}
+
+export interface RpcSystemFacts extends RpcOsFacts, RpcNetworkFacts {
     hostname: string;
     os: string;
     arch: string;
@@ -342,7 +348,7 @@ type Success = { success: boolean };
 
 export interface RpcResults {
     "auth:pair": { success: boolean; token: string } & RpcSystemFacts;
-    "auth:verify": { success: boolean; hostname?: string; os?: string; arch?: string } & RpcOsFacts;
+    "auth:verify": { success: boolean; hostname?: string; os?: string; arch?: string } & RpcOsFacts & RpcNetworkFacts;
     "auth:scope": Ack;
     "auth:panel-token": { token: string };
     "auth:revoke-self": { revoked: boolean };

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../src/security/auth";
+import { mdnsHostName } from "../src/server/hostname";
 import { dataDir } from "testkit/fs";
 import { request, startDaemon, stopDaemon } from "testkit/inproc";
 import { installPanelFiles, serviceSource } from "testkit/panels";
@@ -103,11 +104,12 @@ describe("tokens persist and revocation is exact", () => {
 
 // Signing in tells the host what the computer is, and tells no panel.
 describe("verify answers the computer's identity to the host only", () => {
-	test("a host credential's verify carries the identity; a panel's and a refused one's carry none", async () => {
+	test("a host credential's verify carries the identity and the .local name; a panel's and a refused one's carry none", async () => {
 		const daemon = await startDaemon();
 		const host = await Rpc.open(daemon.url);
 		const facts = await host.ok("auth:verify", { token: daemon.token });
 		expect(facts).toMatchObject({ success: true, os: expect.any(String), hostname: expect.any(String), arch: process.arch });
+		expect(facts.mdnsName).toBe(mdnsHostName() ?? undefined);
 		const panelToken = (await host.ok("auth:panel-token", { panelId: "test.identity" })).token as string;
 
 		const panel = await Rpc.open(daemon.url);
@@ -173,8 +175,11 @@ describe("pairing is opt-in and penalised per peer", () => {
 		const code = daemon.instance.auth.startPairing();
 		const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
 		const pairer = await Rpc.open(daemon.url);
-		const token = (await pairer.ok("auth:pair", { code: spaced, clientName: "Laptop" })).token as string;
+		const paired = await pairer.ok("auth:pair", { code: spaced, clientName: "Laptop" });
+		const token = paired.token as string;
 		expect(token.startsWith("pc_")).toBe(true);
+		// the name it says it answers to, which the pairing app keeps only once its certificate answers there
+		expect(paired.mdnsName).toBe(mdnsHostName() ?? undefined);
 		expect(storedTokens(daemon.dataDir)).toContain(token);
 		await early.close();
 		await pairer.close();

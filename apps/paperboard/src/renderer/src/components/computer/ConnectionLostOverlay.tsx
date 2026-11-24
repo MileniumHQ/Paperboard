@@ -41,7 +41,8 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     <strong>{props.computer.name}</strong>{" "}
                     {computerAddress(props.computer, { inSentence: true })}.
                     Make sure the Paperboard server daemon is running.
-                    Paperboard keeps retrying on its own.
+                    Paperboard keeps looking for it on your network, and
+                    reconnects once it's found.
                 </PaperText>
                 <Show when={props.computer.status?.error}>
                     <PaperText preset="hint" class={styles.message}>

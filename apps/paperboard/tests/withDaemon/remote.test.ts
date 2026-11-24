@@ -306,6 +306,99 @@ describe("paired computers", () => {
 	});
 });
 
+// A paired computer is its certificate, wherever it answers: it is kept at
+// its .local name, dialed there and at its last address at once, and
+// followed to a new address, each only once the pinned certificate answers.
+describe("a paired computer found again", () => {
+	let localDir: string | undefined;
+	beforeAll(() => {
+		// this computer has no daemon of its own here, so no remote is mistaken for it
+		localDir = process.env.PAPERBOARD_DIR;
+		process.env.PAPERBOARD_DIR = dataDir();
+	});
+	afterAll(() => restoreEnv("PAPERBOARD_DIR", localDir));
+
+	// a daemon that takes frames and answers none
+	const unanswering = () => {
+		// says nothing: only what it was sent matters
+	};
+
+	// answers pairing with the name it says it answers to, and every sign-in
+	const answering = (mdnsName: string) => (frame: any, reply: (frame: unknown) => void) => {
+		const facts = { hostname: "far", os: "linux", arch: "x64", mdnsName };
+		if (frame.action === "auth:pair") reply({ type: "response", id: frame.id, result: { success: true, token: "pc_far", ...facts } });
+		if (frame.action === "auth:verify") reply({ type: "response", id: frame.id, result: { success: true, ...facts } });
+	};
+
+	// Inventory: Security — a name is kept for a paired computer only when its pinned certificate answers there.
+	test("pairing by IP keeps the name the computer gives only when that name leads to its certificate", async () => {
+		// the same computer at 127.0.0.2 and, by the name it gives, at 127.0.0.3
+		const far = await scriptedRemote(answering("127.0.0.3"), { bind: "0.0.0.0" });
+		// a computer that names 127.0.0.6, where another certificate answers on its port
+		const misnamed = await scriptedRemote(answering("127.0.0.6"), { bind: "127.0.0.5" });
+		const other = await scriptedRemote(unanswering, { bind: "127.0.0.6", port: misnamed.port });
+		const pool = new ConnectionPool();
+		try {
+			const named = await pool.pairComputer("127.0.0.2", far.port, "123456");
+			expect({ host: named.host, address: named.address }).toEqual({ host: "127.0.0.3", address: "127.0.0.2" });
+			const unnamed = await pool.pairComputer("127.0.0.5", misnamed.port, "123456");
+			expect({ host: unnamed.host, address: unnamed.address }).toEqual({ host: "127.0.0.5", address: undefined });
+			expect(other.frames).toEqual([]);
+		} finally {
+			pool.dispose();
+			await Promise.all([far.close(), misnamed.close(), other.close()]);
+		}
+	});
+
+	// Inventory: Security — a copied fingerprint never moves a paired computer to another machine.
+	test("a sighting is followed only where the pinned certificate answers, past a copy of its fingerprint, and the client reconnects there", async () => {
+		const far = await scriptedRemote(answering("far.local"), { bind: "127.0.0.2" });
+		// another machine advertising the paired computer's fingerprint, on its port
+		const impostor = await scriptedRemote(unanswering, { bind: "127.0.0.4", port: far.port });
+		const pool = new ConnectionPool();
+		let moved: Awaited<ReturnType<typeof scriptedRemote>> | undefined;
+		try {
+			const { id } = await pool.pairComputer("127.0.0.2", far.port, "123456");
+			const record = () => pool.listComputers().find((c) => c.id === id)!;
+			await waitFor("the paired computer to connect", () => record().status.connected);
+			const fingerprint = new crypto.X509Certificate(far.cert).fingerprint256;
+			const sighting = (host: string, port: number) => [{ id: "seen", name: "far", host, port, fingerprint }];
+
+			await pool.followDiscovered(sighting("127.0.0.4", far.port));
+			expect({ host: record().host, port: record().port }).toEqual({ host: "127.0.0.2", port: far.port });
+			expect(impostor.frames).toEqual([]);
+
+			// the computer goes away and comes back at a new address and port
+			await far.close();
+			await waitFor("the paired computer to drop", () => !record().status.connected);
+			moved = await scriptedRemote(answering("far.local"), { identity: far.identity, bind: "127.0.0.5" });
+			// the copy is listed after it, and doesn't hide it
+			await pool.followDiscovered([...sighting("127.0.0.5", moved.port), { ...sighting("127.0.0.4", far.port)[0]!, id: "zz-copy", name: "zz" }]);
+			expect({ host: record().host, port: record().port }).toEqual({ host: "127.0.0.5", port: moved.port });
+			await waitFor("the client to reconnect at the new address", () => record().status.connected && record().status.host === "127.0.0.5");
+			expect(impostor.frames).toEqual([]);
+		} finally {
+			pool.dispose();
+			await Promise.all([impostor.close(), moved?.close()]);
+		}
+	});
+
+	// Inventory: Security — a paired computer's credential goes only to the address its pinned certificate answers at.
+	test("a computer known by two addresses is dialed at both, and only the one with its certificate is sent the token", async () => {
+		const far = await scriptedRemote(answering("far.local"), { bind: "127.0.0.2" });
+		const impostor = await scriptedRemote(unanswering, { bind: "127.0.0.4", port: far.port });
+		const client = new PaperCraneClient({ reconnectBaseMs: 60_000, reconnectMaxMs: 60_000 });
+		try {
+			const status = await client.connect(["127.0.0.4", "127.0.0.2"], far.port, "pc_far", far.cert);
+			expect({ connected: status.connected, host: status.host }).toEqual({ connected: true, host: "127.0.0.2" });
+			expect(impostor.frames).toEqual([]);
+		} finally {
+			client.disconnect();
+			await Promise.all([far.close(), impostor.close()]);
+		}
+	});
+});
+
 // The local daemon whose sockets open tunnels: the real WS server and auth,
 // with the tunnel heartbeat shortened.
 // `standalone` passes no remotesFile, as `papercrane serve` and the systemd
@@ -340,10 +433,19 @@ async function tunnelHost(remotes: unknown[], { standalone = false } = {}) {
 
 // A remote computer that is not Paperboard: a pinned TLS WebSocket server
 // whose answers the test scripts. Records every frame it receives.
-async function scriptedRemote(script: (frame: any, reply: (frame: unknown) => void) => void) {
-	const identity = createTlsIdentity();
+// A daemon whose RPC answers are scripted. It serves /health like a daemon
+// does, and can take another's identity (the same computer at a new address)
+// and listen at any address and port.
+async function scriptedRemote(
+	script: (frame: any, reply: (frame: unknown) => void) => void,
+	at: { identity?: { key: string; cert: string }; bind?: string; port?: number } = {},
+) {
+	const identity = at.identity ?? createTlsIdentity();
 	const frames: string[] = [];
-	const server = https.createServer({ key: identity.key, cert: identity.cert });
+	const server = https.createServer({ key: identity.key, cert: identity.cert }, (req, res) => {
+		res.writeHead(req.url === "/health" ? 200 : 404);
+		res.end();
+	});
 	const wss = new WebSocketServer({ server });
 	wss.on("connection", (ws) => {
 		ws.on("message", (data) => {
@@ -351,8 +453,9 @@ async function scriptedRemote(script: (frame: any, reply: (frame: unknown) => vo
 			script(JSON.parse(data.toString()), (frame) => ws.send(JSON.stringify(frame)));
 		});
 	});
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	await new Promise<void>((resolve) => server.listen(at.port ?? 0, at.bind ?? "127.0.0.1", resolve));
 	return {
+		identity,
 		cert: identity.cert,
 		port: (server.address() as net.AddressInfo).port,
 		frames,
@@ -435,6 +538,19 @@ describe("tunnels and scoped credentials", () => {
 			await tunnelOpen(host, "s1");
 		} finally {
 			restoreEnv("PAPERBOARD_DIR", previous);
+			await local.close();
+		}
+	});
+
+	// Inventory: Core contract — panels reach a paired computer whose .local name doesn't resolve, at its last address.
+	test("a tunnel reaches a computer at its last address when its name leads nowhere", async () => {
+		// the computer listens on IPv4 only, so nothing answers at ::1; it is at 127.0.0.1
+		const local = await tunnelHost([{ id: "far", name: "Far", host: "::1", address: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken }]);
+		try {
+			const host = await local.host();
+			host.send({ type: "remote:open", tunnelId: "a1", computerId: "far" });
+			await tunnelOpen(host, "a1");
+		} finally {
 			await local.close();
 		}
 	});

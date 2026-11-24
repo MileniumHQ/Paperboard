@@ -1,5 +1,6 @@
 import * as net from "node:net";
 import * as os from "node:os";
+import { mdnsHostName } from "./hostname";
 
 // The listener owns this policy. Never resolve an untrusted Host through
 // DNS: a rebound name would resolve to our address and defeat the check.
@@ -30,6 +31,9 @@ export function createHostAuthorityCheck(bindHost = "127.0.0.1"): (authority: st
         const hostname = os.hostname().replace(/\.$/, "").toLowerCase();
         own.add(hostname);
         own.add(`${hostname.replace(/\.local$/, "")}.local`);
+        // the .local name the daemon tells clients about
+        const mdns = mdnsHostName();
+        if (mdns) own.add(mdns.toLowerCase());
         for (const entries of Object.values(os.networkInterfaces())) {
             for (const entry of entries ?? []) {
                 const ip = authorityHostname(entry.address.includes(":") ? `[${entry.address}]` : entry.address);

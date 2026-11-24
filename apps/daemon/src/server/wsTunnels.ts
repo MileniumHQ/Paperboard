@@ -4,12 +4,12 @@
 import * as path from "path";
 import { WebSocket } from "ws";
 import { getLocalDir } from "../core/paths";
-import { readRemotes } from "../system/remotes";
-import { pinnedTlsOptions } from "../security/pinnedTls";
-import { pinnableWebSocket } from "../security/pinnableWebSocket";
+import { readRemotes, remoteHosts } from "../system/remotes";
+import { dialPinned, type PinnedDial } from "../security/pinnedDial";
 import { logger } from "../core/logger";
 import { ErrorCode } from "../core/protocol";
 import { readValue, text } from "@mileniumhq/paperapi/protocol";
+import { errorMessage } from "@mileniumhq/paperapi/errors";
 import { HANDSHAKE_TIMEOUT_MS, MAX_WS_PAYLOAD, sendBounded } from "./wsFrames";
 import type { SocketIdentity } from "./wsIdentity";
 
@@ -24,7 +24,9 @@ export interface TunnelOptions {
 }
 
 interface Tunnel {
-    socket: WebSocket;
+    // null while the computer's addresses are still being dialed
+    socket: WebSocket | null;
+    dial: PinnedDial;
     ready: boolean;
     timer: ReturnType<typeof setTimeout>;
     heartbeat?: ReturnType<typeof setInterval>;
@@ -46,9 +48,10 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
         tunnels.delete(tunnelId);
         clearTimeout(tunnel.timer);
         clearInterval(tunnel.heartbeat);
-        if (tunnel.onPong) tunnel.socket.off("pong", tunnel.onPong);
+        tunnel.dial.cancel();
+        if (tunnel.onPong) tunnel.socket?.off("pong", tunnel.onPong);
         try {
-            tunnel.socket.terminate();
+            tunnel.socket?.terminate();
         } catch (err) {
             logger.debug(`[tunnel ${tunnelId}] close failed:`, err);
         }
@@ -122,85 +125,101 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
             return;
         }
         try {
-            const UpstreamWebSocket = pinnableWebSocket();
-            const upstream = new UpstreamWebSocket(`wss://${entry.host}:${entry.port}`, {
-                maxPayload: MAX_WS_PAYLOAD, handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
-                ...pinnedTlsOptions(entry.cert),
-            });
+            // its .local name and last address at once; the pinned certificate says which is it
+            const dial = dialPinned(remoteHosts(entry), entry.port, entry.cert, { timeoutMs: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_WS_PAYLOAD });
             const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
             timer.unref?.();
-            const tunnel: Tunnel = { socket: upstream, ready: false, timer };
-            let handshake: "connecting" | "auth" | "scope" | "ready" = "connecting";
+            const tunnel: Tunnel = { socket: null, dial, ready: false, timer };
+            let handshake: "auth" | "scope" | "ready" = "auth";
             tunnels.set(tunnelId, tunnel);
-            const opened = () => {
-                if (tunnel.ready || !tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
-                handshake = "ready";
-                clearTimeout(timer);
-                tunnel.ready = true;
-                // a remote that sleeps or drops off the network leaves the
-                // upstream looking open; one missed pong closes the tunnel
-                // so the panel's transport reopens it instead of hanging
-                let awaitingPong = false;
-                tunnel.onPong = () => { awaitingPong = false; };
-                upstream.on("pong", tunnel.onPong);
-                tunnel.heartbeat = setInterval(() => {
-                    if (awaitingPong) {
-                        closeTunnel(tunnelId, { reason: "The remote computer stopped responding" });
-                        return;
+            // the upstream, once one of the computer's addresses answered with its certificate
+            const attach = (upstream: WebSocket) => {
+                // the tunnel was closed while its computer was being dialed
+                if (tunnels.get(tunnelId) !== tunnel) {
+                    upstream.terminate();
+                    return;
+                }
+                tunnel.socket = upstream;
+                const opened = () => {
+                    if (tunnel.ready || !tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
+                    handshake = "ready";
+                    clearTimeout(timer);
+                    tunnel.ready = true;
+                    // a remote that sleeps or drops off the network leaves the
+                    // upstream looking open; one missed pong closes the tunnel
+                    // so the panel's transport reopens it instead of hanging
+                    let awaitingPong = false;
+                    tunnel.onPong = () => { awaitingPong = false; };
+                    upstream.on("pong", tunnel.onPong);
+                    tunnel.heartbeat = setInterval(() => {
+                        if (awaitingPong) {
+                            closeTunnel(tunnelId, { reason: "The remote computer stopped responding" });
+                            return;
+                        }
+                        awaitingPong = true;
+                        upstream.ping();
+                    }, options.tunnelHeartbeatMs ?? TUNNEL_HEARTBEAT_MS);
+                    tunnel.heartbeat.unref?.();
+                    ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
+                };
+                upstream.on("message", (data: any) => {
+                    if (!tunnels.has(tunnelId) || upstream.readyState !== WebSocket.OPEN) return;
+                    try {
+                        const m = JSON.parse(data.toString("utf8"));
+                        if (m?.id === "__tunnel-auth") {
+                            if (handshake !== "auth") return;
+                            if (m.error) {
+                                closeTunnel(tunnelId, { reason: "auth-failed" });
+                            } else if (identity.panelId) {
+                                handshake = "scope";
+                                // The paired host GRANTS a narrower socket identity. No
+                                // host credential is delivered to the panel or its tunnel.
+                                upstream.send(JSON.stringify({ id: "__tunnel-scope", action: "auth:scope", params: { panelId: identity.panelId } }));
+                            } else {
+                                opened();
+                            }
+                            return;
+                        }
+                        if (m?.id === "__tunnel-scope") {
+                            if (handshake !== "scope") return;
+                            if (m.error) closeTunnel(tunnelId, { reason: `Remote scope grant failed: ${m.error}` });
+                            else opened();
+                            return;
+                        }
+                    } catch (err) {
+                        // non-JSON frames during handshake, logged for diagnosis
+                        logger.debug(`[tunnel ${tunnelId}] non-JSON frame during auth handshake:`, err);
                     }
-                    awaitingPong = true;
-                    upstream.ping();
-                }, options.tunnelHeartbeatMs ?? TUNNEL_HEARTBEAT_MS);
-                tunnel.heartbeat.unref?.();
-                ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
-            };
-            upstream.on("open", () => {
-                handshake = "auth";
+                    if (tunnel.ready && ws.readyState === WebSocket.OPEN) {
+                        forwardTunnel(ws, JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
+                    }
+                });
+                upstream.on("close", () => {
+                    closeTunnel(tunnelId);
+                });
+                upstream.on("error", (err) => {
+                    logger.debug(`[tunnel ${tunnelId}] upstream connection error:`, err);
+                    closeTunnel(tunnelId, { reason: "unreachable" });
+                });
                 upstream.send(JSON.stringify({
                     id: "__tunnel-auth",
                     action: "auth:verify",
                     params: { token: entry.token },
                 }));
-            });
-            upstream.on("message", (data: any) => {
-                if (!tunnels.has(tunnelId) || upstream.readyState !== UpstreamWebSocket.OPEN) return;
-                try {
-                    const m = JSON.parse(data.toString("utf8"));
-                    if (m?.id === "__tunnel-auth") {
-                        if (handshake !== "auth") return;
-                        if (m.error) {
-                            closeTunnel(tunnelId, { reason: "auth-failed" });
-                        } else if (identity.panelId) {
-                            handshake = "scope";
-                            // The paired host GRANTS a narrower socket identity. No
-                            // host credential is delivered to the panel or its tunnel.
-                            upstream.send(JSON.stringify({ id: "__tunnel-scope", action: "auth:scope", params: { panelId: identity.panelId } }));
-                        } else {
-                            opened();
-                        }
-                        return;
+            };
+            dial.result.then(
+                ({ socket }) => {
+                    try {
+                        attach(socket);
+                    } catch (err) {
+                        closeTunnel(tunnelId, { reason: errorMessage(err) });
                     }
-                    if (m?.id === "__tunnel-scope") {
-                        if (handshake !== "scope") return;
-                        if (m.error) closeTunnel(tunnelId, { reason: `Remote scope grant failed: ${m.error}` });
-                        else opened();
-                        return;
-                    }
-                } catch (err) {
-                    // non-JSON frames during handshake, logged for diagnosis
-                    logger.debug(`[tunnel ${tunnelId}] non-JSON frame during auth handshake:`, err);
-                }
-                if (tunnel.ready && ws.readyState === WebSocket.OPEN) {
-                    forwardTunnel(ws, JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
-                }
-            });
-            upstream.on("close", () => {
-                closeTunnel(tunnelId);
-            });
-            upstream.on("error", (err) => {
-                logger.debug(`[tunnel ${tunnelId}] upstream connection error:`, err);
-                closeTunnel(tunnelId, { reason: "unreachable" });
-            });
+                },
+                (err) => {
+                    logger.debug(`[tunnel ${tunnelId}] upstream connection error:`, err);
+                    closeTunnel(tunnelId, { reason: "unreachable" });
+                },
+            );
         } catch (err: any) {
             ws.send(JSON.stringify({ type: "tunnel-closed", id: tunnelId, reason: err?.message || "error" }));
         }
@@ -212,7 +231,7 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
         // tunneled frames bypass the local pipeline
         if (maybe.type === "tunnel") {
             const tunnel = tunnels.get(maybe.id);
-            if (identity.authenticated && tunnel?.ready && tunnel.socket.readyState === WebSocket.OPEN) {
+            if (identity.authenticated && tunnel?.ready && tunnel.socket?.readyState === WebSocket.OPEN) {
                 forwardTunnel(tunnel.socket, typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
             }
             return true;

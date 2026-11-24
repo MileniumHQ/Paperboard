@@ -19,12 +19,12 @@ import { getLocalDir } from "daemon/core/paths";
 import {
     peerCertPem,
     pinnedRequest,
-    pinnedTlsOptions,
     type PinnedRequestInit,
     type PinnedResponse,
 } from "daemon/security/pinnedTls";
 import type { TLSSocket } from "tls";
 import { pinnableWebSocket } from "daemon/security/pinnableWebSocket";
+import { dialPinned, type PinnedDial } from "daemon/security/pinnedDial";
 import { bracketHost } from "./probeTarget";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 
@@ -142,7 +142,9 @@ export class PaperCraneConnection extends EventEmitter {
     private generation = 0;
     // what the owner asked to connect to, replayed by automatic reconnects
     // (a local client re-resolves its daemon instead of reusing a token)
-    private target: { host: string; port?: number; token?: string; cert?: string } | null = null;
+    private target: { hosts: string[]; port?: number; token?: string; cert?: string } | null = null;
+    // drops the dials of an attempt still finding which address answers
+    private cancelDials: (() => void) | null = null;
     private heartbeat: NodeJS.Timeout | null = null;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private reconnectAttempts = 0;
@@ -242,16 +244,23 @@ export class PaperCraneConnection extends EventEmitter {
         }
     }
 
+    /**
+     * Connects to a daemon. A paired computer can be known by more than one
+     * address (its .local name and the IP it last answered at): all of them
+     * are dialed at once, and its pinned certificate says which one is it.
+     */
     public async connect(
-        host = "127.0.0.1",
+        host: string | readonly string[] = "127.0.0.1",
         port?: number,
         token?: string,
         cert?: string,
     ): Promise<TargetStatus> {
         if (this.connectingPromise) return this.connectingPromise;
+        const hosts = [...new Set(typeof host === "string" ? [host] : host)];
+        if (hosts.length === 0) throw new Error("A computer needs an address to connect to");
         // pairing dials without a credential and must not be retried
-        this.target = this.trustOnFirstUse ? null : { host, port, token, cert };
-        const attempt: Promise<TargetStatus> = this.open(host, port, token, cert).finally(() => {
+        this.target = this.trustOnFirstUse ? null : { hosts, port, token, cert };
+        const attempt: Promise<TargetStatus> = this.open(hosts, port, token, cert).finally(() => {
             if (this.connectingPromise === attempt) this.connectingPromise = null;
         });
         this.connectingPromise = attempt;
@@ -309,14 +318,26 @@ export class PaperCraneConnection extends EventEmitter {
         }
     }
 
+    /**
+     * The addresses or port a paired computer is known by changed (it was
+     * found somewhere new): reconnects use them. A computer that is offline is
+     * dialed at the new addresses now; a connected one keeps its socket.
+     */
+    public retarget(hosts: readonly string[], port: number): void {
+        if (!this.target || hosts.length === 0) return;
+        this.target = { ...this.target, hosts: [...new Set(hosts)], port };
+        if (!this.isConnected && !this.connectingPromise) this.wake();
+    }
+
     private async open(
-        host: string,
+        hosts: string[],
         port: number | undefined,
         token: string | undefined,
         cert: string | undefined,
     ): Promise<TargetStatus> {
         this.closeSocket();
         const gen = this.generation;
+        let host = hosts[0]!;
         this.host = host;
         if (port) this.port = port;
         this.token = token;
@@ -346,14 +367,31 @@ export class PaperCraneConnection extends EventEmitter {
 
         this.localIdentityVerified = localSocket !== undefined;
         let ws: WebSocket;
-        try {
-            const Socket = pinnableWebSocket();
-            ws =
-                localSocket ??
-                new Socket(`wss://${bracketHost(host)}:${this.port}`, cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false });
-        } catch (err) {
-            // an unreadable pinned certificate fails the same way every time
-            failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${errorMessage(err)}`, { cause: err }), false);
+        if (localSocket) {
+            ws = localSocket;
+        } else if (cert) {
+            // every address the computer is known by, at once (pinnedDial.ts)
+            const dial = ((): PinnedDial => {
+                try {
+                    return dialPinned(hosts, this.port, cert, { timeoutMs: this.connectTimeoutMs });
+                } catch (err) {
+                    // an unreadable pinned certificate fails the same way every time
+                    return failBeforeSocket(new Error(`Cannot connect to ${bracketHost(host)}:${this.port}: ${errorMessage(err)}`, { cause: err }), false);
+                }
+            })();
+            this.cancelDials = dial.cancel;
+            try {
+                const first = await dial.result;
+                ws = first.socket;
+                host = first.host;
+                this.host = host;
+            } catch (err) {
+                failBeforeSocket(err, true);
+            } finally {
+                if (this.cancelDials === dial.cancel) this.cancelDials = null;
+            }
+        } else {
+            ws = new (pinnableWebSocket())(`wss://${bracketHost(host)}:${this.port}`, { rejectUnauthorized: false });
         }
         return new Promise((resolve, reject) => {
             this.ws = ws;
@@ -514,9 +552,9 @@ export class PaperCraneConnection extends EventEmitter {
     private reconnectNow(): void {
         const target = this.target;
         if (!target) return;
-        this.connect(target.host, target.port, target.token, target.cert).catch((err) => {
+        this.connect(target.hosts, target.port, target.token, target.cert).catch((err) => {
             // the attempt's close handler schedules the next one
-            logger.debug(`[PaperCraneClient] reconnect to ${target.host} failed:`, err);
+            logger.debug(`[PaperCraneClient] reconnect to ${target.hosts.join(" / ")} failed:`, err);
         });
     }
 
@@ -573,6 +611,7 @@ export class PaperCraneConnection extends EventEmitter {
     // ends the current socket without touching the owner's intent
     private closeSocket(): void {
         this.generation++;
+        this.cancelDials?.();
         this.localIdentityVerified = false;
         this.stopHeartbeat();
         if (this.reconnectTimer) {
@@ -622,8 +661,8 @@ export class PaperCraneConnection extends EventEmitter {
     ): Promise<RpcResult<A>> {
         if (this.connectingPromise) await this.connectingPromise;
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            const t = this.target ?? { host: this.host, port: this.port, token: this.token, cert: this.cert };
-            await this.connect(t.host, t.port, t.token, t.cert);
+            const t = this.target ?? { hosts: [this.host], port: this.port, token: this.token, cert: this.cert };
+            await this.connect(t.hosts, t.port, t.token, t.cert);
         }
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             throw new Error(`Cannot connect to the Paperboard server daemon at ${bracketHost(this.host)}:${this.port}`);

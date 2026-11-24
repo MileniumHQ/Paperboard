@@ -24,6 +24,7 @@ import {
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, isDaemonChallenge, daemonProof,
 } from "../security/handshake";
 import { loadOrCreateTlsIdentity, type TlsIdentity } from "../security/tlsIdentity";
+import { certFingerprint } from "../security/pinnedTls";
 import { logger } from "../core/logger";
 import { PanelServicesManager } from "../panels/panelServices";
 import { backupServiceFor } from "../rpc/backups";
@@ -414,9 +415,10 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             // previous run's workloads are gone) install now
             void engine.applyReadyStagedPackages();
 
-            // announce over mDNS (loopback skips inside)
-            if (options.advertise !== false) {
-                lifecycle.advertise(advertisePaperCrane({ port: actualPort, host }));
+            // announce over mDNS, with who this daemon is: a loopback-only
+            // daemon has no TLS identity and nothing to announce
+            if (options.advertise !== false && tlsIdentity) {
+                lifecycle.advertise(advertisePaperCrane({ port: actualPort, host, fingerprint: certFingerprint(tlsIdentity.cert) }));
             }
 
             if (!headless) {
