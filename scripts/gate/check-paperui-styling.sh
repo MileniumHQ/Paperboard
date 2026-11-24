@@ -78,7 +78,7 @@ fi
 # src/marketing is left out on purpose: PaperUI Marketing draws the site's own
 # fixed scale (its button's 18px and 24px type, its paper edge), which the
 # app's tokens don't have and no app component should borrow. The hex and
-# global-selector checks above still cover it.
+# global-selector checks still cover it.
 # A standalone 0px is not a size; a line is flagged when a literal is left
 # once those are gone (`0px 12px` still has its 12px, `10px` is no zero).
 scan '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" --include='*.css'
