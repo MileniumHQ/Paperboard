@@ -199,6 +199,12 @@ export function Example() {
                         <td>No default</td>
                         <td>Called once each time the step becomes the active one, including the first step on mount. Nothing it reads, and no change to <PaperCode>canProceed</PaperCode> or <PaperCode>hideBack</PaperCode>, calls it again.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>onNext</PaperCode></td>
+                        <td><PaperCode>() =&gt; boolean | void</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called when Next (or Finish) is pressed on this step and it can proceed. Return <PaperCode>false</PaperCode> to stay on the step, for one that does its own work first, such as signing in, and moves on when that is done.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -293,6 +299,11 @@ import type { WizardContextType } from "@mileniumhq/paperui";`}
                         <td><PaperCode>setBackHidden</PaperCode></td>
                         <td><PaperCode>(hidden: boolean) =&gt; void</PaperCode></td>
                         <td>Hides or shows Back for the active step.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>setNextHandler</PaperCode>, <PaperCode>clearNextHandler</PaperCode></td>
+                        <td><PaperCode>(handler: () =&gt; boolean | void) =&gt; void</PaperCode></td>
+                        <td>Set and take back what the active step does when Next is pressed. Each step does this for its <PaperCode>onNext</PaperCode>; you do not call them.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>optionsShown</PaperCode>, <PaperCode>setOptionsShown</PaperCode></td>
