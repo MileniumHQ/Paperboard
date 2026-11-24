@@ -91,7 +91,7 @@ async function main(): Promise<void> {
         }
         case "pair": {
             const { runPair } = await import("./cli/localControl");
-            return finish(runPair);
+            return finish(() => runPair(command.json));
         }
         case "install-service": {
             const { installService } = await import("./cli/serviceInstall");
