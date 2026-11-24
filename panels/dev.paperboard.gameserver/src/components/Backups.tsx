@@ -51,13 +51,14 @@ const dateText = (iso: string) => new Date(iso).toLocaleString();
 export default function Backups(props: { active: boolean; whileRunning: "quiesce" | "offline" }) {
     const server = useServer();
     const ofServer = { target: server.id };
-    // looked up again each time the tab is shown: routine backups happen
-    // while it is not. Each read keeps the rows it did not change, so a
-    // reload rebuilds no backup's row; the server's running backup or
-    // restore, made here, by a block or routinely, arrives as it moves, and
-    // once it ends its backup and the schedule's last result are read
     // why the running backup's progress can't be heard; once it can again, what it missed is read again
     const [lost, setLost] = createSignal<string | null>(null);
+    // The backups are looked up again each time the tab is shown: routine
+    // backups happen while it is not. Each read keeps the rows it did not
+    // change, so a reload rebuilds no backup's row. The server's running
+    // backup or restore, made here, by a block or routinely, arrives as it
+    // moves, and once it ends its backup and the schedule's last result are
+    // read.
     const read = createRead(
         async () => {
             const [status, schedule] = await Promise.all([backupApi.status(PANEL_ID, ofServer), server.calls.readBackupSchedule()]);
@@ -115,10 +116,13 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         }
     };
 
-    // a backup needs somewhere to go; the first one asks where
+    // a backup needs somewhere to go; the first one asks where, and the
+    // location it chose is on screen (Kept in, Saved Backups) at once
     const ensureLocation = async (): Promise<boolean> => {
         if (status()?.location) return true;
-        return (await backupApi.chooseLocation(PANEL_ID)).status === "chosen";
+        if ((await backupApi.chooseLocation(PANEL_ID)).status !== "chosen") return false;
+        await load();
+        return true;
     };
 
     const changeLocation = () => act("location", "Couldn't change the location", async () => {

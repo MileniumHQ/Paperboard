@@ -12,6 +12,7 @@ import { PANEL_ID } from "../src/servers";
 import { TRIGGER_IDS } from "../src/service/contract";
 import { playerPoller } from "../src/games/serviceKit";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { backupHooks } from "../src/service/backups";
 import { argValue, rconPasswordRule } from "../src/games/rust/service";
 import { parseBanList, parseBansCfg, steamId } from "../src/games/rust/roster";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, RustRconUnreachable } from "../src/games/rust/webrcon";
@@ -216,6 +217,49 @@ describe("Rust", () => {
         await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again");
         expect(fs.existsSync(marker)).toBe(false);
         await stop(server);
+    });
+
+    test("a backup or restore holds the server from its stop to its end: nothing starts in between, and it starts again at the end", async () => {
+        const server = await rustServer();
+        const hooks = backupHooks({
+            server: () => server.server,
+            servers: () => [server.server],
+            panelFolders: () => [],
+            saveSchedule: () => Promise.reject(new Error("no schedules here")),
+            replaceSettings: async (s, settings) => void (await s.updateSettings(() => settings)),
+            reload: (s) => s.game.initialize(false),
+        });
+        const refused = () => startServerInstance(server.server).then(() => null, (err: Error) => err.message);
+        const runs = () => server.server.state.serverEntries.filter((e) => String(e.content).startsWith("Command Line:")).length;
+
+        await online(server);
+        await hooks.beforeBackup(server.server.id);
+        // stopped for the copy, its last run cleaned up, and held
+        expect(server.server.state.serverStatus).toBe("offline");
+        expect(server.server.backupHold).toBe("backup");
+        expect(await refused()).toContain("being backed up");
+        await hooks.afterBackup(server.server.id);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again after the copy");
+        expect(server.server.backupHold).toBeNull();
+
+        await server.server.waitFor(() => runs() === 2, "the second run's command line");
+        await hooks.beforeRestore(server.server.id);
+        expect(server.server.state.serverStatus).toBe("offline");
+        expect(await refused()).toContain("being restored");
+        expect(server.server.state.serverStatus).toBe("offline");
+        const record = { format: 2 as const, id: "b", panelId: PANEL_ID, target: server.server.id, createdAt: new Date().toISOString(), size: 0, sha256: "", panelVersion: null, label: null, paths: [], exclude: [] };
+        await hooks.afterRestore({ target: server.server.id, backup: record, ok: true, data: { ...server.server.settings, hostname: "Restored" } });
+        // the restart is not lost: it starts again on the backup's settings
+        await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again after the restore");
+        expect(server.server.settings.hostname).toBe("Restored");
+        await server.server.waitFor(() => runs() === 3, "the restored run's command line");
+        await stop(server);
+
+        // a restore of a server that was not running leaves it stopped
+        await hooks.beforeRestore(server.server.id);
+        await hooks.afterRestore({ target: server.server.id, backup: record, ok: false, error: "the swap failed" });
+        expect(server.server.backupHold).toBeNull();
+        expect(server.server.state.serverStatus).toBe("offline");
     });
 
     test("the remote console never names its address in an error, tells an unknown command from a lost connection, and fails what is waiting when the server goes", async () => {

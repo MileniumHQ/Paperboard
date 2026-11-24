@@ -307,6 +307,16 @@ export async function resumeIfMarked(ctx: Server, after: string): Promise<void> 
     await startServerInstance(ctx).catch((err) => report(ctx, `The server could not start again after ${after}`, err));
 }
 
+/**
+ * Waits until a server asked to stop is offline and its last run's cleanup
+ * (afterStop) has settled, so nothing of that run writes its folder after,
+ * and a start that follows is not dropped as one for a server still running.
+ */
+export async function stoppedAndReleased(ctx: Server, ms: number, label: string): Promise<void> {
+    await waitUntil(async () => ctx.state.serverStatus === "offline" && !(await ctx.process.exists(ctx.game.primaryProcessId)), ms, label);
+    await ctx.lifecycle.released;
+}
+
 export interface OfflineBackupSpec {
     name: string;
     processId: string;
@@ -323,7 +333,9 @@ export interface OfflineBackupSpec {
 /**
  * Backups of a game that can't be copied while it runs: save, stop, copy,
  * then start again. The stop leaves a resume marker, so a service that dies
- * before the start starts the server once it is back.
+ * before the start starts the server once it is back. A refusal after the
+ * stop leaves the marker too: the caller's `after` starts the server again,
+ * once nothing holds it.
  */
 export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService["backup"] {
     async function before() {
@@ -332,22 +344,15 @@ export function offlineBackup(ctx: Server, spec: OfflineBackupSpec): GameService
         if (ctx.state.serverStatus === "offline") { await spec.clean(); return; }
         if (ctx.state.serverStatus !== "online") throw new Error(`${spec.name} is starting or stopping; wait before backup or restore`);
         flag.busy = true;
-        let marked = false;
         try {
             await spec.announce();
             await spec.save();
             await markResume(ctx);
-            marked = true;
             const saved = await spec.exitStamp?.();
             await (await import("../service/lifecycle")).stopServerInstance(ctx);
-            await waitUntil(async () => !(await ctx.process.exists(spec.processId)), 125_000, `${spec.name} to exit`);
+            await stoppedAndReleased(ctx, 125_000, `${spec.name} to exit`);
             await spec.clean();
             if (saved !== undefined && (await spec.exitStamp!()) === saved) throw new Error(`${spec.name} exited without confirming its shutdown save; no backup was copied`);
-        } catch (err) {
-            // refused after it stopped: the server starts again, as the copy would have ended
-            flag.busy = false;
-            if (marked) await resumeIfMarked(ctx, "the refused backup");
-            throw err;
         } finally { flag.busy = false; }
     }
     return { mode: "offline", before, after: () => resumeIfMarked(ctx, "its backup") };

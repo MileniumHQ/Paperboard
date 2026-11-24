@@ -20,7 +20,7 @@ import { PANEL_ID } from "./contract";
 import { appendCapped } from "./types";
 import { fireBackupEnded, serverOperation } from "./blocks";
 import { stopServerInstance } from "./lifecycle";
-import { markResume, report, resumeIfMarked, settle, waitUntil } from "../games/serviceKit";
+import { markResume, report, resumeIfMarked, settle, stoppedAndReleased } from "../games/serviceKit";
 import { ROUTINE_BACKUP_LABEL, isRoutineLabel, routineBackupsToPrune, type BackupSchedule, type BackupScheduleChoice } from "../backupSchedule";
 
 export interface BackupsHost {
@@ -67,16 +67,33 @@ function contentsOf(host: BackupsHost, server: Server): BackupContents {
     };
 }
 
+/**
+ * Ends the hold of a backup or restore that was refused, then lets the
+ * server carry on as it was: saving resumes, or it starts again when the
+ * preparation had stopped it. The hold goes first, or that start is refused.
+ */
+async function letGo(server: Server, what: string): Promise<void> {
+    server.backupHold = null;
+    await server.game.backup.after().catch((err) => report(server, `The server could not carry on after ${what}`, err));
+    await resumeIfMarked(server, what);
+}
+
 export function backupHooks(host: BackupsHost) {
     return {
         async beforeBackup(target: string | null): Promise<BackupContents> {
             const server = serverFor(host, target);
-            // the last run's cleanup puts back files the copy would catch half written
-            await server.lifecycle.released;
-            const contents = contentsOf(host, server);
-            await server.game.backup.before();
+            // held from here, with no await before it, so no start lands in the preparation
             server.backupHold = "backup";
-            return contents;
+            try {
+                // the last run's cleanup puts back files the copy would catch half written
+                await server.lifecycle.released;
+                const contents = contentsOf(host, server);
+                await server.game.backup.before();
+                return contents;
+            } catch (err) {
+                await letGo(server, "the refused backup");
+                throw err;
+            }
         },
         async afterBackup(target: string | null): Promise<void> {
             const server = targeted(host, target);
@@ -85,20 +102,22 @@ export function backupHooks(host: BackupsHost) {
         },
         async beforeRestore(target: string | null): Promise<void> {
             const server = serverFor(host, target);
-            if (server.game.backup.mode === "offline") await server.game.backup.before();
-            else if (await server.process.exists(server.game.primaryProcessId)) {
-                // the marker is what says it ran: it starts again at the end, or once a service that died meanwhile is back
-                await markResume(server);
-                try {
+            // held from here, with no await before it, so no start lands between the stop and the swap
+            server.backupHold = "restore";
+            try {
+                if (server.game.backup.mode === "offline") await server.game.backup.before();
+                else if (await server.process.exists(server.game.primaryProcessId)) {
+                    // the marker is what says it ran: it starts again at the end, or once a service that died meanwhile is back
+                    await markResume(server);
                     server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping to restore a backup..." }) }));
                     await stopServerInstance(server);
-                    await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 90_000, `${server.name} to stop`);
-                } catch (err) {
-                    await resumeIfMarked(server, "the refused restore");
-                    throw err;
                 }
+                // the run's cleanup (afterStop) is done before the files are swapped
+                await stoppedAndReleased(server, 90_000, `${server.name} to stop`);
+            } catch (err) {
+                await letGo(server, "the refused restore");
+                throw err;
             }
-            server.backupHold = "restore";
         },
         async afterRestore(ended: RestoreEnded): Promise<void> {
             const server = targeted(host, ended.target);
