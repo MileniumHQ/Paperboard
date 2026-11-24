@@ -4,7 +4,7 @@
 import * as path from "path";
 import { WebSocket } from "ws";
 import { getLocalDir } from "../core/paths";
-import { readRemotes } from "../system/remotes";
+import { readRemotes, remoteHosts } from "../system/remotes";
 import { dialPinned, type PinnedDial } from "../security/pinnedDial";
 import { logger } from "../core/logger";
 import { ErrorCode } from "../core/protocol";
@@ -126,8 +126,7 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
         }
         try {
             // its .local name and last address at once; the pinned certificate says which is it
-            const hosts = entry.address && entry.address !== entry.host ? [entry.host, entry.address] : [entry.host];
-            const dial = dialPinned(hosts, entry.port, entry.cert, { timeoutMs: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_WS_PAYLOAD });
+            const dial = dialPinned(remoteHosts(entry), entry.port, entry.cert, { timeoutMs: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_WS_PAYLOAD });
             const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
             timer.unref?.();
             const tunnel: Tunnel = { socket: null, dial, ready: false, timer };

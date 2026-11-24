@@ -93,11 +93,10 @@ export interface RpcOsFacts {
     operator?: RpcIdentityPart;
 }
 
-// who a computer is on the network: the .local name it answers to and its
-// stable machine id; absent from a daemon older than either
+// the .local name a computer says it answers to: a hint, kept only once its
+// pinned certificate answers there; absent from an older daemon
 export interface RpcNetworkFacts {
     mdnsName?: string;
-    machineId?: string;
 }
 
 export interface RpcSystemFacts extends RpcOsFacts, RpcNetworkFacts {

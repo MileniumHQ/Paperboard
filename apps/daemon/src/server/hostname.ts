@@ -15,11 +15,12 @@ function dnsLabel(name: string): string {
 let mdnsName: string | null | undefined;
 
 /**
- * The name other computers on the network reach this one by, with its
- * `.local`: macOS's LocalHostName (what Bonjour answers for, which is not
- * always the hostname), else the first label of the hostname. Null when the
- * hostname has nothing a DNS label can carry, so the computer is reached by
- * its address alone. Read once: it is advertised for as long as the daemon runs.
+ * The name the computer's own mDNS responder (Bonjour, Windows, avahi)
+ * answers for, with its `.local`: macOS's LocalHostName (which is not always
+ * the hostname), else the first label of the hostname. Only a hint: Paperboard
+ * keeps it once the computer's certificate answers there, and the daemon
+ * never publishes records under it. Null when the hostname has nothing a DNS
+ * label can carry. Read once.
  */
 export function mdnsHostName(): string | null {
     if (mdnsName !== undefined) return mdnsName;

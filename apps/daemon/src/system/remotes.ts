@@ -14,6 +14,11 @@ export interface RemoteEntry {
     isLocal?: boolean;
 }
 
+/** every address a paired computer is dialed at, its .local name first */
+export function remoteHosts(entry: { host: string; address?: string }): string[] {
+    return entry.address && entry.address !== entry.host ? [entry.host, entry.address] : [entry.host];
+}
+
 export function readRemotes(file: string): RemoteEntry[] {
     // trust-relevant state (a pairing holds a pinned certificate) is never
     // read as "no paired computers": the shared state reader quarantines

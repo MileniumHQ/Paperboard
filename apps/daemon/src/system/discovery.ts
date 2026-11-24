@@ -115,15 +115,17 @@ export function advertisePaperCrane(
         // publish throws synchronously on invalid config
         let service;
         try {
-            // the address records go out under this computer's .local name,
-            // which is how a paired computer is dialed when its IP changes
-            const host = mdnsHostName();
+            // the .local name goes out as a hint, never as the records' host:
+            // bonjour-service publishes every interface's address (Docker,
+            // VPN, VM bridges) under its host, and the OS responder (avahi)
+            // that owns that name renames the computer over the mismatch
+            const mdnsName = mdnsHostName();
             service = bonjour.publish({
                 name,
                 type: PAPERCRANE_MDNS_TYPE,
                 port: options.port,
-                ...(host ? { host } : {}),
                 txt: {
+                    ...(mdnsName ? { mdns: mdnsName } : {}),
                     id: paperCraneMachineId(),
                     name: os.hostname(),
                     ver: PAPERCRANE_VERSION,
