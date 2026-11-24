@@ -113,7 +113,7 @@ import { RPC, readParams } from "@mileniumhq/paperapi/protocol";`}
                     <tr><td><PaperLink href="/docs/paperapi/terminal/">terminalApi</PaperLink></td><td>Interactive shells with a pseudo terminal.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/package/">packageApi</PaperLink></td><td>Runtimes and tools from the Origami registry, such as Java.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/ports/">portApi</PaperLink></td><td>Network ports the panel's programs listen on, without clashes.</td></tr>
-                    <tr><td><PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink></td><td>Backups of the panel's files and config, made now or on a schedule.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink></td><td>Backups of the files its service names, made now. Routine ones are the panel's own.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/problems/">problemsApi</PaperLink></td><td>Failures no button was waiting for, shown on the panel's row until fixed or dismissed.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/blocks/">blocksApi</PaperLink></td><td>Blocks: the commands, values and events other panels, flows and agents use.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink></td><td>The service's entry point: the contract's handlers, state and lifecycle hooks.</td></tr>

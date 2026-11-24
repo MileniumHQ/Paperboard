@@ -90,7 +90,7 @@ interface PanelProblem {
             <PaperText preset="body" as="p">
                 A failure the person caused with a button goes in a toast, and a failure the page shows in place, such as a city's tile, stays in the state.
                 problemsApi is for the rest: a failure that would otherwise only reach the log.{" "}
-                <PaperCode>definePanelService</PaperCode> reports its own the same way: an <PaperCode>afterBackup</PaperCode>, <PaperCode>afterRestore</PaperCode> or <PaperCode>afterUpdate</PaperCode> that throws, and an <PaperCode>emit</PaperCode> that doesn't reach the page.
+                <PaperCode>definePanelService</PaperCode> reports its own the same way: an <PaperCode>afterUpdate</PaperCode> that throws, and an <PaperCode>emit</PaperCode> that doesn't reach the page.
                 See <PaperLink href="/docs/developers/errors/#in-the-background">Show every failure</PaperLink>.
             </PaperText>
 

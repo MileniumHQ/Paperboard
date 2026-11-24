@@ -13,7 +13,8 @@ export default function BackupsDoc() {
             <PaperText preset="header" as="h1">Backups</PaperText>
             <PaperText preset="body" as="p">
                 Panels back up their own files and settings to a location you choose: the computer itself, Google Drive, or an S3 bucket.
-                The server daemon makes routine backups on a schedule, with Paperboard closed or open.
+                A panel can make routine backups on a schedule it keeps itself, which it sets in the panel.
+                Nothing pauses a panel while it is backed up or restored: its service keeps running.
                 A backup is a plain compressed archive, and it is not encrypted.
             </PaperText>
 
@@ -22,13 +23,14 @@ export default function BackupsDoc() {
                 A backup belongs to one panel on one computer. It holds:
             </PaperText>
             <PaperTextList>
-                <li>The panel's files folder, <PaperCode>files/&lt;panel id&gt;/</PaperCode> in the data directory. For Game Server, that is every server's worlds, settings, plugins and mods.</li>
-                <li>The panel's settings, <PaperCode>configs/&lt;panel id&gt;.json</PaperCode>.</li>
+                <li>The files the panel's service names in its files folder, <PaperCode>files/&lt;panel id&gt;/</PaperCode> in the data directory. For Game Server, that is a server's worlds, settings, plugins and mods.</li>
+                <li>A little data the panel hands over, such as its settings.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
                 It does not hold the panel's saved secrets, the panel's program, or shortcuts (symbolic links) inside its files.
                 A panel can leave out parts of its own files, such as caches.
                 A backup larger than 5 GiB is refused.
+                Backups made by versions of Paperboard before this format are not listed, and are left where they are.
             </PaperText>
             <PaperText preset="body" as="p">
                 Panels offer backups on their own pages. Game Server has a <b>Backups</b> page. A panel without one has no backups.
@@ -87,22 +89,21 @@ export default function BackupsDoc() {
                 Later backups of that panel go to the same place. Change it with <b>Change</b> next to <b>Kept in</b>.
             </PaperText>
             <PaperText preset="body" as="p">
-                While it copies, the panel holds its work so the copy is complete.
+                The panel keeps running while it copies. It gets ready first, holding the work that would change the copy, so the copy is complete, and carries on once the copy is made.
                 A running Minecraft server keeps going and pauses saving during the copy. A running Terraria server is saved, stopped for the copy, and started again.
                 The description under <b>Routine Backups</b> says which applies to a server.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="routine-backups">Routine backups</PaperText>
             <PaperText preset="body" as="p">
-                Turn on <b>Routine Backups</b>. Then choose:
+                Routine backups are set in the panel, not in Paperboard. In Game Server, turn on <b>Routine Backups</b>. Then choose:
             </PaperText>
             <PaperTextList>
                 <li><b>How Often</b>: every hour, 3 hours, 6 hours, 12 hours, every day, every 2 days, or every week. The default is every day.</li>
                 <li><b>Keep</b>: how many routine backups to keep, from the newest 1 to the newest 30. The default is 7.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                The server daemon makes them, so they happen with the Paperboard window closed, as long as the computer and its daemon are running.
-                When a panel is busy at the scheduled time, the daemon tries again 15 minutes later.
+                The panel's own service makes them, so they happen with the Paperboard window closed, as long as the computer and its daemon are running.
                 Older routine backups are deleted past the number you keep. Backups made with <b>Back Up Now</b> are never deleted for you.
             </PaperText>
 
@@ -113,12 +114,12 @@ export default function BackupsDoc() {
                 <li>Read the warning and select <b>Restore</b>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                The server stops, and its whole folder is replaced with the backup. Anything saved since the backup was made is lost.
+                The files the backup holds are replaced with the backup's, and the panel picks up from them. Anything saved since the backup was made is lost.
             </PaperText>
             <PaperText preset="body" as="p">
                 Before it changes anything, the daemon downloads the backup and checks it against the checksum recorded when it was made.
                 It refuses a backup made by a newer version of the panel: update the panel first.
-                It swaps the panel's files and settings in one step, so a restore that fails leaves the old data as it was.
+                It swaps the panel's files in one step, so a restore that fails leaves the old data as it was.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="the-files">The backup files</PaperText>
@@ -135,7 +136,7 @@ export default function BackupsDoc() {
                 <tbody>
                     <tr>
                         <td><PaperCode>20261104-135602-4f09ac.pbbackup</PaperCode></td>
-                        <td>The archive: a gzip-compressed tar file, not encrypted. Its paths start at the data directory: <PaperCode>files/&lt;panel id&gt;/</PaperCode> and <PaperCode>configs/&lt;panel id&gt;.json</PaperCode>.</td>
+                        <td>The archive: a gzip-compressed tar file, not encrypted. The files the panel named, under <PaperCode>files/</PaperCode> (relative to the panel's files folder), and a <PaperCode>data.json</PaperCode> with what it handed over.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>20261104-135602-4f09ac.json</PaperCode></td>

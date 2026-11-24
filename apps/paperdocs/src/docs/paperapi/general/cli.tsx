@@ -380,7 +380,7 @@ Watching every panel on Paperboard at 127.0.0.1:47911. Press Ctrl+C to stop.
             </PaperText>
             <PaperCode block language="text">
 {`panelId action event trigger project id name computerId packageName version
-backupId sourceId destinationId downloadId appId signal cols rows timeoutMs
+backupId target locationId downloadId appId signal cols rows timeoutMs
 stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd command`}
             </PaperCode>
             <PaperText preset="body" as="p">

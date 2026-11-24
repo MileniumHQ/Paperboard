@@ -132,27 +132,27 @@ type ContractContext<C, TState = Record<string, any>> = ServiceContext<State, Ev
                     </tr>
                     <tr>
                         <td><PaperCode>beforeBackup</PaperCode></td>
-                        <td><PaperCode>(ctx, options: {"{ sourceId?: string }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
-                        <td>No default (the service is stopped for the copy, with no warning)</td>
-                        <td>Called before a backup copies the panel's data. Write out what is in memory and make running programs stop writing. Throwing refuses the backup. <PaperCode>sourceId</PaperCode> names the backup source being copied, and is absent for a whole-panel backup.</td>
-                    </tr>
-                    <tr>
-                        <td><PaperCode>beforeRestore</PaperCode></td>
-                        <td><PaperCode>(ctx, options: {"{ sourceId?: string }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
-                        <td>No default</td>
-                        <td>Called before a restore replaces the panel's data. Stop the programs that hold the data open. Throwing refuses the restore with the thrown message.</td>
+                        <td><PaperCode>(ctx, options: {"{ target: string | null }"}) =&gt; BackupContents | Promise&lt;BackupContents&gt;</PaperCode></td>
+                        <td>No default (a panel without it can't be backed up)</td>
+                        <td>Called before a backup copies the panel's data. Stop what would write over the copy, then return <PaperCode>{"{ paths, exclude?, skip?, data? }"}</PaperCode>: the files in the panel's files folder to keep, and JSON to hand back on a restore. The service keeps running. Throwing refuses the backup; undo what you began first. <PaperCode>target</PaperCode> is the part of the panel being backed up, and null for the whole. See <PaperLink href="/docs/paperapi/backups/#hooks">backupApi</PaperLink>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>afterBackup</PaperCode></td>
-                        <td><PaperCode>(ctx, ended: BackupEnded) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td><PaperCode>(ctx, copied: {"{ target, ok, error? }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
                         <td>No default</td>
-                        <td>Called when a backup of the panel's data ends, whoever started it. <PaperCode>ended</PaperCode> is <PaperCode>{"{ ok: true, backup, sourceId? }"}</PaperCode> with the new record, or <PaperCode>{"{ ok: false, error, sourceId? }"}</PaperCode> with why it failed. It runs in the service that started after the backup.</td>
+                        <td>Called when the copy is done or failed: carry on, such as turning saving back on. The upload happens after it resolves, and throwing fails the backup.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>beforeRestore</PaperCode></td>
+                        <td><PaperCode>(ctx, options: {"{ target, backup }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default</td>
+                        <td>Called before a restore replaces the files. Stop the programs that hold them open. Throwing refuses the restore with the thrown message.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>afterRestore</PaperCode></td>
-                        <td><PaperCode>(ctx, ended: BackupEnded) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
-                        <td>No default</td>
-                        <td>The same, for a restore. <PaperCode>backup</PaperCode> is the record that was restored.</td>
+                        <td><PaperCode>(ctx, ended: {"{ target, backup, ok: true, data } | { target, backup, ok: false, error }"}) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td>No default (a panel without it can't restore its backups)</td>
+                        <td>Called when the restore ended. On <PaperCode>ok</PaperCode> the files are the backup's and <PaperCode>data</PaperCode> is what <PaperCode>beforeBackup</PaperCode> handed over: apply it, pick up from the files and resume. When it throws, the original files are put back and it is called again with <PaperCode>ok: false</PaperCode>, where the files are as they were: resume.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>beforeUpdate</PaperCode></td>
@@ -324,9 +324,8 @@ const calls = {
                 <li>When a registration or <PaperCode>onInit</PaperCode> fails, <PaperCode>ready</PaperCode> rejects, the error is logged as <PaperCode>{"[Service:<id>] initialization failed:"}</PaperCode>, and the service never reports ready, so the daemon kills it after 20 seconds.</li>
                 <li>An error thrown by a handler rejects the page's call with the same message. Throw sentences the person using the panel can act on.</li>
                 <li>A contract whose <PaperCode>calls</PaperCode> don't match the handlers throws when the service is defined: <PaperCode>{"[Service:<id>] the call \"<name>\" has no handler"}</PaperCode>, or <PaperCode>{"[Service:<id>] \"<name>\" is not a call of its contract"}</PaperCode>.</li>
-                <li>A <PaperCode>beforeBackup</PaperCode> that throws refuses the backup with <PaperCode>The panel could not get ready for a backup: &lt;message&gt;</PaperCode>. A <PaperCode>beforeRestore</PaperCode> that throws refuses the restore with its own message.</li>
-                <li><PaperCode>afterBackup</PaperCode> and <PaperCode>afterRestore</PaperCode> are told only while the service is ready. A backup that ends while the service is stopped or still starting is not heard. An error they throw is reported as the panel's problem, <PaperCode>Finishing up after a backup failed</PaperCode> (or a restore), with its message.</li>
-                <li>The daemon waits at most 5 minutes for either hook, then fails with <PaperCode>Service &lt;id&gt; did not get ready for the backup within 300 s</PaperCode>. The hooks run only while the service is ready; a stopped or failed service is not asked.</li>
+                <li>A <PaperCode>beforeBackup</PaperCode> or <PaperCode>beforeRestore</PaperCode> that throws refuses the backup or restore with its message. An <PaperCode>afterBackup</PaperCode> that throws fails the backup, and an <PaperCode>afterRestore</PaperCode> that throws on <PaperCode>ok: true</PaperCode> puts the original files back and is called again with <PaperCode>ok: false</PaperCode>.</li>
+                <li>A panel whose service is not running, or has no <PaperCode>beforeBackup</PaperCode> or <PaperCode>afterRestore</PaperCode>, is refused a backup or restore. The service keeps running through both.</li>
                 <li>Paperboard never stops your processes for an update on its own. While they run, the update waits in the top bar's list until someone chooses Stop and update, or they stop.</li>
                 <li>A <PaperCode>beforeUpdate</PaperCode> that throws refuses the update with <PaperCode>&lt;panel id&gt; could not stop its processes for the update: &lt;message&gt;</PaperCode>. The daemon waits at most 2 minutes for it. An error <PaperCode>afterUpdate</PaperCode> throws is reported as the panel's problem, <PaperCode>Finishing up after an update failed</PaperCode>, with its message.</li>
                 <li>Each page counts from the moment it is ready until its connection closes, so a page that loses its connection counts again when it is back. An error <PaperCode>onPagesChanged</PaperCode> throws is reported as the panel's problem, <PaperCode>The panel's service couldn't follow its pages opening and closing</PaperCode>, with its message.</li>

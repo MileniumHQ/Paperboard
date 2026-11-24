@@ -55,7 +55,7 @@ fileApi.clear(appId: string): Promise<true>;`}
                 <li><PaperCode>read</PaperCode> and <PaperCode>write</PaperCode> handle UTF-8 text, at most 16 MiB a write. For larger or binary files, use <PaperCode>download</PaperCode>, or the path from <PaperCode>getPath</PaperCode> with Node's <PaperCode>fs</PaperCode> in the service.</li>
                 <li>A path that climbs out of the folder, or passes through a symbolic link, is refused.</li>
                 <li><PaperCode>delete</PaperCode> removes files only. <PaperCode>clear</PaperCode> removes the folder and everything in it.</li>
-                <li>Backups include the folder. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
+                <li>A backup includes the folder when the service names it. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
                 <li>For a panel shown from another computer, the folder and every path are on that computer.</li>
             </PaperTextList>
 
