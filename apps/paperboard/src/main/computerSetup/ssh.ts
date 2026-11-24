@@ -104,6 +104,9 @@ const HOST_KEY_ALGORITHMS: Record<string, string[]> = {
 export async function openSsh(options: OpenSshOptions): Promise<SshSession> {
     const target = resolveWithOverrides(options.host, options, { port: options.port, user: options.username });
     const { hostName, port, user: username } = target;
+    // the name its key is filed under in known_hosts: HostKeyAlias stands alone, as ssh files it
+    const keyHost = target.hostKeyAlias ?? hostName;
+    const keyPort = target.hostKeyAlias === undefined ? port : 22;
     const where = port === 22 ? hostName : `${hostName}:${port}`;
     // every file ssh reads; a new key is written to the person's first
     const knownFiles = [...target.knownHosts.user, ...target.knownHosts.global];
@@ -111,7 +114,7 @@ export async function openSsh(options: OpenSshOptions): Promise<SshSession> {
     const knownHostsFile = target.knownHosts.user[0];
     const known = readKnown();
     const methods = authMethods(username, systemAgent(options.agent), loadKeys(target.identityFiles), options.password);
-    const preferred = knownKeyTypes(known, hostName, port).flatMap((type) => HOST_KEY_ALGORITHMS[type] ?? []) as ServerHostKeyAlgorithm[];
+    const preferred = knownKeyTypes(known, keyHost, keyPort).flatMap((type) => HOST_KEY_ALGORITHMS[type] ?? []) as ServerHostKeyAlgorithm[];
 
     const client = new Client();
     let hostKeyFingerprint: string | undefined;
@@ -130,17 +133,17 @@ export async function openSsh(options: OpenSshOptions): Promise<SshSession> {
             const fingerprint = fingerprintOf(key);
             hostKeyFingerprint = fingerprint;
             try {
-                const check = checkHostKey(readKnown(), hostName, port, key);
+                const check = checkHostKey(readKnown(), keyHost, keyPort, key);
                 if (check.kind === "known") return true;
                 if (check.kind === "new") {
                     // with UserKnownHostsFile none, nothing is written down: ssh would ask every time too
-                    if (knownHostsFile !== undefined) appendKnownHost(knownHostsFile, hostName, port, key);
+                    if (knownHostsFile !== undefined) appendKnownHost(knownHostsFile, keyHost, keyPort, key);
                     return true;
                 }
                 const reason = check.kind === "revoked"
                     ? `The host key of ${where} (${fingerprint}) is marked revoked in known_hosts`
                     : `The host key of ${where} changed: known_hosts has a different ${check.knownTypes.join("/")} key, and it presented ${fingerprint}`;
-                refusal = new SshHostKeyChanged(`${reason}. Setup stopped, so nothing was sent. If the computer was reinstalled, remove its line from ${knownFiles.filter((file) => readKnownHosts(file) !== "").join(" or ")} (ssh-keygen -R ${knownHostName(hostName, port)}) and try again.`, fingerprint);
+                refusal = new SshHostKeyChanged(`${reason}. Setup stopped, so nothing was sent. If the computer was reinstalled, remove its line from ${knownFiles.filter((file) => readKnownHosts(file) !== "").join(" or ")} (ssh-keygen -R ${knownHostName(keyHost, keyPort)}) and try again.`, fingerprint);
             } catch (err) {
                 // quiet: the error is the connection's outcome, rejected below
                 refusal = err instanceof Error ? err : new Error(errorMessage(err));

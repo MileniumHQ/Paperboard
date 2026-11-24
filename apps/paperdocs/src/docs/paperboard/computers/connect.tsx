@@ -32,7 +32,7 @@ export default function ConnectDoc() {
                 <li><b>Pairing.</b> Paperboard opens pairing there and pairs with the certificate the server names over SSH, so no other computer can answer in its place.</li>
             </PaperTextList>
             <PaperTextList>
-                <li>On Linux, the service runs as your account. Paperboard turns on lingering so it keeps running after you sign out, using your password with <PaperCode>sudo</PaperCode> if it needs to. If it can&apos;t, Paperboard says so once the computer is added. Signed in as root, the service is a system service that starts at boot.</li>
+                <li>On Linux, the service runs as your account. Paperboard turns on lingering so it keeps running after you sign out, using your password with <PaperCode>sudo</PaperCode> if it needs to. If it can&apos;t, Paperboard says so once the computer is added. Signed in as root, the service is a system service that starts at boot and runs as root, so every panel on that computer runs as root too. Sign in as your own account to avoid that.</li>
                 <li>On macOS, with a password, the service starts at boot. Signed in with a key, it runs while you are signed in to that Mac.</li>
                 <li>On Windows, the account has to be an administrator, because the service starts at boot. For other accounts, setup asks for the pairing code instead.</li>
             </PaperTextList>

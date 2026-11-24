@@ -1,7 +1,8 @@
 // Reading the person's OpenSSH client config (`~/.ssh/config`) the way `ssh`
-// does, for the few settings setting up a computer needs: HostName, User,
-// Port, IdentityFile and the known_hosts files. Lines for other keywords
-// are skipped unread, as they don't change where or how it connects. Host blocks match the name the person typed (an
+// does, for the settings setting up a computer needs: HostName, User, Port,
+// IdentityFile, the known_hosts files and HostKeyAlias. Lines for other
+// keywords are skipped unread. Of those, ProxyJump, ProxyCommand and
+// CertificateFile do change how ssh connects, and aren't followed. Host blocks match the name the person typed (an
 // alias), first value wins, IdentityFile adds up, and Include pulls other
 // files in where it stands. Match blocks need state this doesn't have
 // (exec, user, address), so their contents are skipped as a whole.
@@ -21,6 +22,8 @@ export interface SshTarget {
     identityFiles: string[];
     /** where host keys are looked up: the person's files (a new key is added to the first) and the system's, read only */
     knownHosts: { user: string[]; global: string[] };
+    /** HostKeyAlias: the name its host key is filed under instead of hostName and port */
+    hostKeyAlias?: string;
 }
 
 export interface SshConfigOptions {
@@ -35,6 +38,7 @@ interface RawSettings {
     identityFiles: string[];
     userKnownHosts?: string[];
     globalKnownHosts?: string[];
+    hostKeyAlias?: string;
 }
 
 // ssh's own defaults for the system's known_hosts
@@ -43,7 +47,7 @@ const GLOBAL_KNOWN_HOSTS = process.platform === "win32"
     : ["/etc/ssh/ssh_known_hosts", "/etc/ssh/ssh_known_hosts2"];
 
 // the keywords read here; any other line is passed over, as ssh's own options
-const READ = new Set(["host", "match", "hostname", "user", "port", "identityfile", "include", "userknownhostsfile", "globalknownhostsfile"]);
+const READ = new Set(["host", "match", "hostname", "user", "port", "identityfile", "include", "userknownhostsfile", "globalknownhostsfile", "hostkeyalias"]);
 
 const MAX_INCLUDE_DEPTH = 16;
 
@@ -73,7 +77,7 @@ export function resolveWithOverrides(
         user: files(raw.userKnownHosts, [path.join(options.sshDir, "known_hosts"), path.join(options.sshDir, "known_hosts2")], "UserKnownHostsFile"),
         global: files(raw.globalKnownHosts, GLOBAL_KNOWN_HOSTS, "GlobalKnownHostsFile"),
     };
-    return { hostName, port, user, identityFiles, knownHosts };
+    return { hostName, port, user, identityFiles, knownHosts, ...(raw.hostKeyAlias === undefined ? {} : { hostKeyAlias: raw.hostKeyAlias }) };
 }
 
 function readSettings(host: string, sshDir: string): RawSettings {
@@ -121,6 +125,9 @@ function applyFile(file: string, host: string, sshDir: string, settings: RawSett
                 break;
             case "globalknownhostsfile":
                 settings.globalKnownHosts ??= args;
+                break;
+            case "hostkeyalias":
+                settings.hostKeyAlias ??= value;
                 break;
             case "include":
                 for (const pattern of args) {

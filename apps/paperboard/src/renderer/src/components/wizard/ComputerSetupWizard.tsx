@@ -76,6 +76,10 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     // whether SSH answers there too: then the computer is set up over SSH
     const ssh = createRead(({ host }) => computerSetupApi.sshCheck(host), { source: checking });
     const sshAvailable = () => !ssh.loading() && ssh.error() === null && ssh.value()?.ssh === true;
+    // a check that can't run (an ssh config it can't read) says why, or SSH setup would just not be offered
+    createEffect(on(ssh.error, (err) => {
+        if (err !== null) showError("Couldn't check for SSH", err);
+    }));
     // a computer picked from the nearby list counts as reachable while it is checked
     const [picked, setPicked] = createSignal(false);
     const answered = () => !probe.loading() && (probe.value() !== undefined || probe.error() !== null);

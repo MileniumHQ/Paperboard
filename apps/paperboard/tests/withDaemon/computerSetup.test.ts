@@ -166,6 +166,25 @@ esac
 		expect(pool.listComputers().filter((c) => c.id !== "local")).toEqual([]);
 	});
 
+	test("signed in as root, the server is installed as a system service running as root, and lingering is left alone", async () => {
+		const box = computer();
+		const calls = path.join(box.home, "calls");
+		fs.writeFileSync(path.join(box.bin, "id"), `#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n`, { mode: 0o755 });
+		fs.writeFileSync(path.join(box.bin, "loginctl"), `#!/bin/sh\necho "loginctl $*" >> "${calls}"\n`, { mode: 0o755 });
+		// installed but stopped: setup starts it, and pairing is where this one ends
+		fs.writeFileSync(path.join(box.bin, "papercrane"), `#!/bin/sh
+case "$1" in
+  status) exit 3 ;;
+  install-service) echo "papercrane $*" >> "${calls}" ;;
+  pair) echo "no pairing here" >&2; exit 1 ;;
+esac
+`, { mode: 0o755 });
+		const server = await startServer({ env: box.env });
+		const { result } = await run(server);
+		expect(result).toEqual({ failed: expect.stringContaining("no pairing here") });
+		expect(fs.readFileSync(calls, "utf8")).toBe("papercrane install-service --system --run-as root\n");
+	});
+
 	// the release is checked here, before a byte of it goes to the computer
 	const target = `${process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "arm64" : "x64"}`;
 	const release = (binary: Buffer) => {

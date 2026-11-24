@@ -78,6 +78,19 @@ describe("host keys", () => {
         expect(fs.existsSync(knownHosts(sshDir))).toBe(false);
     });
 
+    test("with HostKeyAlias, the key is filed and checked under the alias", async () => {
+        const sshDir = path.join(tempDir("pb-ssh-home-"), ".ssh");
+        fs.mkdirSync(sshDir, { recursive: true });
+        fs.writeFileSync(path.join(sshDir, "config"), "HostKeyAlias lab-box\n");
+        const server = await startServer();
+        (await open(server, sshDir, { password: PASSWORD })).close();
+        expect(fs.readFileSync(knownHosts(sshDir), "utf8")).toBe(`lab-box ssh-ed25519 ${server.hostKey.getPublicSSH().toString("base64")}\n`);
+        await server.close();
+        const impostor = await startServer({ port: server.port });
+        expect(await failure(open(impostor, sshDir, { password: PASSWORD }))).toBeInstanceOf(SshHostKeyChanged);
+        expect(impostor.attempts).toEqual([]);
+    });
+
     test("a known_hosts line without a trailing newline gets one before the new host", async () => {
         const sshDir = tempDir("pb-ssh-dir-");
         fs.writeFileSync(knownHosts(sshDir), "other.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl");

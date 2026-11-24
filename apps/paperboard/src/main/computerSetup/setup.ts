@@ -57,7 +57,13 @@ interface PairingLine {
 
 // pair --json's first line; anything else stops the setup
 function parsePairingLine(line: string): PairingLine {
-    const parsed = JSON.parse(line) as Partial<PairingLine>;
+    let parsed: Partial<PairingLine>;
+    try {
+        parsed = JSON.parse(line) as Partial<PairingLine>;
+    } catch {
+        // quiet: the line itself is the error said
+        throw new SetupStopped(`papercrane pair answered with something other than a pairing: ${line}`);
+    }
     if (typeof parsed.code !== "string" || typeof parsed.fingerprint !== "string" || typeof parsed.listen?.host !== "string" || typeof parsed.listen.port !== "number") {
         throw new SetupStopped(`papercrane pair answered with something other than a pairing: ${line}`);
     }
@@ -313,6 +319,7 @@ export class ComputerSetupJob {
         this.progress("install", 90, "Setting it up to start with the computer");
         const sudo = (command: string) => `sudo -S -p '' ${command}`;
         let result: SshExecResult;
+        const root = remote.os !== "windows" && (await remote.run("id -u")).stdout.trim() === "0";
         if (remote.os === "windows") {
             // a user task runs only while its account is signed in at the
             // desktop, which an SSH session isn't: only a system task runs
@@ -321,12 +328,11 @@ export class ComputerSetupJob {
                 throw new UseCode(`${username} isn't an administrator on ${this.host}, so Paperboard Server can't be set up to start with it. Install it there, then pair it with its code.`);
             }
             result = await remote.run(this.crane(remote, binary, "install-service --system"));
-        } else if ((await remote.run("id -u")).stdout.trim() === "0") {
-            // root has no session of its own to live in: a system service,
-            // which runs at boot as root, is the one that fits
-            result = await remote.run(this.crane(remote, binary, "install-service --system"));
-            if (result.code !== 0) throw new SetupStopped(`Paperboard Server didn't start on ${this.host}: ${said(result)}`);
-            return;
+        } else if (root) {
+            // root has no session of its own to live in, so a system service
+            // that starts at boot; it runs as root because root is who signed
+            // in, and every panel then runs as root too (the docs say so)
+            result = await remote.run(this.crane(remote, binary, "install-service --system --run-as root"));
         } else if (remote.os === "macos" && this.password !== undefined) {
             // a LaunchAgent needs the account signed in at the desktop; with
             // the password, a LaunchDaemon runs it at boot as this account
@@ -335,7 +341,7 @@ export class ComputerSetupJob {
             result = await remote.run(this.crane(remote, binary, "install-service"));
         }
         if (result.code !== 0) throw new SetupStopped(`Paperboard Server didn't start on ${this.host}: ${said(result)}`);
-        if (remote.os === "linux") await this.keepRunningAfterSignOut(remote, sudo);
+        if (remote.os === "linux" && !root) await this.keepRunningAfterSignOut(remote, sudo);
     }
 
     // a user service stops when the account's last session ends, unless lingering is on
