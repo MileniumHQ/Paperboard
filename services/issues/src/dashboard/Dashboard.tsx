@@ -80,7 +80,7 @@ function IssueDetail(props: { summary: IssueSummary; onDelete: () => void }) {
                     </PaperFlex>
                 </PaperFlex>
                 <Switch>
-                    <Match when={full.error() && !loaded()}>
+                    <Match when={full.error() && !loaded() && !full.loading()}>
                         <PaperError title="Couldn't load the issue" error={full.error()} action={{ label: "Try again", disabled: full.loading(), onClick: () => void full.reload() }} />
                     </Match>
                     <Match when={!loaded()}>
@@ -133,8 +133,9 @@ export default function Dashboard() {
         const last = issues().at(-1);
         if (!last) return;
         void older.run("Couldn't load older issues", async () => {
-            const page = await listIssues(last.receivedAt);
-            read.set((prev) => (prev ? { issues: [...prev.issues, ...page.issues], more: page.more } : prev));
+            const page = await listIssues(last.receivedAt, last.id);
+            // a Reload that landed meanwhile replaced the list: this page continues the old one, so it's dropped
+            read.set((prev) => (prev && prev.issues.at(-1)?.id === last.id ? { issues: [...prev.issues, ...page.issues], more: page.more } : prev));
         });
     };
 

@@ -16,9 +16,9 @@ export interface IssuePage {
     more: boolean;
 }
 
-/** One page of summaries, newest first: the ones received before `before` (Unix milliseconds), or the newest. */
-export async function listIssues(before?: number): Promise<IssuePage> {
-    const res = await fetch(before === undefined ? API : `${API}?before=${before}`);
+/** One page of summaries, newest first: the ones after the issue (`before` in Unix milliseconds, `beforeId`), or the newest. */
+export async function listIssues(before?: number, beforeId?: string): Promise<IssuePage> {
+    const res = await fetch(before === undefined ? API : `${API}?before=${before}&beforeId=${beforeId}`);
     if (!res.ok) throw await failure(res);
     return (await res.json()) as IssuePage;
 }
