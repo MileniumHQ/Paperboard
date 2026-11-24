@@ -19,6 +19,9 @@ Paperboard is a dashboard for self-hostable programs. Panels are like the apps. 
 - **No weird fallbacks:** Don't invent placeholders when something isn't available—throw an error and handle it.
 - **Changelogs are suspended:** No changelogs right now.
 - **Nothing ships that is unfinished:** Write production-ready code, not experiments.
+- **Old-version code needs a removal date:** if you add code just to support an older version, mark it `TODO(remove after vX.Y)`. The gate fails once that version ships, so it can't be forgotten.
+- **Only migrate what users have:** if it never shipped, just change it. No migration code for it.
+- **Delete what you replace:** if nothing uses the old code anymore, remove it.
 - **Rewrites > band-aids:** Prefer rewriting a messy part over patching around it, and flag when that's needed. Still, if a 5-line fix is genuinely best, take it.
 - **Suicide prevention:** Never run `pkill` or `killall` (it can kill your own shell or another session). Stop only PIDs you started.
 - **Leave the real app alone:** Never kill the installed Paperboard app or its workloads (game servers, supervisors). If it crashed, check whether a session killed it first.
@@ -32,6 +35,7 @@ Tests:
 - **Platform tests:** only OS-dependent tests go in `test/platform`; CI runs those on every release target.
 - **Only what matters:** data loss, security, updates/releases, core contracts.
 - **Never skip or loosen a failing test.** Fix the code, or the test if it expects broken behavior.
+- **Find out why CI failed before rerunning:** if someone else broke (GitHub, apt), rerun. If our code or tests broke, fix it, even if a rerun passes.
 
 *drumroll:* PRs!
 
@@ -51,7 +55,7 @@ Paperboard has gates relevant to each individual part of the codebase. `bun run 
 - Apps: `paperboard` (desktop app), `daemon` (server daemon and its Go supervisor), `paperdocs` (docs site)
 - Services: `origami` (registry), `library` (panel store), `arilink` (pbd.lc short links), `panelapis` (panel APIs), `issues` (issue reports)
 - Packages: `paperapi`, `paperui`, `create-panel`, `npx` (the npx launcher), `release`, `testkit` (the shared test harness), `packages` (the packed libraries as a consumer gets them)
-- Panels: `agents`, `blocks`, `botcreator`, `gameserver`, `terminal`
+- Panels: `agents`, `blocks`, `botcreator`, `drive`, `gameserver`, `terminal`
 - Repo: `scripts` (root scripts), `global` (repo-wide checks), `platform` (the OS-dependent suites CI runs on every release target)
 
 Run them before pushing code. No need to run the full gate unless you're so inclined!
