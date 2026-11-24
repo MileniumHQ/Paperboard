@@ -21,5 +21,9 @@ export default definePanelService({
     contract: blocksContract,
     calls: runtime.calls,
     onInit: (ctx) => runtime.init(ctx.setState),
+    beforeBackup: (_ctx, { target }) => runtime.backup.beforeBackup(target),
+    afterBackup: () => runtime.backup.resume(),
+    beforeRestore: (_ctx, { target }) => runtime.backup.beforeRestore(target),
+    afterRestore: (_ctx, ended) => (ended.ok ? runtime.backup.restored() : runtime.backup.resume()),
     onPagesChanged: (_ctx, open) => runtime.pagesChanged(open),
 });

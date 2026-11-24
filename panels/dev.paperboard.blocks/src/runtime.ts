@@ -2,7 +2,7 @@
 // it over: it keeps the projects and their flows, listens for the events the
 // switched-on projects start from, and runs them. service.ts hands it the
 // daemon's; the tests hand it a registry and storage in memory.
-import { blockEntry, type blocksApi, type BlocksHandle, type CallHandlers, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
+import { blockEntry, type BackupContents, type blocksApi, type BlocksHandle, type CallHandlers, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
@@ -308,5 +308,37 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         if ((await store.dropDrafts()) > 0) publishProjects();
     }
 
-    return { calls, init, pagesChanged };
+    // Backups: everything Blocks keeps is in the panel's files (the project index and one file per
+    // canvas), so a backup is those files, copied while no change is being written.
+    const noTarget = (target: string | null) => {
+        if (target !== null) throw new Error(`Blocks backs up as a whole, so it has no "${target}" to back up`);
+    };
+
+    const backup = {
+        beforeBackup: async (target: string | null): Promise<BackupContents> => {
+            noTarget(target);
+            if ((await read) !== null) throw new Error("The projects couldn't be read, so there is nothing to back up");
+            await store.pause();
+            return { paths: [""] };
+        },
+        beforeRestore: async (target: string | null): Promise<void> => {
+            noTarget(target);
+            if ((await read) !== null) throw new Error("The projects couldn't be read, so they can't be replaced by a backup");
+            await store.pause();
+        },
+        /** the copy is made, or a restore did not happen: the held changes go on */
+        resume: async (): Promise<void> => {
+            if (store.paused) await store.resume(false);
+        },
+        /** the files are the backup's: the projects are read again from them and the flows run from those */
+        restored: async (): Promise<void> => {
+            // the read is done before any held change runs, so none meets the old projects over the new files
+            await store.resume(true);
+            for (const run of runs.keys()) run.abort();
+            setState({ projects: store.list(), projectsError: null, loaded: true });
+            publishProjects();
+        },
+    };
+
+    return { calls, init, pagesChanged, backup };
 }

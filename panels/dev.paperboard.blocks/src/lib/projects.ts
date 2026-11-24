@@ -129,9 +129,13 @@ interface Project {
 }
 
 export class ProjectStore {
-    private readonly projects = new Map<string, Project>();
+    private projects = new Map<string, Project>();
     private readonly queue = new SerialQueue();
     private opened = false;
+    // while paused, one task holds the queue: nothing is written until letGo
+    private held: Promise<void> | null = null;
+    private letGo: (() => void) | null = null;
+    private readAgain = false;
 
     constructor(private readonly storage: ProjectStorage) {}
 
@@ -141,6 +145,7 @@ export class ProjectStore {
      * named "My flows" and leaves the document as it was, as the backup.
      */
     async open(): Promise<void> {
+        const projects = new Map<string, Project>();
         let metas = readProjectIndex(await this.storage.get(PROJECTS_FILE));
         if (!metas) {
             metas = [];
@@ -166,9 +171,45 @@ export class ProjectStore {
             } catch (err) {
                 project.loadError = errorMessage(err);
             }
-            this.projects.set(meta.id, project);
+            projects.set(meta.id, project);
         }
+        // the projects are swapped in whole: a read that fails leaves the ones held as they were
+        this.projects = projects;
         this.opened = true;
+    }
+
+    get paused(): boolean {
+        return this.held !== null;
+    }
+
+    /**
+     * Resolves once every change before it is written, and holds the later
+     * ones back until `resume`: the files can be copied or swapped meanwhile.
+     */
+    pause(): Promise<void> {
+        if (this.held) throw new Error("The projects are already paused");
+        return new Promise<void>((paused) => {
+            this.held = this.queue.run(async () => {
+                await new Promise<void>((go) => {
+                    this.letGo = go;
+                    paused();
+                });
+                // the files changed meanwhile: what is held is read again before any later change runs
+                if (this.readAgain) await this.open();
+            });
+        });
+    }
+
+    /** Lets the changes held back run; with `reread` the projects are read from the files first, and a failure to is thrown. */
+    async resume(reread: boolean): Promise<void> {
+        const held = this.held;
+        const go = this.letGo;
+        if (!held || !go) throw new Error("The projects are not paused");
+        this.held = null;
+        this.letGo = null;
+        this.readAgain = reread;
+        go();
+        await held;
     }
 
     /** Every project, the most recently edited first. */
