@@ -203,7 +203,7 @@ export class ConnectionPool extends EventEmitter {
     // to its name once the name answers here.
     private refreshFacts(id: string, facts: OsFacts & { mdnsName?: string }) {
         const comp = this.computers.get(id);
-        if (comp && facts.mdnsName) void this.follow(id, { name: facts.mdnsName });
+        if (comp && facts.mdnsName) void this.follow(id, [{ name: facts.mdnsName }]);
         // a daemon too old to answer with facts keeps what pairing recorded
         if (!comp || !facts.os) return;
         const next = osFactsOf(facts);
@@ -237,24 +237,34 @@ export class ConnectionPool extends EventEmitter {
      * there, so whoever else answers to a name or copies a fingerprint
      * never takes the record. The client then dials the new addresses.
      */
-    private async follow(id: string, seen: Sighting): Promise<void> {
+    // every sighting is probed (a copy of the public fingerprint can be
+    // advertised too); the first whose certificate answers is followed
+    private async follow(id: string, sightings: Sighting[]): Promise<void> {
         const comp = this.computers.get(id);
         if (!comp?.cert || comp.isLocal) return;
-        const port = seen.port ?? comp.port;
-        const name = seen.name && (seen.name !== comp.host || port !== comp.port) ? seen.name : undefined;
-        const address = seen.address && (seen.address !== comp.address && seen.address !== comp.host || port !== comp.port) ? seen.address : undefined;
-        if (!name && !address) return;
+        const cert = comp.cert;
+        const fresh = sightings.map((seen) => {
+            const port = seen.port ?? comp.port;
+            const name = seen.name && (seen.name !== comp.host || port !== comp.port) ? seen.name : undefined;
+            const address = seen.address && (seen.address !== comp.address && seen.address !== comp.host || port !== comp.port) ? seen.address : undefined;
+            return { port, name, address };
+        }).filter((seen) => seen.name || seen.address);
+        if (fresh.length === 0) return;
         const token = ++this.sightingCounter;
         this.sightings.set(id, token);
-        const cert = comp.cert;
-        const [nameOk, addressOk] = await Promise.all([
-            name ? this.healthAt(name, port, cert).then((why) => why === null) : false,
-            address ? this.healthAt(address, port, cert).then((why) => why === null) : false,
-        ]);
+        const probed = await Promise.all(fresh.map(async (seen) => {
+            const [nameOk, addressOk] = await Promise.all([
+                seen.name ? this.healthAt(seen.name, seen.port, cert).then((why) => why === null) : false,
+                seen.address ? this.healthAt(seen.address, seen.port, cert).then((why) => why === null) : false,
+            ]);
+            return { ...seen, nameOk, addressOk };
+        }));
         // a newer sighting, a re-pairing or a removal came first
         if (this.sightings.get(id) !== token || this.computers.get(id) !== comp || comp.cert !== cert) return;
         this.sightings.delete(id);
-        if (!nameOk && !addressOk) return;
+        const answered = probed.find((seen) => seen.nameOk || seen.addressOk);
+        if (!answered) return;
+        const { port, name, address, nameOk, addressOk } = answered;
         let host = comp.host;
         let known = comp.address;
         if (nameOk && name) {
@@ -283,13 +293,18 @@ export class ConnectionPool extends EventEmitter {
      * Settles once every sighting was checked.
      */
     public async followDiscovered(found: DiscoveredComputer[]): Promise<void> {
-        const byFingerprint = new Map(found.filter((d) => d.fingerprint).map((d) => [d.fingerprint!, d]));
-        if (byFingerprint.size === 0) return;
+        if (!found.some((d) => d.fingerprint)) return;
         const checks: Promise<void>[] = [];
         for (const comp of this.computers.values()) {
             if (comp.isLocal || !comp.cert) continue;
-            const seen = byFingerprint.get(certFingerprint(comp.cert));
-            if (seen) checks.push(this.follow(comp.id, { name: seen.mdnsName, address: seen.host, port: seen.port }));
+            let fingerprint: string;
+            try {
+                fingerprint = certFingerprint(comp.cert);
+            } catch {
+                continue; // quiet: a certificate that doesn't parse fails that computer's own connection, which says so
+            }
+            const seen = found.filter((d) => d.fingerprint === fingerprint);
+            if (seen.length) checks.push(this.follow(comp.id, seen.map((d) => ({ name: d.mdnsName, address: d.host, port: d.port }))));
         }
         await Promise.all(checks);
     }

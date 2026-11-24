@@ -63,7 +63,8 @@ export class DiscoveryService extends EventEmitter {
             for (const event of ["srv-update", "txt-update"]) {
                 this.browser.on(event, (service: any, previous: any) => {
                     try {
-                        this.handleDown(previous);
+                        // one change: the old record goes without a list of its own
+                        this.handleDown(previous, false);
                         this.handleUp(service);
                     } catch (err) {
                         logger.warn(`[Discovery] failed to process mDNS '${event}':`, err);
@@ -164,7 +165,7 @@ export class DiscoveryService extends EventEmitter {
         this.emitChange();
     }
 
-    private handleDown(service: any): void {
+    private handleDown(service: any, announce = true): void {
         const key = this.serviceKey(service);
         if (!key) return;
         // match by fqdn too — goodbye can arrive with a partial record
@@ -188,7 +189,7 @@ export class DiscoveryService extends EventEmitter {
         logger.debug(
             `[Discovery] Paperboard Server offline: ${removed.name} (${removed.host}:${removed.port})`,
         );
-        this.emitChange();
+        if (announce) this.emitChange();
     }
 
     private emitChange() {

@@ -351,7 +351,7 @@ describe("a paired computer found again", () => {
 	});
 
 	// Inventory: Security — a copied fingerprint never moves a paired computer to another machine.
-	test("a sighting is followed only where the pinned certificate answers, and the client reconnects there", async () => {
+	test("a sighting is followed only where the pinned certificate answers, past a copy of its fingerprint, and the client reconnects there", async () => {
 		const far = await scriptedRemote(answering("far.local"), { bind: "127.0.0.2" });
 		// another machine advertising the paired computer's fingerprint, on its port
 		const impostor = await scriptedRemote(unanswering, { bind: "127.0.0.4", port: far.port });
@@ -372,7 +372,8 @@ describe("a paired computer found again", () => {
 			await far.close();
 			await waitFor("the paired computer to drop", () => !record().status.connected);
 			moved = await scriptedRemote(answering("far.local"), { identity: far.identity, bind: "127.0.0.5" });
-			await pool.followDiscovered(sighting("127.0.0.5", moved.port));
+			// the copy is listed after it, and doesn't hide it
+			await pool.followDiscovered([...sighting("127.0.0.5", moved.port), { ...sighting("127.0.0.4", far.port)[0]!, id: "zz-copy", name: "zz" }]);
 			expect({ host: record().host, port: record().port }).toEqual({ host: "127.0.0.5", port: moved.port });
 			await waitFor("the client to reconnect at the new address", () => record().status.connected && record().status.host === "127.0.0.5");
 			expect(impostor.frames).toEqual([]);
