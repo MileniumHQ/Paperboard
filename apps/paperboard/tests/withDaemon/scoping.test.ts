@@ -342,3 +342,21 @@ describe("the port registry", () => {
 		}, dir);
 	});
 });
+
+// A panel's registration pass lands whole or not at all.
+describe("the blocks registry", () => {
+	test("a block set with one entry owned by another connection registers none of it", async () => {
+		await withDaemon(async (daemon) => {
+			const first = await daemon.panelRpc("test.blockset");
+			const second = await daemon.panelRpc("test.blockset");
+			const block = (id: string) => ({ entry: `command.${id}`, schema: { kind: "command", id, name: id } });
+			await first.ok("blocks:register-set", { panelId: "test.blockset", entries: [block("held")] });
+
+			const refused = await second.call("blocks:register-set", { panelId: "test.blockset", entries: [block("fresh"), block("held")] });
+			expect(refused.code).toBe("CONFLICT");
+			const listed = (await first.ok("blocks:list", { panelId: "test.blockset" })).entries.map((e: { entry: string }) => e.entry);
+			expect(listed).toEqual(["command.held"]);
+			for (const s of [first, second]) await s.close();
+		});
+	});
+});

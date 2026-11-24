@@ -78,32 +78,38 @@ export class BlocksRegistry {
         return `${panelId}:${action}`;
     }
 
+    /**
+     * Registers one pass of a panel's blocks: all of them, or none when one
+     * is owned by another socket or names a project this socket didn't define.
+     */
     public register(
         panelId: string,
-        actionName: string,
+        entries: { entry: string; schema?: any }[],
         ws: WebSocket,
-        schema?: any,
     ): RegistryResult {
-        const key = this.actionKey(panelId, actionName);
-        const existing = this.actions.get(key);
-        if (existing && existing.ws !== ws) {
-            logger.warn(
-                `[Blocks] Refused to register "${actionName}" for panel "${panelId}": already registered by another socket`,
-            );
-            return { ok: false, code: "CONFLICT", owner: existing.ws };
+        for (const { entry } of entries) {
+            const existing = this.actions.get(this.actionKey(panelId, entry));
+            if (existing && existing.ws !== ws) {
+                logger.warn(
+                    `[Blocks] Refused to register "${entry}" for panel "${panelId}": already registered by another socket`,
+                );
+                return { ok: false, code: "CONFLICT", owner: existing.ws };
+            }
+            this.assertProjectOwned(panelId, entry, ws);
         }
-        this.assertProjectOwned(panelId, actionName, ws);
-
-        this.actions.set(key, { panelId, action: actionName, schema, ws });
 
         let set = this.socketActions.get(ws);
         if (!set) {
             set = new Set();
             this.socketActions.set(ws, set);
         }
-        set.add(key);
+        for (const { entry, schema } of entries) {
+            const key = this.actionKey(panelId, entry);
+            this.actions.set(key, { panelId, action: entry, schema, ws });
+            set.add(key);
+        }
 
-        logger.info(`[Blocks] Registered block "${actionName}" for panel "${panelId}"`);
+        logger.info(`[Blocks] Registered ${entries.length} ${entries.length === 1 ? "block" : "blocks"} for panel "${panelId}"`);
         return { ok: true };
     }
 

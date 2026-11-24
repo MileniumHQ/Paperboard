@@ -33,9 +33,19 @@ const conflict = (what: string, panelId: string) =>
     `Registry namespace is owned by another socket: ${what} for panel "${panelId}" conflicts`;
 
 export const blocksRpc = rpcModule({
+    // one registration pass of a panel's blocks
+    "blocks:register-set": ({ panelId, entries }, ctx) => {
+        const owner = ownNamespace(panelId, ctx);
+        if (entries.length === 0) throw new InvalidParamsError("blocks:register-set needs at least one entry");
+        ownedElsewhere(blocksRegistry.register(owner, entries, ctx.ws), conflict(`a set of ${entries.length} blocks`, owner));
+        ctx.broadcastEvent("blocks:registry-updated", { type: "blocks:registered", panelId: owner, entries: entries.map((e) => e.entry) });
+        return { success: true };
+    },
+    // one block at a time, as panels built before blocks:register-set ask;
+    // goes at the next protocol version
     "blocks:register": ({ panelId, entry, schema }, ctx) => {
         const owner = ownNamespace(panelId, ctx);
-        ownedElsewhere(blocksRegistry.register(owner, entry, ctx.ws, schema), conflict(`block "${entry}"`, owner));
+        ownedElsewhere(blocksRegistry.register(owner, [{ entry, schema }], ctx.ws), conflict(`block "${entry}"`, owner));
         ctx.broadcastEvent("blocks:registry-updated", { type: "block:registered", panelId: owner, entry });
         return { success: true };
     },

@@ -663,11 +663,11 @@ export class CraneTransport {
         return resolveDefaultPanelId(this.opts.panelId);
     }
 
-    /** Registers one Blocks entry ("kind.id" or "project/kind.id") and its handler. */
-    public async registerBlock(panelId: string, entry: string, handler: ActionHandler, schema: BlockSchema): Promise<void> {
-        this.blocksRegistry.addAction(panelId, entry, handler, schema);
+    /** Registers a panel's Blocks entries ("kind.id" or "project/kind.id") and their handlers, in one call. */
+    public async registerBlocks(panelId: string, blocks: { entry: string; handler: ActionHandler; schema: BlockSchema }[]): Promise<void> {
+        for (const { entry, handler, schema } of blocks) this.blocksRegistry.addAction(panelId, entry, handler, schema);
         await this.ensureConnected();
-        await this.call("blocks:register", { panelId, entry, schema });
+        await this.call("blocks:register-set", { panelId, entries: blocks.map(({ entry, schema }) => ({ entry, schema })) });
     }
 
     public async unregisterBlock(panelId: string, entry: string): Promise<void> {

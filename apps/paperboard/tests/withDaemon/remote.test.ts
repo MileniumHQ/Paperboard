@@ -411,7 +411,7 @@ describe("tunnels and scoped credentials", () => {
 			expect((await tunnelClosed(anonymous, "t0")).code).toBe("AUTH_REQUIRED");
 
 			const owner = await local.host();
-			await owner.ok("blocks:register", { panelId: "test.answerer", entry: "command.ask", schema: { kind: "command", id: "ask", name: "Ask" } });
+			await owner.ok("blocks:register-set", { panelId: "test.answerer", entries: [{ entry: "command.ask", schema: { kind: "command", id: "ask", name: "Ask" } }] });
 			const caller = await local.host();
 			const answer = caller.call("blocks:call", { panelId: "test.answerer", entry: "command.ask", request: { inputs: {} } });
 			const call = await owner.next((f) => f.type === "action_call");

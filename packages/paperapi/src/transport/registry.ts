@@ -68,12 +68,16 @@ export class TransportRegistry {
                     .catch((err) => onError(`blocks:project-define resubscribe ${key}`, err)),
             ),
         );
-        for (const [key, entry] of this.registeredActions.entries()) {
-            call("blocks:register", {
-                panelId: entry.panelId,
-                entry: entry.action,
-                schema: entry.schema,
-            }).catch((err) => onError(`blocks:register resubscribe ${key}`, err));
+        // one call per panel, as each panel registers its blocks
+        const byPanel = new Map<string, { entry: string; schema: unknown }[]>();
+        for (const { panelId, action, schema } of this.registeredActions.values()) {
+            const entries = byPanel.get(panelId) ?? [];
+            entries.push({ entry: action, schema });
+            byPanel.set(panelId, entries);
+        }
+        for (const [panelId, entries] of byPanel) {
+            call("blocks:register-set", { panelId, entries })
+                .catch((err) => onError(`blocks:register-set resubscribe ${panelId}`, err));
         }
     }
 }
