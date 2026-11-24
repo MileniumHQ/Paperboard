@@ -19,7 +19,7 @@
     },
     "vars": {
         "ACCESS_TEAM_DOMAIN": "mileniumhq.cloudflareaccess.com",
-        "ACCESS_AUD": ""
+        "ACCESS_AUD": "988b88dc0e1cd590d2b8a5ffcf3d5c1f7c9ffc8cb1a3b45e1068d334433c473d"
     },
     "ratelimits": [{ "name": "SUBMIT_LIMIT", "namespace_id": "1281931", "simple": { "limit": 5, "period": 60 } }],
     "durable_objects": { "bindings": [{ "name": "ISSUES", "class_name": "IssueStore" }] },
