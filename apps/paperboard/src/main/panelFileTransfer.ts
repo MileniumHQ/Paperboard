@@ -13,6 +13,7 @@ import { Transform, type Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { pinnedTlsOptions } from "daemon/security/pinnedTls";
 import { logger } from "daemon/core/logger";
+import { errorCode } from "@mileniumhq/paperapi/errors";
 import {
     failedResult,
     isImportableName,
@@ -172,7 +173,10 @@ async function writePanelFile(
     }
     res.resume();
     const sendError = await sent;
-    if (sendError) throw new PanelFileTransferError("failed", sendError.message);
+    // a 201 or 204 comes only once the daemon has every byte Content-Length
+    // declared (a body cut short aborts the request instead), so the request
+    // closing before it reports its own finish lost nothing: the file is in
+    if (sendError && errorCode(sendError) !== "ERR_STREAM_PREMATURE_CLOSE") throw new PanelFileTransferError("failed", sendError.message);
 }
 
 /** stream the panel file to dest; the chosen path changes only on success */
