@@ -26,7 +26,7 @@ The submit endpoint has no sign-in, so everything it takes is bounded:
 
 ## Access
 
-The Access application **issues dashboard** covers `issues.ariapis.com/dashboard` (every path under it) on the `mileniumhq` team, with the same policy as tribot: only `login@paperboard.dev`, through the same identity provider. The Worker checks the `Cf-Access-Jwt-Assertion` token on every dashboard request too: the signature against the team's published keys, the audience (`ACCESS_AUD` in `wrangler.jsonc`, the application's AUD tag), the issuer and the expiry. Without a valid token the dashboard answers 403; with no `ACCESS_AUD` set it answers 503, never an open dashboard. `workers_dev` and preview URLs are off, so the custom domain is the only way in.
+The Access application **issues dashboard** covers `issues.ariapis.com/dashboard` (every path under it) on the `mileniumhq` team, with the same policy and identity provider as tribot: only the maintainer's account. The Worker checks the `Cf-Access-Jwt-Assertion` token on every dashboard request too: the signature against the team's published keys, the audience (`ACCESS_AUD` in `wrangler.jsonc`, the application's AUD tag), the issuer and the expiry. Without a valid token the dashboard answers 403; with no `ACCESS_AUD` set it answers 503, never an open dashboard. `workers_dev` and preview URLs are off, so the custom domain is the only way in.
 
 ## Development
 
