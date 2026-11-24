@@ -19,7 +19,7 @@ import {
 } from "solid-js";
 import { metaSections } from "../docs/meta";
 import { docsPath, withBase } from "../utils/base";
-import { styledText } from "../site/landing/TextEffect";
+import { MarketingText } from "@mileniumhq/paperui/marketing";
 import {
     BRAND,
     DOCS_LINKS,
@@ -121,12 +121,8 @@ export function Topbar(props: TopbarProps) {
                         }
                     >
                         <span class="paper-wordmark">
-                            <span class="paper-wordmark-label">Paperboard</span>
-                            <span
-                                class="styled-text-host"
-                                aria-hidden="true"
-                                innerHTML={styledText("Paperboard", 20)}
-                            />
+                            <MarketingText class="paper-wordmark-lettering" text="Paperboard" size={20} />
+                            <span class="paper-wordmark-plain">Paperboard</span>
                         </span>
                     </Show>
                 </a>

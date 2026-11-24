@@ -133,7 +133,7 @@ export async function checkDownloads(browser, origin) {
 
         for (const path of ['/', '/blocks/', '/bot-creator/', '/agents/', '/game-server/']) {
             await page.goto(`${origin}${path}`);
-            const trigger = page.locator('.site-topbar__download paper-button').getByRole('link', { name: 'Download', exact: true });
+            const trigger = page.locator('.site-topbar__download').getByRole('link', { name: 'Download', exact: true });
             await trigger.waitFor();
             await trigger.focus();
             await page.keyboard.press('Enter');
@@ -192,7 +192,7 @@ export async function checkLinuxDownload(browser, origin) {
         const base = 'https://i.paperboard.dev/pb/latest/paperboard-linux-x64';
         for (const path of ['/', '/game-server/']) {
             await page.goto(`${origin}${path}`);
-            const trigger = page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' });
+            const trigger = page.locator('.download-cta').first().getByRole('link', { name: 'Download for Linux (x64)' });
             await trigger.waitFor();
             await trigger.click();
             const modal = page.getByRole('dialog', { name: 'Download for Linux' });
@@ -216,7 +216,7 @@ export async function checkLinuxDownload(browser, origin) {
             downloads = 0;
         }
         // The topbar's short button asks too, and each opening starts from the AppImage.
-        const topbar = page.locator('.site-topbar__download paper-button').getByRole('link', { name: 'Download', exact: true });
+        const topbar = page.locator('.site-topbar__download').getByRole('link', { name: 'Download', exact: true });
         await topbar.click();
         const modal = page.getByRole('dialog', { name: 'Download for Linux' });
         await modal.waitFor();
@@ -226,7 +226,7 @@ export async function checkLinuxDownload(browser, origin) {
         assert.equal(downloads, 0, 'Dismissing downloads nothing');
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`${origin}/`);
-        await page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
+        await page.locator('.download-cta').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
         await modal.waitFor();
         assert.ok(await modal.evaluate(node => node.getBoundingClientRect().width <= innerWidth && node.clientWidth >= node.scrollWidth), 'The format choice fits a phone without clipping');
         if (process.env.LINUX_DOWNLOAD_SHOT) await page.screenshot({ path: process.env.LINUX_DOWNLOAD_SHOT });
@@ -236,7 +236,7 @@ export async function checkLinuxDownload(browser, origin) {
         // format's name and description stand out from the surface behind them.
         for (const colorScheme of ['light', 'dark']) {
             await page.emulateMedia({ colorScheme });
-            await page.locator('.download-cta paper-button').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
+            await page.locator('.download-cta').first().getByRole('link', { name: 'Download for Linux (x64)' }).click();
             await modal.waitFor();
             const contrast = await modal.evaluate(dialog => {
                 const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
