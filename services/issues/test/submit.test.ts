@@ -2,7 +2,10 @@
 // bounded in size, shape and rate, and what it keeps is exactly what the app sent.
 import { afterEach, describe, expect, test } from "bun:test";
 import { DAILY_LIMIT, STORE_LIMIT } from "../src/worker/limits";
-import { MAX_BODY_BYTES, MAX_TEXT_LENGTH, type Issue } from "../src/shared";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { MAX_BODY_BYTES, MAX_DETAILS_LENGTH, MAX_TEXT_LENGTH, type Issue } from "../src/shared";
 import { SUBMIT_LIMIT, startIssues, validIssue, type Issues } from "./helpers/worker";
 
 let service: Issues | undefined;
@@ -35,7 +38,28 @@ test("a submitted issue is kept with its context and listed newest first", async
 
     const issues = await listed(service);
     expect(issues.map((issue) => issue.text)).toEqual(["Second problem", "First problem\nsecond line"]);
-    expect(issues[1]).toMatchObject({ id, context: validIssue().context });
+    expect(issues[1]).toMatchObject({ id, context: validIssue().context, details: validIssue().details });
+});
+
+// Inventory: Data loss — a store from before diagnostics keeps its issues when the worker that adds them starts.
+test("issues kept before diagnostics existed survive the upgrade, with none", async () => {
+    const persistDir = await mkdtemp(path.join(tmpdir(), "issues-upgrade-"));
+    service = await startIssues({ persistDir });
+    await service.legacy();
+    await service.dispose();
+    service = await startIssues({ persistDir });
+    try {
+        expect((await service.submit(validIssue({ text: "after the upgrade" }))).status).toBe(201);
+        const issues = await listed(service);
+        expect(issues.map((issue) => [issue.text, issue.details])).toEqual([
+            ["after the upgrade", validIssue().details as string],
+            ["kept from the first release", ""],
+        ]);
+    } finally {
+        await service.dispose();
+        service = undefined;
+        await rm(persistDir, { recursive: true, force: true });
+    }
 });
 
 // Inventory: Security — the unauthenticated endpoint refuses what it wasn't built to take.
@@ -45,6 +69,9 @@ describe("the submit endpoint refuses malformed requests", () => {
         ["a body that isn't JSON", {}, "{not json", 400, "invalid_issue"],
         ["an unknown top-level field", {}, validIssue({ email: "someone@example.com" }), 400, "invalid_issue"],
         ["empty text", {}, validIssue({ text: "   \n " }), 400, "invalid_issue"],
+        ["no details", {}, { text: "No details", context: validIssue().context }, 400, "invalid_issue"],
+        ["details over the limit", {}, validIssue({ details: "a".repeat(MAX_DETAILS_LENGTH + 1) }), 400, "invalid_issue"],
+        ["control characters in details", {}, validIssue({ details: "\u001b[31mred" }), 400, "invalid_issue"],
         ["text over the limit", {}, validIssue({ text: "a".repeat(MAX_TEXT_LENGTH + 1) }), 400, "invalid_issue"],
         ["control characters", {}, validIssue({ text: "bell \u0007" }), 400, "invalid_issue"],
         ["a missing context field", {}, validIssue({ context: { appVersion: "0.4.0", os: "Linux", osVersion: "6", arch: "x64" } }), 400, "invalid_issue"],
@@ -73,7 +100,7 @@ describe("the submit endpoint refuses malformed requests", () => {
 // Inventory: Security — a body is read only up to the cap, whatever it claims.
 test("bodies over the size cap are refused, declared or streamed", async () => {
     service = await startIssues();
-    const big = JSON.stringify(validIssue({ text: "a".repeat(MAX_BODY_BYTES) }));
+    const big = JSON.stringify(validIssue({ details: "a".repeat(MAX_BODY_BYTES) }));
     const declared = await service.submit(big);
     expect(declared.status).toBe(413);
 

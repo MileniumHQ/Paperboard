@@ -8,10 +8,12 @@ export const SUBMIT_PATH = "/v1/issues";
 
 /** The longest issue text, in UTF-16 code units, after trimming. */
 export const MAX_TEXT_LENGTH = 10_000;
+/** The longest diagnostics text (logs, panels), in UTF-16 code units. */
+export const MAX_DETAILS_LENGTH = 60_000;
 /** The longest context value, in UTF-16 code units. */
 export const MAX_CONTEXT_LENGTH = 100;
 /** The largest request body the submit endpoint reads, in bytes. */
-export const MAX_BODY_BYTES = 48 * 1024;
+export const MAX_BODY_BYTES = 256 * 1024;
 
 /** What the app says about itself alongside the issue. Nothing about the person or the computer's name. */
 export interface IssueContext {
@@ -33,6 +35,12 @@ export const SHELLS = ["window", "browser"] as const satisfies readonly IssueCon
 export interface IssueSubmission {
     text: string;
     context: IssueContext;
+    /**
+     * What the app attached to help find the cause, when the person left it
+     * on: the computer, its panels and versions, and recent log lines, with
+     * paths, names, addresses and secrets scrubbed. Empty when left off.
+     */
+    details: string;
 }
 
 export interface Issue extends IssueSubmission {

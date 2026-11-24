@@ -2,6 +2,8 @@ import { For, Index, Match, Show, Switch, createMemo, createSignal } from "solid
 import {
     PaperButton,
     PaperCard,
+    PaperCode,
+    PaperCollapsible,
     PaperEffect,
     PaperEmptyState,
     PaperError,
@@ -76,6 +78,15 @@ function IssueDetail(props: { issue: Issue; onDelete: () => void }) {
                 <PaperFlex direction="column" gap="half">
                     <IssueText text={props.issue.text} />
                 </PaperFlex>
+                <Show when={props.issue.details}>
+                    {(details) => (
+                        <PaperCollapsible title="Logs and diagnostics" icon="receipt_long">
+                            <PaperCode block wrap copyable language="text">
+                                {details()}
+                            </PaperCode>
+                        </PaperCollapsible>
+                    )}
+                </Show>
                 <PaperSeparator />
                 <PaperKeyValueList>
                     <PaperKeyValue label="Paperboard">{props.issue.context.appVersion}</PaperKeyValue>
@@ -83,6 +94,7 @@ function IssueDetail(props: { issue: Issue; onDelete: () => void }) {
                         {props.issue.context.os} {props.issue.context.osVersion} ({props.issue.context.arch})
                     </PaperKeyValue>
                     <PaperKeyValue label="Shown in">{SHOWN_IN[props.issue.context.shell]}</PaperKeyValue>
+                    <PaperKeyValue label="Diagnostics">{props.issue.details ? "Attached" : "Not sent"}</PaperKeyValue>
                 </PaperKeyValueList>
             </PaperFlex>
         </PaperCard>

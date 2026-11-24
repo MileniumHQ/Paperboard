@@ -8,7 +8,7 @@ Collects the issues people send from **App Settings → Help → Report an Issue
 
 ## Endpoints
 
-- `POST /v1/issues`: public. Takes `application/json` with exactly `{ text, context }`. `text` is trimmed, 1 to 10,000 characters, with no control characters other than tabs and line breaks. `context` is exactly `appVersion`, `os`, `osVersion`, `arch` and `shell` (`window` or `browser`), each one line of at most 100 characters. Answers `201 { id }`. No CORS headers: the app posts from its main process, and a JSON post from a web page needs a preflight this service never answers.
+- `POST /v1/issues`: public. Takes `application/json` with exactly `{ text, context, details }`. `text` is trimmed, 1 to 10,000 characters, with no control characters other than tabs and line breaks. `context` is exactly `appVersion`, `os`, `osVersion`, `arch` and `shell` (`window` or `browser`), each one line of at most 100 characters. `details` is the diagnostics the person saw and left on (the computer, its panels and versions, recent warnings, errors and log lines, scrubbed in the app by `apps/paperboard/src/main/issueDetails.ts`), at most 60,000 characters, or `""`. Answers `201 { id }`. No CORS headers: the app posts from its main process, and a JSON post from a web page needs a preflight this service never answers.
 - `GET /dashboard/`: the dashboard page.
 - `GET /dashboard/api/issues`: every issue, newest first.
 - `GET /dashboard/api/issues/:id/prompt`: the issue as a prompt file (`paperboard-issue-<id>.txt`).
@@ -20,7 +20,7 @@ Errors are `{ error: { code, message } }`, and the app shows `message` to the pe
 
 The submit endpoint has no sign-in, so everything it takes is bounded:
 
-- **Size:** the body is read to at most 48 KiB, whatever `Content-Length` says (`413`).
+- **Size:** the body is read to at most 256 KiB, whatever `Content-Length` says (`413`).
 - **Per address:** 5 issues a minute per `CF-Connecting-IP`, through the Cloudflare rate-limit binding (`429 rate_limited`). It is approximate and per location; shared NATs share it. The address is used for nothing else and never stored.
 - **Everyone together:** 300 issues in any 24 hours (`429 busy`), and 5,000 kept at once (`503 full`) until some are deleted. Both are counted inside the Durable Object, so they hold exactly across locations.
 
@@ -44,5 +44,5 @@ The Worker `issues` is deployed by hand with Wrangler; no CI job deploys it.
 
 1. Create the Access application (once): self-hosted, domain `issues.ariapis.com/dashboard`, the `Only Pxl` policy and identity provider as the tribot application. Put its AUD tag in `ACCESS_AUD` in `wrangler.jsonc`.
 2. Rate-limit namespace `1281931` must be unused by any other Worker in the account.
-3. `bun run --cwd services/issues deploy` builds the dashboard and deploys. The first deploy creates the `issues.ariapis.com` custom domain (its DNS record and certificate) and the Durable Object. Keep the store's name (`issues-v1`) and the migration across releases: changing either loses every issue.
+3. `bun run --cwd services/issues deploy` builds the dashboard and deploys. The first deploy creates the `issues.ariapis.com` custom domain (its DNS record and certificate) and the Durable Object. Keep the store's name (`issues-v1`) and the migration across releases: changing either loses every issue. The store adds columns in place when it starts (`details` came after the first release), so a new column needs a default for the rows already kept.
 4. Check that `POST /v1/issues` answers 201, that `/dashboard` asks for the Access sign-in, and that a download opens as a prompt.

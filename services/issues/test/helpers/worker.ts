@@ -73,6 +73,10 @@ export interface Issues {
     /** Calls the dashboard signed in with a valid token. */
     dashboard(pathAndQuery: string, init?: RequestInit): Promise<Response>;
     seed(count: number, receivedAt: number): Promise<void>;
+    /** Rewrites the store as the first release left it (test door). */
+    legacy(): Promise<void>;
+    /** Where the store is kept; pass it to the next startIssues to restart on it. */
+    persistDir: string;
     /** workerd's loopback origin */
     origin: string;
     /** The keys Access publishes; replace to rotate them. */
@@ -85,12 +89,15 @@ export function validIssue(overrides: Record<string, unknown> = {}): Record<stri
     return {
         text: "The Game Server panel says Stopped after the app restarts.\n\nIt's still running.",
         context: { appVersion: "0.4.0", os: "Linux", osVersion: "6.12.1", arch: "x64", shell: "window" },
+        details: "Panels on it:\n- dev.paperboard.gameserver 0.4.0\n\nWarnings and errors:\n2026-11-23T10:00:00.000Z [ERROR] [Supervisor] lost <ip>:25565",
         ...overrides,
     };
 }
 
-export async function startIssues(options: { aud?: string; assets?: (request: Request) => Response | Promise<Response> } = {}): Promise<Issues> {
-    const persistDir = await mkdtemp(path.join(tmpdir(), "issues-test-"));
+export async function startIssues(
+    options: { aud?: string; assets?: (request: Request) => Response | Promise<Response>; persistDir?: string } = {},
+): Promise<Issues> {
+    const persistDir = options.persistDir ?? (await mkdtemp(path.join(tmpdir(), "issues-test-")));
     const key = await signingKey("key-1");
     const access = { keys: [key], reads: 0 };
     const script = await bundle();
@@ -146,12 +153,18 @@ export async function startIssues(options: { aud?: string; assets?: (request: Re
             const res = await fetch(`${origin}/__test/seed`, { method: "POST", body: JSON.stringify({ count, receivedAt }) });
             if (!res.ok) throw new Error(`seeding failed: ${res.status} ${await res.text()}`);
         },
+        legacy: async () => {
+            const res = await fetch(`${origin}/__test/legacy`, { method: "POST" });
+            if (!res.ok) throw new Error(`legacy failed: ${res.status} ${await res.text()}`);
+        },
+        persistDir,
         access,
         key,
         origin,
+        // a store the caller passed in outlives this run, for a restart on it
         async dispose() {
             await mf.dispose();
-            await rm(persistDir, { recursive: true, force: true });
+            if (!options.persistDir) await rm(persistDir, { recursive: true, force: true });
         },
     };
 }

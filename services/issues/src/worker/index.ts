@@ -5,6 +5,7 @@ import {
     CONTEXT_KEYS,
     MAX_BODY_BYTES,
     MAX_CONTEXT_LENGTH,
+    MAX_DETAILS_LENGTH,
     MAX_TEXT_LENGTH,
     SHELLS,
     SUBMIT_PATH,
@@ -70,14 +71,17 @@ function contextOf(value: unknown): IssueContext {
 
 function submissionOf(value: unknown): IssueSubmission {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid("The body must be a JSON object.");
-    const { text, context, ...rest } = value as Record<string, unknown>;
+    const { text, context, details, ...rest } = value as Record<string, unknown>;
     if (Object.keys(rest).length) throw invalid(`Unknown fields: ${Object.keys(rest).join(", ")}.`);
     if (typeof text !== "string") throw invalid("text must be a string.");
     const trimmed = text.trim();
     if (!trimmed) throw invalid("Say what went wrong.");
     if (trimmed.length > MAX_TEXT_LENGTH) throw invalid(`An issue holds at most ${MAX_TEXT_LENGTH} characters.`);
     if (CONTROL.test(trimmed)) throw invalid("text holds control characters.");
-    return { text: trimmed.replace(/\r\n?/g, "\n"), context: contextOf(context) };
+    if (typeof details !== "string") throw invalid("details must be a string.");
+    if (details.length > MAX_DETAILS_LENGTH) throw invalid(`details hold at most ${MAX_DETAILS_LENGTH} characters.`);
+    if (CONTROL.test(details)) throw invalid("details hold control characters.");
+    return { text: trimmed.replace(/\r\n?/g, "\n"), context: contextOf(context), details: details.trim().replace(/\r\n?/g, "\n") };
 }
 
 const tooLarge = () => new Failure(413, "too_large", `The request is over ${MAX_BODY_BYTES} bytes.`);
@@ -136,8 +140,7 @@ async function submit(request: Request, env: Env): Promise<Response> {
         // quiet: answered as the 400 below
         throw invalid("The body isn't JSON.");
     }
-    const { text, context } = submissionOf(body);
-    const added = await store(env).add(text, context);
+    const added = await store(env).add(submissionOf(body));
     if (!added.ok) {
         throw added.reason === "daily_limit"
             ? new Failure(429, "busy", "Paperboard is getting a lot of issues right now. Try again later.", { "Retry-After": "3600" })
