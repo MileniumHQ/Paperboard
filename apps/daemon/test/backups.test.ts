@@ -138,6 +138,43 @@ describe("a panel's service runs its own backups", () => {
 		await host.close();
 	});
 
+	test("a restore that can't be marked finished keeps its files, says so as a problem, and tells the panel once", async () => {
+		const dir = dataDir();
+		const log = path.join(tempDir(), "hooks.log");
+		const work = path.join(dir, "backups", ".work");
+		const note = (what: string) => `fs.appendFileSync(${JSON.stringify(log)}, ${what} + "\\n")`;
+		// its afterRestore leaves the swap folder read-only, so the journal in it can't be deleted
+		const service = serviceSource({
+			calls: PING,
+			extra: `import * as fs from "node:fs";\nimport * as path from "node:path";`,
+			options: `
+				beforeBackup: async () => ({ paths: ["state.txt"] }),
+				afterRestore: async (_ctx, ended) => {
+					${note('"after-restore " + ended.ok')};
+					for (const name of fs.readdirSync(${JSON.stringify(work)})) if (name.startsWith("restore-")) fs.chmodSync(path.join(${JSON.stringify(work)}, name), 0o555);
+				},`,
+		});
+		await installPanelFiles(dir, { id: "test.unfinished", service });
+		const daemon = await startDaemon({ dataDir: dir });
+		const host = await daemon.rpc();
+		await readyService(host, "test.unfinished");
+		await host.ok("file:write", { appId: "test.unfinished", targetPath: "state.txt", content: "old" });
+		await host.ok("backup:panel-location-set", { panelId: "test.unfinished", locationId: "local" });
+		const record: BackupRecord = await host.ok("backup:create", { panelId: "test.unfinished" });
+		await host.ok("file:write", { appId: "test.unfinished", targetPath: "state.txt", content: "current" });
+
+		try {
+			expect((await host.ok("backup:restore", { panelId: "test.unfinished", backupId: record.id })).id).toBe(record.id);
+			expect(fs.readFileSync(path.join(dir, "files", "test.unfinished", "state.txt"), "utf8")).toBe("old");
+			expect(lines(log)).toEqual(["after-restore true"]);
+			const { problems } = await host.ok("problems:list", { panelId: "test.unfinished" });
+			expect(problems).toEqual([expect.objectContaining({ key: "paperboard:unfinished-restore", message: expect.stringContaining("journal.json") })]);
+		} finally {
+			for (const name of fs.readdirSync(work)) fs.chmodSync(path.join(work, name), 0o755);
+		}
+		await host.close();
+	});
+
 	test("restored files the panel can't pick up from are put back, and it hears the failure", async () => {
 		const dir = dataDir();
 		const log = path.join(tempDir(), "hooks.log");
