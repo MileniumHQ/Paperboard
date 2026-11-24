@@ -11,7 +11,7 @@ html, body {
     flex-direction: column;
     gap: var(--paper-uigap-double);
     padding: var(--paper-uigap-double);
-    max-width: 48rem;
+    max-width: var(--paper-size-panel-large);
 }
 
 .demo-panel section {
@@ -37,7 +37,6 @@ html, body {
 }
 
 .demo-panel textarea {
-    min-height: 6rem;
     resize: vertical;
 }
 
