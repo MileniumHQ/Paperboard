@@ -1,4 +1,5 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
@@ -157,7 +158,13 @@ describe("the daemon command line works headless", () => {
 					const uninstall = await runCrane(["uninstall-service", "--system", "--name", name], childEnv(dataDir()), 60_000);
 					removed = uninstall.code === 0;
 					expect(uninstall.code).toBe(0);
-					await waitFor("the daemon to stop", () => !isAlive(JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")).pid));
+					try {
+						await waitFor("the daemon to stop", () => !isAlive(JSON.parse(fs.readFileSync(path.join(data, "local", "crane.json"), "utf8")).pid));
+					} catch (err) {
+						// what was left running, and what uninstall did, so a failure says why
+						const left = spawnSync("powershell.exe", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'papercrane|conhost' } | Format-Table ProcessId,ParentProcessId,CommandLine -AutoSize -Wrap | Out-String -Width 400"], { encoding: "utf8" });
+						throw new Error(`${(err as Error).message}\nuninstall said:\n${uninstall.output}\nstill running:\n${left.stdout}${left.stderr}`);
+					}
 					expect(isAlive(record!.childPid)).toBe(true);
 					expect(fs.existsSync(path.join(data, "local"))).toBe(true);
 				} finally {
