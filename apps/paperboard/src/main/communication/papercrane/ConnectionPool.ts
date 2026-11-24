@@ -448,6 +448,9 @@ export class ConnectionPool extends EventEmitter {
         port: number | string = DEFAULT_PORT,
         code: string,
         customName?: unknown,
+        // the certificate the computer must answer with, when something it
+        // trusts already named it (`papercrane pair --json` over SSH)
+        expect?: { fingerprint: string },
     ): Promise<StoredComputer> {
         const checked = checkProbeTarget(host, port);
         if ("error" in checked) throw new Error(checked.error);
@@ -459,6 +462,10 @@ export class ConnectionPool extends EventEmitter {
             await tempClient.connectForPairing(host, checked.port);
             const cert = tempClient.getCert();
             if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
+            // checked before the code goes out: whoever else answers there never sees it
+            if (expect && certFingerprint(cert) !== expect.fingerprint) {
+                throw new Error(`Pairing stopped: ${host}:${checked.port} answered with a certificate other than the one its Paperboard Server named over SSH, so the code wasn't sent.`);
+            }
             // who answered is told by its certificate, never by the address:
             // an ssh tunnel and this computer's own daemon share 127.0.0.1
             const own = readTlsCert(getLocalDir());
@@ -469,15 +476,19 @@ export class ConnectionPool extends EventEmitter {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
 
+            // a computer paired here before is paired again, not added twice:
+            // it keeps its id (and so its tabs and panels) and its name
+            const fingerprint = certFingerprint(cert);
+            const before = [...this.computers.values()].find((c) => !c.isLocal && c.cert && certFingerprint(c.cert) === fingerprint);
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct
-            const id = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const id = before?.id ?? `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             // its .local name, when that name leads to this same certificate
             // from here; else the address it was paired at
             const named = pairRes.mdnsName && pairRes.mdnsName !== host && (await this.healthAt(pairRes.mdnsName, checked.port, cert)) === null;
             const comp: StoredComputer = {
                 id,
-                name: name || pairRes.hostname || host,
+                name: name || before?.name || pairRes.hostname || host,
                 host: named ? pairRes.mdnsName! : host,
                 ...(named ? { address: host } : {}),
                 port: checked.port,
@@ -497,8 +508,22 @@ export class ConnectionPool extends EventEmitter {
             catch (err) {
                 // the remote issued a token we could not keep: say so, and
                 // keep memory equal to disk (the pairing did not stick here)
-                this.computers.delete(id);
+                if (before) this.computers.set(id, before);
+                else this.computers.delete(id);
                 throw new Error(`Paired, but this computer could not save the pairing: ${errorMessage(err)}`);
+            }
+            // the connection on the old token makes way for one on the new,
+            // and the old token is given back so it isn't left valid there
+            const old = before ? this.clients.get(id) : undefined;
+            if (old) {
+                this.clients.delete(id);
+                // its going is no news: the computer stays connected on the new one
+                old.removeAllListeners("status");
+                old.removeAllListeners("facts");
+                void old.call("auth:revoke-self", {}, 5000)
+                    // quiet: the new pairing stands either way; an old token left behind is listed on that computer
+                    .catch((err) => logger.warn(`[ConnectionPool] ${id}'s old token wasn't given back:`, err))
+                    .finally(() => old.disconnect());
             }
             this.getClient(id);
             this.emit("change");
