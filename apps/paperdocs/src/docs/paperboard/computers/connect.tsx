@@ -48,7 +48,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             <PaperText preset="subheader" as="h2" id="add-the-computer">2. Add the computer in Paperboard</PaperText>
             <PaperTextList ordered>
                 <li>In Paperboard, select <b>Add Computer</b>, the plus button in the rail.</li>
-                <li>On <b>Connect a Computer</b>, the computers Paperboard finds on your network are listed by name. Select yours and then <b>Next</b>.</li>
+                <li>On <b>Connect a Computer</b>, the computers Paperboard finds on your network are listed by name, with the address they were found at, such as <PaperCode>192.168.1.50:45464</PaperCode>. Once paired, Paperboard switches to the computer&apos;s <PaperCode>.local</PaperCode> name if it answers there. Select yours and then <b>Next</b>.</li>
                 <li>If it is not listed, select <b>Custom IP</b>. On <b>Computer Details</b>, type its address in <b>Computer address</b>, and its port in <b>Server port</b> if it is not <PaperCode>45464</PaperCode>. The address and port as <PaperCode>papercrane pair</PaperCode> prints them, such as <PaperCode>192.168.1.50:45464</PaperCode>, also go in <b>Computer address</b> whole. <b>Next</b> turns on once Paperboard reaches the computer.</li>
                 <li>On <b>Pairing Verification</b>, type the code into <b>Pairing code</b>, with or without the space.</li>
                 <li>Select <b>Add Computer</b>.</li>
@@ -56,6 +56,19 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             <PaperText preset="body" as="p">
                 The computer appears in the rail under its own computer name, and Paperboard opens it.
                 Install panels on it from its <b>Panel Library</b>. See <PaperLink href="/docs/paperboard/panels/">Install and manage panels</PaperLink>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="addresses">How Paperboard finds the computer later</PaperText>
+            <PaperText preset="body" as="p">
+                Paperboard knows a paired computer by its certificate, not by its address, so a computer whose address changes stays paired.
+            </PaperText>
+            <PaperTextList>
+                <li>When the computer answers to a <PaperCode>.local</PaperCode> name from this computer, Paperboard keeps that name, even if you paired it by IP address. It also keeps the IP address it last answered at, and tries both at once.</li>
+                <li>When the computer gets a new IP address or port, Paperboard finds it on your network and connects to it there.</li>
+                <li>A computer on another network, such as over a VPN, keeps the address you paired it at.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                A name or address is only kept once the computer's own certificate answers there, so another computer on the network can't take its place.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="pairing-rules">How pairing is protected</PaperText>
@@ -113,7 +126,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
 
             <PaperText preset="subheader" as="h2" id="when-a-computer-is-offline">When a computer is offline</PaperText>
             <PaperText preset="body" as="p">
-                When a paired computer stops answering, its page shows <b>Connection Lost</b> and Paperboard keeps trying to reconnect, waiting up to 15 seconds between tries.
+                When a paired computer stops answering, its page shows <b>Connection Lost</b>. Paperboard looks for it on your network and keeps trying to reconnect, waiting up to 15 seconds between tries.
                 Select <b>Attempt Reconnect</b> to try at once. The line under it gives the last error.
             </PaperText>
             <PaperText preset="body" as="p">

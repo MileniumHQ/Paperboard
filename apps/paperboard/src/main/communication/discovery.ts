@@ -13,7 +13,7 @@ interface DiscoveredEntry extends DiscoveredComputer {
 
 // what browsing needs of bonjour-service; a test hands in its own network
 export interface MdnsBrowser {
-    on(event: string, listener: (arg: any) => void): unknown;
+    on(event: string, listener: (...args: any[]) => void): unknown;
     update(): void;
     stop(): void;
 }
@@ -37,6 +37,10 @@ export class DiscoveryService extends EventEmitter {
     public start(): void {
         if (this.started) return;
         this.started = true;
+        this.openBrowser();
+    }
+
+    private openBrowser(): void {
         try {
             this.mdns = this.openMdns();
             this.browser = this.mdns.find({ type: PAPERCRANE_MDNS_TYPE });
@@ -54,6 +58,19 @@ export class DiscoveryService extends EventEmitter {
                     logger.warn("[Discovery] failed to process mDNS 'down':", err);
                 }
             });
+            // a computer announcing again under the same name, at a new port
+            // or address, or with new details, comes as an update, never 'up'
+            for (const event of ["srv-update", "txt-update"]) {
+                this.browser.on(event, (service: any, previous: any) => {
+                    try {
+                        // one change: the old record goes without a list of its own
+                        this.handleDown(previous, false);
+                        this.handleUp(service);
+                    } catch (err) {
+                        logger.warn(`[Discovery] failed to process mDNS '${event}':`, err);
+                    }
+                });
+            }
             // the browser's socket failed (a network change)
             this.browser.on("error", (err: unknown) => this.fail(err));
             logger.info(`[Discovery] browsing for _${PAPERCRANE_MDNS_TYPE}._tcp services`);
@@ -113,6 +130,7 @@ export class DiscoveryService extends EventEmitter {
             );
             return;
         }
+        this.confirming?.seen.add(key);
         const entry: DiscoveredEntry = {
             id: key,
             name:
@@ -120,9 +138,19 @@ export class DiscoveryService extends EventEmitter {
                 String(service?.name || key).replace(/\._[^.]+\._tcp\.?$/, ""),
             host,
             port,
+            // the .local name it says it answers to (a hint: kept only once
+            // its certificate answers there); an older daemon sends none
+            mdnsName:
+                typeof service?.txt?.mdns === "string" && /^[A-Za-z0-9-]{1,63}\.local$/i.test(service.txt.mdns)
+                    ? service.txt.mdns
+                    : undefined,
             version:
                 typeof service?.txt?.ver === "string"
                     ? service.txt.ver
+                    : undefined,
+            fingerprint:
+                typeof service?.txt?.fp === "string" && service.txt.fp
+                    ? service.txt.fp
                     : undefined,
             os:
                 typeof service?.txt?.os === "string"
@@ -137,7 +165,7 @@ export class DiscoveryService extends EventEmitter {
         this.emitChange();
     }
 
-    private handleDown(service: any): void {
+    private handleDown(service: any, announce = true): void {
         const key = this.serviceKey(service);
         if (!key) return;
         // match by fqdn too — goodbye can arrive with a partial record
@@ -161,7 +189,7 @@ export class DiscoveryService extends EventEmitter {
         logger.debug(
             `[Discovery] Paperboard Server offline: ${removed.name} (${removed.host}:${removed.port})`,
         );
-        this.emitChange();
+        if (announce) this.emitChange();
     }
 
     private emitChange() {
@@ -186,18 +214,58 @@ export class DiscoveryService extends EventEmitter {
     // online machines, sorted by name
     public list(): DiscoveredComputer[] {
         return Array.from(this.services.values())
-            .map(({ id, name, host, port, version, os }) => ({
+            .map(({ id, name, host, mdnsName, port, version, os, fingerprint }) => ({
                 id,
                 name,
                 host,
+                mdnsName,
                 port,
                 version,
                 os,
+                fingerprint,
             }))
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    public stop(): void {
+    private lastRediscover = 0;
+    // a fresh look under way: the computers it has seen again, and when it
+    // drops the ones it hasn't
+    private confirming: { seen: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
+
+    /**
+     * A paired computer stopped answering: look again with a fresh browser.
+     * A browser keeps each computer at the addresses it first saw, so one
+     * that moved to a new IP under the same name is only seen there by a
+     * fresh look. The list stays as it is meanwhile; after a few seconds,
+     * the computers the fresh look didn't see again are dropped. At most once
+     * every 30 seconds.
+     */
+    public rediscover(): void {
+        if (!this.started || Date.now() - this.lastRediscover < 30_000) return;
+        this.lastRediscover = Date.now();
+        logger.debug("[Discovery] a paired computer is unreachable; looking again");
+        if (this.confirming) clearTimeout(this.confirming.timer);
+        const confirming = {
+            seen: new Set<string>(),
+            timer: setTimeout(() => {
+                if (this.confirming !== confirming) return;
+                this.confirming = null;
+                let dropped = false;
+                for (const key of [...this.services.keys()]) {
+                    if (confirming.seen.has(key)) continue;
+                    this.services.delete(key);
+                    dropped = true;
+                }
+                if (dropped) this.emitChange();
+            }, 5_000),
+        };
+        confirming.timer.unref?.();
+        this.confirming = confirming;
+        this.closeBrowser();
+        this.openBrowser();
+    }
+
+    private closeBrowser(): void {
         try {
             this.browser?.stop();
         } catch (err) {
@@ -210,6 +278,12 @@ export class DiscoveryService extends EventEmitter {
         }
         this.browser = null;
         this.mdns = null;
+    }
+
+    public stop(): void {
+        this.closeBrowser();
+        if (this.confirming) clearTimeout(this.confirming.timer);
+        this.confirming = null;
         this.services.clear();
         this.started = false;
     }

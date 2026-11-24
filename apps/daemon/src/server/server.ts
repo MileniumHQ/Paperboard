@@ -24,6 +24,7 @@ import {
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, isDaemonChallenge, daemonProof,
 } from "../security/handshake";
 import { loadOrCreateTlsIdentity, type TlsIdentity } from "../security/tlsIdentity";
+import { certFingerprint } from "../security/pinnedTls";
 import { logger } from "../core/logger";
 import { PanelServicesManager } from "../panels/panelServices";
 import { backupServiceFor } from "../rpc/backups";
@@ -49,6 +50,8 @@ export interface ServerOptions {
     remotesFile?: string;
     // mDNS announcement on non-loopback binds (default on)
     advertise?: boolean;
+    // stop, as on SIGTERM, once the process that started the daemon is gone
+    exitWithParent?: boolean;
 }
 
 export interface ServerInstance {
@@ -335,6 +338,23 @@ function daemonLifecycle(parts: DaemonParts) {
     };
 }
 
+// A Windows user task runs the daemon under conhost --headless, and ending
+// the task ends only conhost: the daemon then stops the way a signal stops
+// it, leaving its workloads for the next daemon
+function followParent(): void {
+    const parent = process.ppid;
+    const timer = setInterval(() => {
+        try {
+            process.kill(parent, 0);
+        } catch {
+            clearInterval(timer);
+            logger.info(`[Paperboard Server] the process that started the daemon (PID ${parent}) is gone; stopping`);
+            process.emit("SIGTERM");
+        }
+    }, 2000);
+    timer.unref();
+}
+
 // One attempt to listen on a port. Builds the attempt's own engine, auth and
 // servers, and settles once the daemon is ready; a failed bind tears all of
 // it down before rejecting, so a retry starts clean.
@@ -396,6 +416,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             }
             settled = true;
             lifecycle.arm();
+            if (options.exitWithParent) followParent();
 
             // Start background services for installed panels
             try {
@@ -414,9 +435,10 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
             // previous run's workloads are gone) install now
             void engine.applyReadyStagedPackages();
 
-            // announce over mDNS (loopback skips inside)
-            if (options.advertise !== false) {
-                lifecycle.advertise(advertisePaperCrane({ port: actualPort, host }));
+            // announce over mDNS, with who this daemon is: a loopback-only
+            // daemon has no TLS identity and nothing to announce
+            if (options.advertise !== false && tlsIdentity) {
+                lifecycle.advertise(advertisePaperCrane({ port: actualPort, host, fingerprint: certFingerprint(tlsIdentity.cert) }));
             }
 
             if (!headless) {

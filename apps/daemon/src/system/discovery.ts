@@ -8,6 +8,7 @@ import { logger } from "../core/logger";
 import { getPaperboardDir } from "../core/paths";
 import pkg from "../../package.json";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
+import { mdnsHostName } from "../server/hostname";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
 // the daemon's package.json version, which sync-versions keeps equal to the app's
@@ -17,6 +18,9 @@ export interface AdvertiseOptions {
     port: number;
     host?: string;
     name?: string;
+    /** the SHA-256 fingerprint of this daemon's TLS certificate: who it is,
+     *  whatever its address, so a paired computer is found again by it */
+    fingerprint: string;
 }
 
 export interface AdvertisementHandle {
@@ -111,15 +115,22 @@ export function advertisePaperCrane(
         // publish throws synchronously on invalid config
         let service;
         try {
+            // the .local name goes out as a hint, never as the records' host:
+            // bonjour-service publishes every interface's address (Docker,
+            // VPN, VM bridges) under its host, and the OS responder (avahi)
+            // that owns that name renames the computer over the mismatch
+            const mdnsName = mdnsHostName();
             service = bonjour.publish({
                 name,
                 type: PAPERCRANE_MDNS_TYPE,
                 port: options.port,
                 txt: {
+                    ...(mdnsName ? { mdns: mdnsName } : {}),
                     id: paperCraneMachineId(),
                     name: os.hostname(),
                     ver: PAPERCRANE_VERSION,
                     os: process.platform,
+                    fp: options.fingerprint,
                 },
             });
         } catch (err) {

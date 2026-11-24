@@ -15,11 +15,11 @@ export function createReachCheck() {
     const [error, setError] = createSignal<string | null>(null);
     const latest = createLatest();
 
-    const check = async (computer: { host: string; port: number }): Promise<boolean> => {
+    const check = async (computer: { id: string }): Promise<boolean> => {
         const current = latest();
         setChecking(true);
         try {
-            const probe = await computersApi.probe(computer.host, computer.port);
+            const probe = await computersApi.reach(computer.id);
             if (!current()) return false;
             if (probe?.reachable) {
                 setError(null);

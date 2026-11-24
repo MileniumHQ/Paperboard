@@ -35,7 +35,10 @@ export interface IdentityPart {
 export interface ComputerInfo {
     id: string;
     name: string;
+    /** the address it is dialed at first: its .local name when it answers to one */
     host: string;
+    /** the IP it last answered at, dialed alongside a .local host */
+    address?: string;
     port: number;
     /** the address other machines reach this computer at (local computer only) */
     networkAddress?: string;
@@ -68,15 +71,26 @@ export interface ComputerProbeResult {
     invalidAddress?: boolean;
 }
 
+/** whether a paired computer answers, at any address it is known by, under its pinned certificate */
+export interface ComputerReachResult {
+    reachable: boolean;
+    error?: string;
+}
+
 /** A Paperboard server found nearby over mDNS. */
 export interface DiscoveredComputer {
     /** stable service identity: the dedupe key */
     id: string;
     name: string;
+    /** the address it answered from */
     host: string;
+    /** the .local name it answers to (an older daemon advertises none) */
+    mdnsName?: string;
     port: number;
     version?: string;
     os?: string;
+    /** its TLS certificate's SHA-256 fingerprint: who it is, whatever its address */
+    fingerprint?: string;
 }
 
 /** A backup location as people see it: where it is, never its keys or sign-in. */
@@ -106,6 +120,7 @@ export const SHELL_CALLS = {
     "crane-credentials": { browser: true },
     "computers-list": { browser: true },
     "computer-probe": { browser: true },
+    "computer-reach": { browser: true },
     "computer-pair": { browser: true },
     "computer-update": { browser: true },
     "computer-remove": { browser: true },
@@ -180,6 +195,7 @@ export interface ShellCallContract {
     };
     "computers-list": { args: void; answer: ComputerListResult };
     "computer-probe": { args: { host: string; port?: number | string }; answer: ComputerProbeResult };
+    "computer-reach": { args: { id: string }; answer: ComputerReachResult };
     "computer-pair": {
         args: { host: string; port?: number | string; code: string; name?: string };
         // the id of the computer it paired, which the shell goes to, and
