@@ -9,12 +9,15 @@ definePanelService({
     id: PANEL_ID,
     state: { startedAt: Date.now(), noteAtStart: "" },
     onInit: async (ctx) => {
-        ctx.setState({ noteAtStart: (await fileApi.read(NOTE, PANEL_ID)) ?? "" });
+        const note = await fileApi.read(NOTE, PANEL_ID);
+        // a fresh demo has an empty note, so there is always one to back up
+        if (note === null) await fileApi.write(NOTE, "", PANEL_ID);
+        ctx.setState({ noteAtStart: note ?? "" });
     },
     // the note is all the panel keeps, and only its page writes it
     beforeBackup: () => ({ paths: [NOTE] }),
-    afterRestore: async (ctx, ended) => {
-        if (!ended.ok) return;
+    // either way the note is read again: a restore that ends badly after the service took it puts the old note back
+    afterRestore: async (ctx) => {
         ctx.setState({ noteAtStart: (await fileApi.read(NOTE, PANEL_ID)) ?? "" });
     },
 });
