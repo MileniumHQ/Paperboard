@@ -147,7 +147,7 @@ interface BackupProgressChange {
                 <li>Paperboard never touches a <PaperLink href="/docs/paperapi/config/">config</PaperLink> document. A panel that keeps its settings there hands them over as <PaperCode>data</PaperCode>, and writes them back in <PaperCode>afterRestore</PaperCode>.</li>
                 <li>A panel whose service is not running, or has no <PaperCode>beforeBackup</PaperCode>, can't be backed up; one without <PaperCode>afterRestore</PaperCode> can't restore its backups.</li>
                 <li>A backup made by a newer version of the panel than the one installed is refused, so old code never reads new data.</li>
-                <li>One backup or restore runs for each target at a time.</li>
+                <li>The backups and restores of one panel run one after another: one for another target waits its turn. A second one for a target that already has one running is refused.</li>
                 <li><PaperCode>label</PaperCode> is at most 100 characters.</li>
                 <li>A backup started from inside one of the service's own calls or blocks just awaits <PaperCode>backupApi.create</PaperCode>: the service keeps running, so the call returns the record as any other.</li>
                 <li>The calls have no timeout. Show <PaperCode>onProgress</PaperCode> to say how far along a backup is, as the sample below does.</li>
@@ -161,9 +161,9 @@ interface BackupProgressChange {
             <PaperCode block language="tsx">
 {`interface BackupContents {
     /** files and folders in the panel's files folder, "/" between names; "" is all of it.
-     * None may hold another. May be empty when data is all there is to keep. */
+     * None may repeat or hold another. May be empty when data is all there is to keep. */
     paths: string[];
-    /** paths under paths to leave out; a restore leaves them as they are */
+    /** paths strictly under one of paths to leave out, none inside another; a restore leaves them as they are */
     exclude?: string[];
     /** file names left out wherever they are, such as a lock a running program holds */
     skip?: string[];
@@ -217,6 +217,8 @@ definePanelService({
             </PaperTable>
             <PaperTextList>
                 <li><PaperCode>paths</PaperCode> and <PaperCode>exclude</PaperCode> each name at most 64 paths, and the record that lists them may not grow past 8 KiB. Name a few larger folders over many files.</li>
+                <li><PaperCode>paths</PaperCode> may not repeat, and none may be inside another. Each <PaperCode>exclude</PaperCode> entry may not be <PaperCode>""</PaperCode>, must be strictly under one of the <PaperCode>paths</PaperCode>, and may not be inside another <PaperCode>exclude</PaperCode> entry.</li>
+                <li>A restore of <PaperCode>""</PaperCode> swaps the storage's top-level entries one by one, so an excluded folder never moves.</li>
                 <li>A backup must hold something: <PaperCode>paths</PaperCode> or <PaperCode>data</PaperCode>.</li>
                 <li>Links inside a folder are left out.</li>
             </PaperTextList>
@@ -224,7 +226,7 @@ definePanelService({
             <PaperText preset="subheader" as="h2" id="progress">Progress</PaperText>
             <PaperText preset="body" as="p">
                 A backup goes through <PaperCode>preparing</PaperCode> (<PaperCode>beforeBackup</PaperCode>), <PaperCode>packing</PaperCode>, <PaperCode>resuming</PaperCode> (<PaperCode>afterBackup</PaperCode>) and <PaperCode>saving</PaperCode>.
-                A restore goes through <PaperCode>downloading</PaperCode>, <PaperCode>checking</PaperCode>, <PaperCode>unpacking</PaperCode>, <PaperCode>preparing</PaperCode>, <PaperCode>restoring</PaperCode> and <PaperCode>resuming</PaperCode>.
+                A restore goes through <PaperCode>downloading</PaperCode>, <PaperCode>checking</PaperCode>, <PaperCode>unpacking</PaperCode>, <PaperCode>preparing</PaperCode>, <PaperCode>restoring</PaperCode> and <PaperCode>resuming</PaperCode> (<PaperCode>afterRestore</PaperCode>, which runs while it is shown).
                 Packing, saving and downloading count bytes. The others have <PaperCode>done</PaperCode> and <PaperCode>total</PaperCode> set to <PaperCode>null</PaperCode>.
             </PaperText>
             <PaperCode block language="tsx">
@@ -280,8 +282,8 @@ async function runRoutineBackup(keep: number) {
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>No backup location chosen for this panel</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td><PaperCode>create</PaperCode>, <PaperCode>list</PaperCode> or <PaperCode>restore</PaperCode> before a location is chosen.</td></tr>
-                    <tr><td><PaperCode>A backup is being made for this panel</PaperCode>, <PaperCode>... is being restored ...</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>One is already running for the target.</td></tr>
                     <tr><td><PaperCode>The panel's service is not running, so it can't be backed up</PaperCode>, <PaperCode>This panel's service has no beforeBackup, so it can't be backed up</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>There is no service to ask, or it takes no part in backups.</td></tr>
+                    <tr><td><PaperCode>A backup is being made for this target</PaperCode>, <PaperCode>... is being restored ...</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>One is already running for the same target (or, with no target, for the panel).</td></tr>
                     <tr><td><PaperCode>This panel's service has no afterRestore, so it can't restore its backups</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>A restore for a service that couldn't pick up from the files.</td></tr>
                     <tr><td><PaperCode>This backup was made by version &lt;a&gt; of the panel; &lt;b&gt; is installed. Update the panel first</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>A restore of a newer panel's backup.</td></tr>
                     <tr><td><PaperCode>Backup &lt;id&gt; is not at this panel's backup location</PaperCode></td><td><PaperCode>NOT_FOUND</PaperCode></td><td>A wrong id, or a backup at another location.</td></tr>
