@@ -104,6 +104,9 @@ export function createFiles(calls: Calls, place: string) {
                     };
                 },
             }),
+
+        /** Lets go of every file read, held ones too: for when nothing shows them anymore. */
+        clear: () => urls.clear(),
     };
 }
 

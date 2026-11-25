@@ -1,8 +1,8 @@
 // One place's files: a thin bar with where you are and what you can do, and
 // the files filling the rest. Folders open in place; a file opens in a
 // preview over the page, Space looks at it quickly, and arrows move to the
-// next one while it's open. A Browser is made for one place, by its id, and
-// keeps its folder and choice while another place is shown.
+// next one while it's open. A Browser shows one place's view (placeView.ts),
+// which keeps its folder, choice and uploads while another place is shown.
 import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import {
     ancestorPaths,
@@ -29,14 +29,13 @@ import {
     type PaperFileViewEntry,
     type PaperFileViewMode,
     type PaperFileViewRef,
-    type PaperFileViewSort,
     type PaperFileViewThumbnailOptions,
 } from "@mileniumhq/paperui";
 import { fileApi } from "@mileniumhq/paperapi";
 import { drive } from "./client";
 import { baseOf, PANEL_ID, parentOf, type DriveEntry, type Place } from "./lib/contract";
-import { createFiles, mediaType, PREVIEW_MAX_BYTES, THUMBNAIL_MAX_BYTES } from "./lib/files";
-import { createUploads } from "./lib/uploads";
+import { mediaType, PREVIEW_MAX_BYTES, THUMBNAIL_MAX_BYTES } from "./lib/files";
+import type { PlaceView } from "./placeView";
 import styles from "./Browser.module.css";
 
 const MODE_KEY = "drive:view";
@@ -61,6 +60,8 @@ function savedMode(): PaperFileViewMode {
 
 export interface BrowserProps {
     place: Place;
+    /** what's kept for the place while it isn't shown */
+    view: PlaceView;
     /** lets the disk go; the sidebar's Eject does the same */
     onEject: () => void;
     /** stops showing the linked folder */
@@ -68,17 +69,15 @@ export interface BrowserProps {
 }
 
 export default function Browser(props: BrowserProps) {
-    // the place's id never changes: a Browser is made for one place
-    const files = createFiles(drive.calls, untrack(() => props.place.id));
+    // a Browser is made for one place, and its view is made with the place: read once
+    const kept = untrack(() => props.view);
+    const { files, uploads, folder, setFolder, selection, setSelection, sort, setSort } = kept;
     const place = () => props.place.id;
     let view: PaperFileViewRef | undefined;
     let uploadInput!: HTMLInputElement;
 
     // ---------- where, and how ----------
-    const [folder, setFolder] = createSignal("");
     const [mode, setMode] = createSignal<PaperFileViewMode>(savedMode());
-    const [sort, setSort] = createSignal<PaperFileViewSort>({ key: "name", dir: 1 });
-    const [selection, setSelection] = createSignal<string[]>([]);
     createEffect(
         on(mode, (m) => {
             try {
@@ -196,7 +195,7 @@ export default function Browser(props: BrowserProps) {
     async function download(entry: PaperFileViewEntry) {
         try {
             // by where it is on the computer: every place's files save the same way
-            const result = await fileApi.exportFile(`${props.place.location}/${entry.path}`, PANEL_ID, { suggestedName: entry.name });
+            const result = await fileApi.exportFile(`${props.place.location.replace(/[\\/]+$/, "")}/${entry.path}`, PANEL_ID, { suggestedName: entry.name, onComputer: true });
             if (result.status === "exported") showToast({ title: `Downloaded “${entry.name}”`, icon: "download", variant: "success" });
         } catch (err) {
             showError(`Couldn't download “${entry.name}”`, err);
@@ -252,13 +251,6 @@ export default function Browser(props: BrowserProps) {
     };
 
     // ---------- uploads ----------
-    const uploads = createUploads(files, {
-        landed: (entry) => void view?.reload(parentOf(entry.path)),
-        failed: (name, err) => showError(`Couldn't upload “${name}”`, err),
-        finished: (landed) => {
-            if (landed > 0) showToast({ title: landed === 1 ? "Uploaded 1 file" : `Uploaded ${landed} files`, icon: "cloud_done", variant: "success" });
-        },
-    });
     const uploadTotals = createMemo(() => {
         const jobs = uploads.jobs();
         return { count: jobs.length, sent: jobs.reduce((n, j) => n + j.sent, 0), size: jobs.reduce((n, j) => n + j.size, 0), first: jobs[0]?.name ?? "" };
@@ -414,7 +406,10 @@ export default function Browser(props: BrowserProps) {
                             </PaperButton>
                         </PaperEmptyState>
                     }
-                    ref={(v) => (view = v)}
+                    ref={(v) => {
+                        view = v;
+                        onCleanup(kept.show(v));
+                    }}
                 />
             </PaperFlex>
 

@@ -1,8 +1,9 @@
 // Drive: a sidebar of the places it shows (its own folder, the disks plugged
 // in, the folders linked from this computer) beside the files of the one
 // that's open. The places are the service's state, mirrored here and kept
-// by id, so a place's browser keeps its folder while another is shown.
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+// by id. Only the open place's Browser is shown; each place's view (its
+// folder, choice and uploads) is kept here until the place leaves Drive.
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import {
     formatBytes,
@@ -12,6 +13,7 @@ import {
     PaperInterfaceGroup,
     PaperInterfaceItem,
     PaperMenu,
+    PaperMenuAction,
     PaperMenuItem,
     PaperMenuLabel,
     PaperPanel,
@@ -25,10 +27,9 @@ import Browser from "./Browser";
 import LinkFolder from "./LinkFolder";
 import { drive } from "./client";
 import { OWN_PLACE, type Place } from "./lib/contract";
+import { createPlaceView, type PlaceView } from "./placeView";
 
 const PLACE_KEY = "drive:place";
-// the sidebar's entry that links a folder: it opens the picker, and is never the open place
-const LINK_ENTRY = "link";
 
 const ICONS: Record<Place["kind"], string> = { own: "home_storage", disk: "hard_drive", folder: "folder" };
 
@@ -43,8 +44,9 @@ function savedPlace(): string {
 }
 
 /** What the sidebar says under a place's name. */
-function placeNote(place: Place): string | undefined {
+function placeNote(place: Place, uploading: number): string | undefined {
     if (!place.available) return "Not here right now";
+    if (uploading > 0) return uploading === 1 ? "Uploading 1 file" : `Uploading ${uploading} files`;
     if (place.free === undefined) return undefined;
     return `${formatBytes(place.free)} free`;
 }
@@ -54,24 +56,51 @@ export default function App() {
     const [places, setPlaces] = createStore<Place[]>([]);
     const [known, setKnown] = createSignal(false);
     const mirror = drive.state;
-    // a disk that leaves without Eject was pulled out: that's said once
-    const ejecting = new Set<string>();
     const off = mirror.subscribe((state) => {
-        const gone = known() ? places.filter((p) => p.kind === "disk" && !state.places.some((n) => n.id === p.id)) : [];
-        setPlaces(reconcile(state.places, { key: "id" }));
-        setKnown(true);
-        for (const disk of gone) {
-            if (ejecting.delete(disk.id)) continue;
-            showToast({ title: `“${disk.name}” was unplugged`, message: "Eject a disk before you pull it out, so nothing is lost.", icon: "usb_off", variant: "warning" });
-        }
+        batch(() => {
+            setPlaces(reconcile(state.places, { key: "id" }));
+            setKnown(true);
+        });
+    });
+    // the service says when a disk left without Eject, once, to every window
+    const offUnplugged = drive.events.unplugged((disk) => {
+        showToast({ title: `“${disk.name}” was unplugged`, message: "Eject a disk before you pull it out, so nothing is lost.", icon: "usb_off", variant: "warning" });
     });
     onCleanup(() => {
         off();
+        offUnplugged();
         mirror.dispose();
     });
     const disks = createMemo(() => places.filter((p) => p.kind === "disk"));
     const folders = createMemo(() => places.filter((p) => p.kind === "folder"));
     const placeById = (id: string) => places.find((p) => p.id === id);
+
+    // ---------- each place's view, kept while another is shown ----------
+    const views = new Map<string, PlaceView>();
+    const viewOf = (id: string) => {
+        let view = views.get(id);
+        if (!view) {
+            view = createPlaceView(id);
+            views.set(id, view);
+        }
+        return view;
+    };
+    // a place that left Drive takes its view with it: its uploads stop
+    createEffect(
+        on(
+            () => places.map((p) => p.id),
+            (ids) => {
+                for (const [id, view] of views) {
+                    if (ids.includes(id)) continue;
+                    view.dispose();
+                    views.delete(id);
+                }
+            },
+        ),
+    );
+    onCleanup(() => {
+        for (const view of views.values()) view.dispose();
+    });
 
     // ---------- the place that's open ----------
     const [open, setOpen] = createSignal(savedPlace());
@@ -96,12 +125,10 @@ export default function App() {
     const [linking, setLinking] = createSignal(false);
 
     async function eject(place: Place) {
-        ejecting.add(place.id);
         try {
             await drive.calls.eject({ id: place.id });
             showToast({ title: `“${place.name}” can be unplugged`, icon: "eject", variant: "success" });
         } catch (err) {
-            ejecting.delete(place.id);
             showError(`Couldn't eject “${place.name}”`, err);
         }
     }
@@ -132,7 +159,7 @@ export default function App() {
     };
 
     const entry = (place: Place) => (
-        <PaperMenuItem value={place.id} icon={ICONS[place.kind]} description={placeNote(place)} onContextMenu={(e) => placeMenu(e, place)}>
+        <PaperMenuItem value={place.id} icon={ICONS[place.kind]} description={placeNote(place, viewOf(place.id).uploads.jobs().length)} onContextMenu={(e) => placeMenu(e, place)}>
             {place.name}
         </PaperMenuItem>
     );
@@ -143,10 +170,7 @@ export default function App() {
                 name="places"
                 aria-label="Places"
                 value={open()}
-                onValueChange={(value) => {
-                    if (value === LINK_ENTRY) setLinking(true);
-                    else setOpen(String(value));
-                }}
+                onValueChange={(value) => setOpen(String(value))}
             >
                 <For each={places.filter((p) => p.kind === "own")}>{entry}</For>
                 <Show when={disks().length > 0}>
@@ -155,16 +179,16 @@ export default function App() {
                 </Show>
                 <PaperMenuLabel>Folders</PaperMenuLabel>
                 <For each={folders()}>{entry}</For>
-                <PaperMenuItem value={LINK_ENTRY} icon="add">
+                <PaperMenuAction icon="add" onClick={() => setLinking(true)}>
                     Link a folder
-                </PaperMenuItem>
+                </PaperMenuAction>
             </PaperMenu>
 
             <PaperInterfaceGroup value={open()}>
                 <For each={places}>
                     {(place) => (
                         <PaperInterfaceItem value={place.id} variant="full">
-                            <Browser place={place} onEject={() => void eject(place)} onUnlink={() => void unlink(place)} />
+                            <Browser place={place} view={viewOf(place.id)} onEject={() => void eject(place)} onUnlink={() => void unlink(place)} />
                         </PaperInterfaceItem>
                     )}
                 </For>
