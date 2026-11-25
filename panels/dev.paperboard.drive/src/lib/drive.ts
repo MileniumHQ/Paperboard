@@ -94,7 +94,9 @@ export interface Space {
     total: number;
 }
 
-const isPart = (name: string) => name.startsWith(PART_PREFIX) && name.endsWith(PART_SUFFIX);
+// only the shape uploadBegin makes: a file of someone's own that merely starts the same way is theirs, never swept
+const PART_NAME = /^\.paperboard-upload-[0-9a-f]{24}\.part$/;
+const isPart = (name: string) => PART_NAME.test(name);
 
 export class Drive {
     private uploads = new Map<string, Upload>();
@@ -110,12 +112,6 @@ export class Drive {
         });
         if (!st.isDirectory()) throw new Error(`“${this.root}” isn't a folder.`);
         this.realRoot = await fs.promises.realpath(this.root);
-    }
-
-    /** How full the root's disk is. */
-    async space(): Promise<Space> {
-        const st = await fs.promises.statfs(this.root);
-        return { free: st.bavail * st.bsize, total: st.blocks * st.bsize };
     }
 
     /** Ends every upload under way, removing what they wrote. */

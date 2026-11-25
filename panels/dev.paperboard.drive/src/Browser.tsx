@@ -64,8 +64,6 @@ export interface BrowserProps {
     view: PlaceView;
     /** lets the disk go; the sidebar's Eject does the same */
     onEject: () => void;
-    /** stops showing the linked folder */
-    onUnlink: () => void;
 }
 
 export default function Browser(props: BrowserProps) {
@@ -290,20 +288,7 @@ export default function Browser(props: BrowserProps) {
     const title = () => (folder() === "" ? props.place.name : baseOf(folder()));
     const emptyTitle = () => (folder() !== "" ? "This folder is empty" : props.place.kind === "own" ? "Your drive is empty" : `“${props.place.name}” is empty`);
 
-    // a linked folder that isn't there (its disk is unplugged) says where it was, and can be let go
-    const missing = (
-        <PaperFlex fullWidth fullHeight align="center" justify="center" padding="double" class={styles.app}>
-            <PaperEmptyState icon="folder_off" title={`“${props.place.name}” isn't here right now`} description={`Drive shows it again once ${props.place.location} is back.`}>
-                <PaperButton onClick={() => props.onUnlink()}>
-                    <PaperIcon zeroHeight>link_off</PaperIcon>
-                    Unlink
-                </PaperButton>
-            </PaperEmptyState>
-        </PaperFlex>
-    );
-
     return (
-        <Show when={props.place.available} fallback={missing}>
         <PaperFlex direction="column" fullWidth fullHeight minHeight={0} class={styles.app} onKeyDown={onKeyDown}>
             <PaperFlex direction="row" align="center" gap="half" class={styles.bar} classList={{ [styles.atTop]: folder() === "" }}>
                 <PaperButton icon variant="text" size="small" class={styles.up} aria-label="Enclosing folder" title="Enclosing folder" disabled={folder() === ""} onClick={goUp}>
@@ -522,6 +507,19 @@ export default function Browser(props: BrowserProps) {
                 }
             />
         </PaperFlex>
-        </Show>
+    );
+}
+
+/** A linked folder that isn't there (its disk is unplugged): it says where it was, and can be let go. */
+export function MissingPlace(props: { place: Place; onUnlink: () => void }) {
+    return (
+        <PaperFlex fullWidth fullHeight align="center" justify="center" padding="double" class={styles.app}>
+            <PaperEmptyState icon="folder_off" title={`“${props.place.name}” isn't here right now`} description={`Drive shows it again once ${props.place.location} is back.`}>
+                <PaperButton onClick={() => props.onUnlink()}>
+                    <PaperIcon zeroHeight>link_off</PaperIcon>
+                    Unlink
+                </PaperButton>
+            </PaperEmptyState>
+        </PaperFlex>
     );
 }

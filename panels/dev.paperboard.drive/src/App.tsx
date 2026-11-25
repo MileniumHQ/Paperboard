@@ -23,7 +23,7 @@ import {
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import Browser from "./Browser";
+import Browser, { MissingPlace } from "./Browser";
 import LinkFolder from "./LinkFolder";
 import { drive } from "./client";
 import { OWN_PLACE, type Place } from "./lib/contract";
@@ -188,7 +188,10 @@ export default function App() {
                 <For each={places}>
                     {(place) => (
                         <PaperInterfaceItem value={place.id} variant="full">
-                            <Browser place={place} view={viewOf(place.id)} onEject={() => void eject(place)} onUnlink={() => void unlink(place)} />
+                            {/* a folder that's gone takes its Browser with it: its preview and questions don't wait for it */}
+                            <Show when={place.available} fallback={<MissingPlace place={place} onUnlink={() => void unlink(place)} />}>
+                                <Browser place={place} view={viewOf(place.id)} onEject={() => void eject(place)} />
+                            </Show>
                         </PaperInterfaceItem>
                     )}
                 </For>

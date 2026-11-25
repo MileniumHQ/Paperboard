@@ -149,20 +149,24 @@ describe("uploads", () => {
         const { outside } = await openDrive();
         const linked = new Drive(outside);
         await linked.open();
-        const stale = path.join(outside, `${PART_PREFIX}old.part`);
+        const stale = path.join(outside, `${PART_PREFIX}${"0".repeat(24)}.part`);
         fs.writeFileSync(stale, "half");
         const old = (Date.now() - UPLOAD_IDLE_MS - 1000) / 1000;
         fs.utimesSync(stale, old, old);
-        const fresh = path.join(outside, `${PART_PREFIX}new.part`);
+        const fresh = path.join(outside, `${PART_PREFIX}${"f".repeat(24)}.part`);
+        // a file of someone's own that only looks like one stays, and shows
+        const lookalike = path.join(outside, `${PART_PREFIX}notes.part`);
+        fs.writeFileSync(lookalike, "mine");
+        fs.utimesSync(lookalike, old, old);
         fs.writeFileSync(fresh, "half");
         const { id } = await linked.uploadBegin("", "live.bin", 10);
         await linked.uploadPut(id, 0, Buffer.alloc(5));
-        expect(await linked.list("")).toEqual([]);
+        expect((await linked.list("")).map((e) => e.name)).toEqual([`${PART_PREFIX}notes.part`]);
         // a part someone else may still be writing (another window's upload) is left alone until it's old
         expect(fs.existsSync(stale)).toBe(false);
         expect(fs.existsSync(fresh)).toBe(true);
         await linked.uploadCancel(id);
-        expect(fs.readdirSync(outside).sort()).toEqual([`${PART_PREFIX}new.part`]);
+        expect(fs.readdirSync(outside).sort()).toEqual([`${PART_PREFIX}${"f".repeat(24)}.part`, `${PART_PREFIX}notes.part`]);
         await linked.close();
     });
 
