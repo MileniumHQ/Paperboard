@@ -131,6 +131,29 @@ describe("places", () => {
         await again.close();
     });
 
+    test("linked folders show as there from the first word to the windows, even while disks can't be read", async () => {
+        const { dir, places, folder } = await openPlaces();
+        const music = await places.link(folder("home/Music"));
+        await places.close();
+        const pushes: Place[][] = [];
+        const again = new Places({
+            root: path.join(dir, "data/Drive"),
+            saved: path.join(dir, "data/places.json"),
+            disks: {
+                read: async () => {
+                    throw new Error("mountinfo is gone");
+                },
+            },
+            onChange: (list) => pushes.push(list),
+            onUnplugged: () => {},
+            onProblem: () => {},
+        });
+        await again.open();
+        onTestFinished(() => again.close());
+        expect(pushes.length).toBeGreaterThan(0);
+        for (const list of pushes) expect(list.find((p) => p.id === music.id)).toMatchObject({ available: true });
+    });
+
     test("two calls at once open a place's drive once", async () => {
         const { places, folder } = await openPlaces();
         const place = await places.link(folder("home/Videos"));

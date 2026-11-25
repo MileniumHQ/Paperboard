@@ -104,7 +104,8 @@ export class Places {
         await this.own.open();
         this.linked = await this.load();
         await this.readSpaceOf(OWN_PLACE);
-        // the windows see Drive's own folder and the linked ones before any disk is looked at
+        // the windows see Drive's own folder and the linked ones, as they are, before any disk is looked at
+        await this.background("look", this.lookAtFolders());
         this.publish();
         // the first look fails the way every later one can: as a problem, with Drive's own folder still open
         await this.background("look", this.refresh());
@@ -339,19 +340,21 @@ export class Places {
     }
 
     /**
-     * What's plugged in and what's there now: what left is let go, and what
-     * came is read. Everything is looked at before anything changes, so a
-     * look that fails leaves the places as they were.
+     * What's there now: the linked folders, then the disks plugged in. What
+     * left is let go, and what came is read. Each is looked at whole before
+     * it changes anything, and a failing disk read never holds back the
+     * folders, which are looked at first.
      */
     private async look(): Promise<void> {
-        const now = await this.reader.read();
+        await this.lookAtFolders();
+        await this.lookAtDisks();
+    }
+
+    private async lookAtFolders(): Promise<void> {
         const linked = this.linked;
         const there = await Promise.all(linked.map((f) => isFolder(f.path)));
-        const gone = this.disks.filter((d) => !now.some((n) => n.mount === d.mount));
-        const fresh = now.filter((n) => !this.disks.some((d) => d.mount === n.mount));
-        this.disks = now;
-        const arrived = fresh.map((d) => diskId(d.mount));
-        const left = gone.map((d) => diskId(d.mount));
+        const arrived: string[] = [];
+        const left: string[] = [];
         linked.forEach((f, i) => {
             // a folder unlinked while this looked is no longer this look's to change
             if (!this.linked.includes(f) || there[i] === this.present.has(f.id)) return;
@@ -359,10 +362,26 @@ export class Places {
             else this.present.delete(f.id);
             (there[i] ? arrived : left).push(f.id);
         });
+        await this.settle(arrived, left);
+    }
+
+    private async lookAtDisks(): Promise<void> {
+        const now = await this.reader.read();
+        const gone = this.disks.filter((d) => !now.some((n) => n.mount === d.mount));
+        const fresh = now.filter((n) => !this.disks.some((d) => d.mount === n.mount));
+        this.disks = now;
         for (const d of gone) {
             const id = diskId(d.mount);
             if (!this.ejecting.delete(id)) this.options.onUnplugged({ id, name: d.name });
         }
+        await this.settle(
+            fresh.map((d) => diskId(d.mount)),
+            gone.map((d) => diskId(d.mount)),
+        );
+    }
+
+    /** Lets go of the places that left, tells the windows, then reads the space on the ones that came. */
+    private async settle(arrived: string[], left: string[]): Promise<void> {
         await Promise.all(left.map((id) => this.forget(id)));
         this.publish();
         await Promise.all(arrived.map((id) => this.readSpaceOf(id)));
