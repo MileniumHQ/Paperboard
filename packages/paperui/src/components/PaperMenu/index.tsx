@@ -439,3 +439,43 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         </Show>
     );
 }
+
+export interface PaperMenuActionProps extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
+    icon?: JSX.Element | string;
+    level?: number;
+}
+
+/**
+ * An entry that does something (opens a dialog, starts a new item) instead
+ * of being chosen: it looks like the menu's entries, but is never the
+ * menu's value, and never opens a page in a phone-width panel.
+ */
+export function PaperMenuAction(props: ParentProps<PaperMenuActionProps>) {
+    const [local, rest] = splitProps(props, ["icon", "level", "class", "style", "children"]);
+    const contextLevel = useMenuLevel();
+    return (
+        <button
+            {...rest}
+            type="button"
+            class={cx(styles.PaperMenuItem, styles.action, local.class)}
+            style={mergeStyle({ "--menu-indent-level": local.level ?? contextLevel }, local.style)}
+        >
+            <Show when={local.icon}>
+                {(glyph) =>
+                    typeof glyph() === "string" ? (
+                        <PaperIcon class={styles.menuIcon} zeroHeight>
+                            {glyph()}
+                        </PaperIcon>
+                    ) : (
+                        <span class={styles.menuIcon}>{glyph()}</span>
+                    )
+                }
+            </Show>
+            <div class={styles.itemText}>
+                <PaperText class={styles.menuTitle} size={2} weight={500}>
+                    {local.children}
+                </PaperText>
+            </div>
+        </button>
+    );
+}
