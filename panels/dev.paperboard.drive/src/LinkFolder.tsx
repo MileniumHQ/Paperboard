@@ -1,6 +1,7 @@
 // Picks a folder on the computer Paperboard runs on and links it into Drive.
 // The folders come from the service, so this works from a phone or another
-// computer as well as on this one. It opens in the home folder.
+// computer as well as on this one. It opens in the home folder, and says
+// why a folder can't be linked (it holds Drive's own files) before Link is pressed.
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import {
     PaperButton,
@@ -16,7 +17,7 @@ import {
 } from "@mileniumhq/paperui";
 import { errorMessage } from "@mileniumhq/paperapi";
 import { drive } from "./client";
-import type { HostFolder, Place } from "./lib/contract";
+import { COMPUTER, type HostFolder, type Place } from "./lib/contract";
 
 export interface LinkFolderProps {
     open: boolean;
@@ -28,6 +29,10 @@ export default function LinkFolder(props: LinkFolderProps) {
     const [at, setAt] = createSignal<HostFolder | null>(null);
     const [error, setError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
+    const linkable = () => {
+        const folder = at();
+        return folder !== null && !folder.cannotLink;
+    };
     let token = 0;
 
     async function go(folder: string) {
@@ -55,7 +60,7 @@ export default function LinkFolder(props: LinkFolderProps) {
 
     async function link() {
         const folder = at();
-        if (!folder) return;
+        if (!folder || !linkable()) return;
         setBusy(true);
         try {
             props.onLinked(await drive.calls.link({ folder: folder.path }));
@@ -76,15 +81,15 @@ export default function LinkFolder(props: LinkFolderProps) {
                     <PaperButton variant="text" onClick={props.onClose}>
                         Cancel
                     </PaperButton>
-                    <PaperButton variant="primary" disabled={!at() || busy()} onClick={() => void link()}>
-                        {at() ? `Link “${at()!.name}”` : "Link"}
+                    <PaperButton variant="primary" disabled={!linkable() || busy()} onClick={() => void link()}>
+                        {linkable() ? `Link “${at()!.name}”` : "Link"}
                     </PaperButton>
                 </>
             }
         >
             <PaperFlex direction="column" gap="full">
                 <PaperText preset="body" color="text-muted">
-                    Its files show in Drive where they are. Nothing is copied or moved.
+                    {at()?.cannotLink ?? "Its files show in Drive where they are. Nothing is copied or moved."}
                 </PaperText>
                 <PaperFlex direction="row" align="center" gap="half">
                     <PaperButton icon variant="text" size="small" aria-label="Enclosing folder" title="Enclosing folder" disabled={!at()?.parent} onClick={() => at()?.parent && void go(at()!.parent!)}>
@@ -92,7 +97,7 @@ export default function LinkFolder(props: LinkFolderProps) {
                     </PaperButton>
                     <PaperFlex flex minWidth={0}>
                         <PaperText preset="label" truncate>
-                            {at()?.path ?? ""}
+                            {at()?.path === COMPUTER ? at()!.name : (at()?.path ?? "")}
                         </PaperText>
                     </PaperFlex>
                 </PaperFlex>
@@ -109,11 +114,22 @@ export default function LinkFolder(props: LinkFolderProps) {
                 >
                     <Show when={at()} fallback={<PaperLoader loaderStatus="indeterminate" label="Opening" />}>
                         {(folder) => (
-                            <Show when={folder().folders.length > 0} fallback={<PaperEmptyState icon="folder_open" title="No folders in here" description="You can still link this one." />}>
-                                <PaperList standalone selectable={false} buttons scrollable="y" aria-label={`Folders in ${folder().name}`}>
+                            <Show
+                                when={folder().folders.length > 0}
+                                fallback={<PaperEmptyState icon="folder_open" title="No folders in here" description={folder().cannotLink ? undefined : "You can still link this one."} />}
+                            >
+                                <PaperList
+                                    name="link-folder"
+                                    standalone
+                                    buttons
+                                    scrollable="y"
+                                    aria-label={`Folders in ${folder().name}`}
+                                    value={folder().path}
+                                    onValueChange={(sub) => void go(String(sub))}
+                                >
                                     <For each={folder().folders}>
                                         {(sub) => (
-                                            <PaperListItem value={sub.path} icon="folder" onClick={() => void go(sub.path)}>
+                                            <PaperListItem value={sub.path} icon={folder().path === COMPUTER ? "hard_drive" : "folder"}>
                                                 {sub.name}
                                             </PaperListItem>
                                         )}

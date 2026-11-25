@@ -10,6 +10,9 @@ export const DRIVE_FOLDER = "files";
 /** The id of Drive's own folder among the places. */
 export const OWN_PLACE = "drive";
 
+/** What browse is given for the computer's own top: on Windows, the drive letters above each disk's top. */
+export const COMPUTER = "computer";
+
 /** The most of a file one call carries: the page uploads and reads files in pieces this size. */
 export const CHUNK_BYTES = 4 * 1024 * 1024;
 
@@ -52,9 +55,11 @@ export type Place = Infer<typeof place>;
 const hostFolder = shape.object({
     path: shape.text(),
     name: shape.text(),
-    /** the folder above; null at the top of a disk */
+    /** the folder above (COMPUTER above a Windows drive letter); null at the top */
     parent: shape.nullable(shape.text()),
     folders: shape.list(shape.object({ name: shape.text(), path: shape.text() })),
+    /** why this folder can't be linked, when it can't */
+    cannotLink: shape.optional(shape.text()),
 });
 export type HostFolder = Infer<typeof hostFolder>;
 
@@ -75,7 +80,7 @@ export const driveContract = defineContract(PANEL_ID, {
         unlink: { input: shape.object({ id: shape.text() }), output: shape.nothing() },
         /** lets a disk go so it can be pulled out */
         eject: { input: shape.object({ id: shape.text() }), output: shape.nothing() },
-        /** the folders in a folder on this computer, to pick one to link; "" is the home folder */
+        /** the folders in a folder on this computer, to pick one to link; "" is the home folder, COMPUTER its top */
         browse: { input: shape.object({ folder: shape.text() }), output: hostFolder },
         /** what a folder holds; "" is the drive's top */
         list: { input: inPlace({ folder: shape.text() }), output: shape.list(entry) },
@@ -110,5 +115,7 @@ export const driveContract = defineContract(PANEL_ID, {
     events: {
         /** files changed in these folders of a place: a window showing one lists it again */
         changed: shape.object({ place: shape.text(), folders: shape.list(shape.text()) }),
+        /** a disk left without being ejected: pulled out, or let go by the system */
+        unplugged: shape.object({ id: shape.text(), name: shape.text() }),
     },
 });

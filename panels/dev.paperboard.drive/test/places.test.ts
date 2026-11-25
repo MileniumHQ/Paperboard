@@ -11,11 +11,13 @@ import { diskId, Places } from "../src/lib/places";
 
 async function openPlaces(dir = fs.mkdtempSync(path.join(os.tmpdir(), "drive-places-")), plugged: Disk[] = []) {
     const pushes: Place[][] = [];
+    const unplugged: { id: string; name: string }[] = [];
     const places = new Places({
         root: path.join(dir, "data/Drive"),
         saved: path.join(dir, "data/places.json"),
         disks: { read: async () => [...plugged] },
         onChange: (list) => pushes.push(list),
+        onUnplugged: (disk) => unplugged.push(disk),
         onProblem: () => {},
     });
     await places.open();
@@ -28,7 +30,7 @@ async function openPlaces(dir = fs.mkdtempSync(path.join(os.tmpdir(), "drive-pla
         fs.mkdirSync(full, { recursive: true });
         return fs.realpathSync(full);
     };
-    return { dir, places, pushes, plugged, folder };
+    return { dir, places, pushes, plugged, unplugged, folder };
 }
 
 const ids = (list: Place[]) => list.map((p) => `${p.kind}:${p.name}`);
@@ -57,6 +59,7 @@ describe("places", () => {
             saved: path.join(dir, "data/places.json"),
             disks: { read: async () => [] },
             onChange: () => {},
+            onUnplugged: () => {},
             onProblem: () => {},
         });
         await again.open();
@@ -89,6 +92,27 @@ describe("places", () => {
         await expect(places.link(dir)).rejects.toThrow("Drive's own files");
     });
 
+    test("picking a folder says why one can't be linked before Link is pressed", async () => {
+        const { dir, places, folder, plugged } = await openPlaces();
+        const music = folder("home/Music");
+        expect((await places.browse(music)).cannotLink).toBeUndefined();
+        await places.link(music);
+        expect((await places.browse(music)).cannotLink).toContain("already linked");
+        expect((await places.browse(dir)).cannotLink).toContain("Drive's own files");
+        expect((await places.browse(path.join(dir, "data/Drive"))).cannotLink).toContain("Drive's own files");
+        const usb = folder("media/USB");
+        plugged.push({ mount: usb, name: "USB" });
+        await places.refresh();
+        expect((await places.browse(usb)).cannotLink).toContain("is a disk");
+    });
+
+    test("two calls at once open a place's drive once", async () => {
+        const { places, folder } = await openPlaces();
+        const place = await places.link(folder("home/Videos"));
+        const [a, b] = await Promise.all([places.drive(place.id), places.drive(place.id)]);
+        expect(a).toBe(b);
+    });
+
     test("a linked folder that goes away stays linked, says it's missing, and comes back", async () => {
         const { places, folder } = await openPlaces();
         const projects = folder("home/Projects");
@@ -106,7 +130,7 @@ describe("places", () => {
     });
 
     test("disks show while they're plugged in, and folders on them come and go with them", async () => {
-        const { places, plugged, folder, pushes } = await openPlaces();
+        const { places, plugged, unplugged, folder, pushes } = await openPlaces();
         const usb = folder("media/Samsung T7");
         const photos = folder("media/Samsung T7/Photos");
         plugged.push({ mount: usb, name: "Samsung T7" });
@@ -126,6 +150,8 @@ describe("places", () => {
         expect(ids(places.list())).toEqual(["own:Drive", "folder:Photos"]);
         expect(places.list()[1]).toMatchObject({ available: false });
         await expect(places.drive(disk.id)).rejects.toThrow("isn't in Drive anymore");
+        // nobody asked it to go, so every window is told
+        expect(unplugged).toEqual([{ id: disk.id, name: "Samsung T7" }]);
 
         // back in: both are there again
         fs.renameSync(pulled, usb);
@@ -156,12 +182,13 @@ describe("places", () => {
         await expect(places.browse(path.join(home, "Nope"))).rejects.toThrow("isn't there");
     });
 
-    test("disks that can't be read are a problem until they can be again", async () => {
+    test("disks that can't be read are a problem until they can be again, from the first look on", async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "drive-places-"));
-        // each report the poll makes, as it makes it
-        let heard: (report: { key: string; error: string | null }) => void = () => {};
+        // each report the looks make, as they make it
+        const reports: { key: string; error: string | null }[] = [];
+        let heard: (report: { key: string; error: string | null }) => void = (report) => reports.push(report);
         const next = () => new Promise<{ key: string; error: string | null }>((resolve) => (heard = resolve));
-        let broken = false;
+        let broken = true;
         const places = new Places({
             root: path.join(dir, "data/Drive"),
             saved: path.join(dir, "data/places.json"),
@@ -172,15 +199,17 @@ describe("places", () => {
                 },
             },
             onChange: () => {},
+            onUnplugged: () => {},
             onProblem: (key, _title, error) => heard({ key, error: error === null ? null : String(error) }),
         });
+        // the first look fails too, and Drive still opens with its own folder
         await places.open();
         onTestFinished(async () => {
             await places.close();
             fs.rmSync(dir, { recursive: true, force: true });
         });
-        broken = true;
-        expect(await next()).toEqual({ key: "look", error: "Error: mountinfo is gone" });
+        expect(reports).toEqual([{ key: "look", error: "Error: mountinfo is gone" }]);
+        expect(places.list().map((p) => p.id)).toEqual(["drive"]);
         broken = false;
         expect(await next()).toEqual({ key: "look", error: null });
     });

@@ -11,9 +11,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
-import { OWN_PLACE, type HostFolder, type Place } from "./contract";
-import { DiskReader, ejectDisk, type Disk } from "./disks";
-import { Drive, type Space } from "./drive";
+import { COMPUTER, OWN_PLACE, type HostFolder, type Place } from "./contract";
+import { DiskReader, ejectDisk, windowsLetters, type Disk } from "./disks";
+import { Drive, within, type Space } from "./drive";
 
 /** How often the disks plugged in, and the linked folders, are looked at again. */
 export const POLL_MS = 2_000;
@@ -29,19 +29,21 @@ interface Saved {
     folders: Linked[];
 }
 
-const isMissing = (err: unknown) => (err as NodeJS.ErrnoException)?.code === "ENOENT";
+const codeOf = (err: unknown) => (err as NodeJS.ErrnoException)?.code ?? "";
+const isMissing = (err: unknown) => codeOf(err) === "ENOENT";
+/** A path that leads nowhere this can go: not there, through a file, not allowed in, or round a loop. */
+const isUnreachable = (err: unknown) => ["ENOENT", "ENOTDIR", "EACCES", "EPERM", "ELOOP"].includes(codeOf(err));
 const folderName = (p: string) => path.basename(p) || p;
-/** Whether a folder is there; a path that leads nowhere isn't one. */
+const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true });
+/** Whether a folder is there to open; one this can't reach isn't, for now. */
 const isFolder = (p: string) =>
     fs.promises.stat(p).then(
         (st) => st.isDirectory(),
         (err: unknown) => {
-            if (isMissing(err)) return false;
+            if (isUnreachable(err)) return false;
             throw err;
         },
     );
-/** Whether `inner` is `outer` or in it. */
-const within = (inner: string, outer: string) => inner === outer || inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
 
 export interface PlacesOptions {
     /** Drive's own folder, made when it's missing */
@@ -52,6 +54,8 @@ export interface PlacesOptions {
     disks?: { read(): Promise<Disk[]> };
     /** hears the places whenever they change */
     onChange: (places: Place[]) => void;
+    /** hears a disk that left without Eject: pulled out, or let go by the system */
+    onUnplugged: (disk: { id: string; name: string }) => void;
     /**
      * Hears a failure no one asked for (the disks couldn't be read), by what
      * it's about, and null once that works again: the panel shows it as a
@@ -60,8 +64,12 @@ export interface PlacesOptions {
     onProblem: (key: string, title: string, error: unknown | null) => void;
 }
 
-const LOOK_PROBLEM = "look";
-const SPACE_PROBLEM = "space";
+/** The problems the background work reports, by key, with what each says. */
+export const PROBLEMS = {
+    look: "Drive can't see which disks are plugged in",
+    space: "Drive can't read how much space is left",
+} as const;
+type Problem = keyof typeof PROBLEMS;
 
 export class Places {
     readonly own: Drive;
@@ -70,7 +78,10 @@ export class Places {
     private space = new Map<string, Space>();
     /** the linked folders that are there now */
     private present = new Set<string>();
-    private opened = new Map<string, Drive>();
+    // a drive is kept from the moment it starts opening, so two calls at once share it
+    private opened = new Map<string, Promise<Drive>>();
+    /** the disks being ejected: their leaving was asked for */
+    private ejecting = new Set<string>();
     private readonly reader: { read(): Promise<Disk[]> };
     private timers: ReturnType<typeof setInterval>[] = [];
     private last = "";
@@ -78,6 +89,8 @@ export class Places {
     private failing = new Set<string>();
     // one look at a time: a slow one is never overtaken by the next
     private looking: Promise<void> | null = null;
+    /** the look asked for while one was under way: it starts once that one is done */
+    private queued: Promise<void> | null = null;
 
     constructor(private readonly options: PlacesOptions) {
         this.own = new Drive(options.root);
@@ -89,9 +102,11 @@ export class Places {
         await this.own.open();
         this.linked = await this.load();
         await this.readSpaceOf(OWN_PLACE);
-        await this.refresh();
+        // the first look fails the way every later one can: as a problem, with Drive's own folder still open
+        await this.background("look", this.refresh());
+        // the poll skips a turn while a look is under way
         const look = setInterval(() => {
-            this.background(LOOK_PROBLEM, "Drive can't see which disks are plugged in", this.refresh());
+            if (!this.looking && !this.queued) void this.background("look", this.startLook());
         }, POLL_MS);
         const space = setInterval(() => this.refreshSpace(), SPACE_POLL_MS);
         for (const t of [look, space]) t.unref?.();
@@ -101,8 +116,7 @@ export class Places {
     async close(): Promise<void> {
         for (const t of this.timers) clearInterval(t);
         this.timers = [];
-        await Promise.all([this.own, ...this.opened.values()].map((d) => d.close()));
-        this.opened.clear();
+        await Promise.all([this.own.close(), ...[...this.opened.keys()].map((id) => this.forget(id))]);
     }
 
     /** Every place, in the order the sidebar shows them. */
@@ -115,7 +129,7 @@ export class Places {
         return [
             { id: OWN_PLACE, kind: "own", name: "Drive", location: this.options.root, available: true, ...space(OWN_PLACE) },
             ...[...this.disks]
-                .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+                .sort(byName)
                 .map((d): Place => ({ id: diskId(d.mount), kind: "disk", name: d.name, location: d.mount, available: true, ...space(diskId(d.mount)) })),
             ...this.linked.map((f): Place => {
                 const available = this.present.has(f.id);
@@ -135,13 +149,18 @@ export class Places {
             this.publish();
             throw new Error(`“${this.nameOf(id)}” isn't there right now.`);
         }
-        let drive = this.opened.get(id);
-        if (!drive) {
-            drive = new Drive(root);
-            await drive.open();
-            this.opened.set(id, drive);
+        let opening = this.opened.get(id);
+        if (!opening) {
+            const drive = new Drive(root);
+            const made = drive.open().then(() => drive);
+            opening = made;
+            this.opened.set(id, made);
+            made.catch(() => {
+                // quiet: the call that opened it hears why; the next one tries again
+                if (this.opened.get(id) === made) this.opened.delete(id);
+            });
         }
-        return drive;
+        return opening;
     }
 
     /** Links a folder on this computer; the place it is now. */
@@ -153,12 +172,8 @@ export class Places {
         });
         if (!st.isDirectory()) throw new Error(`“${folder}” isn't a folder.`);
         const real = await fs.promises.realpath(folder);
-        const own = await fs.promises.realpath(this.options.root);
-        if (within(real, own) || within(own, real)) throw new Error("That folder holds Drive's own files, or is in them.");
-        const disk = this.disks.find((d) => d.mount === real || d.mount === folder);
-        if (disk) throw new Error(`“${disk.name}” is a disk: it's already under Drives.`);
-        const same = this.linked.find((f) => f.path === real);
-        if (same) throw new Error(`“${folderName(real)}” is already linked.`);
+        const problem = await this.cannotLink(real, folder);
+        if (problem) throw new Error(problem);
         const linked: Linked = { id: `folder-${randomBytes(6).toString("hex")}`, path: real };
         await this.save([...this.linked, linked]);
         this.linked = [...this.linked, linked];
@@ -186,34 +201,55 @@ export class Places {
         // uploads to it stop first: the disk can't go while they write to it
         const onIt = [id, ...this.foldersOn([disk])];
         await Promise.all(onIt.map((p) => this.forget(p)));
-        await ejectDisk(disk.mount);
+        // its leaving was asked for, so it isn't said to be unplugged when the next look finds it gone
+        this.ejecting.add(id);
+        try {
+            await ejectDisk(disk.mount);
+        } catch (err) {
+            this.ejecting.delete(id);
+            throw err;
+        }
         await this.refresh();
     }
 
-    /** Looks at the disks plugged in and the linked folders again, as the poll does. */
+    /** Looks at the disks plugged in and the linked folders again, in a look that starts after this is asked. */
     refresh(): Promise<void> {
-        this.looking ??= this.look().finally(() => {
-            this.looking = null;
+        if (!this.looking) return this.startLook();
+        // the look under way may have read the disks before what the caller changed
+        this.queued ??= this.looking
+            .then(
+                () => undefined,
+                () => undefined, // quiet: that look's failure went to whoever started it
+            )
+            .then(() => {
+                this.queued = null;
+                return this.startLook();
+            });
+        return this.queued;
+    }
+
+    private startLook(): Promise<void> {
+        const look = this.look().finally(() => {
+            if (this.looking === look) this.looking = null;
         });
-        return this.looking;
+        this.looking = look;
+        return look;
     }
 
     /** Files changed on a place: the space left on it is read again. */
     changed(id: string): void {
-        this.background(
-            SPACE_PROBLEM,
-            "Drive can't read how much space is left",
-            this.readSpaceOf(id).then(() => this.publish()),
-        );
+        void this.background("space", this.readSpaceOf(id).then(() => this.publish()));
     }
 
-    /** The folders in a folder on this computer, for picking one to link; "" is the home folder. */
+    /** The folders in a folder on this computer, for picking one to link; "" is the home folder, COMPUTER its top. */
     async browse(folder: string): Promise<HostFolder> {
+        if (folder === COMPUTER) return this.computer();
         const at = folder === "" ? os.homedir() : folder;
         if (!path.isAbsolute(at)) throw new Error("That's not a folder on this computer.");
         const names = await fs.promises.readdir(at, { withFileTypes: true }).catch((err: unknown) => {
             if (isMissing(err)) throw new Error(`“${at}” isn't there.`);
-            if ((err as NodeJS.ErrnoException).code === "EACCES" || (err as NodeJS.ErrnoException).code === "EPERM") throw new Error(`Paperboard isn't allowed to open “${at}”.`);
+            if (codeOf(err) === "ENOTDIR") throw new Error(`“${at}” isn't a folder.`);
+            if (codeOf(err) === "EACCES" || codeOf(err) === "EPERM") throw new Error(`Paperboard isn't allowed to open “${at}”.`);
             throw err;
         });
         const folders = await Promise.all(
@@ -224,19 +260,19 @@ export class Places {
                     if (d.isDirectory()) return { name: d.name, path: full };
                     if (!d.isSymbolicLink()) return null;
                     // a link to a folder is a folder to pick; a broken one, or one this can't follow, isn't
-                    const st = await fs.promises.stat(full).catch((err: unknown) => {
-                        if (["ENOENT", "EACCES", "EPERM", "ELOOP"].includes((err as NodeJS.ErrnoException).code ?? "")) return null;
-                        throw err;
-                    });
-                    return st?.isDirectory() ? { name: d.name, path: full } : null;
+                    return (await isFolder(full)) ? { name: d.name, path: full } : null;
                 }),
         );
         const parent = path.dirname(at);
+        // a Windows drive letter's top sits under the computer, beside the other letters
+        const top = parent === at ? (process.platform === "win32" ? COMPUTER : null) : parent;
+        const cannotLink = await this.cannotLink(await fs.promises.realpath(at), at);
         return {
             path: at,
             name: folderName(at),
-            parent: parent === at ? null : parent,
-            folders: folders.filter((f): f is { name: string; path: string } => f !== null).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+            parent: top,
+            folders: folders.filter((f): f is { name: string; path: string } => f !== null).sort(byName),
+            ...(cannotLink ? { cannotLink } : {}),
         };
     }
 
@@ -254,49 +290,71 @@ export class Places {
         return this.list().find((p) => p.id === id)?.name ?? id;
     }
 
+    /** The computer's top: each drive letter on Windows, and "/" anywhere else. */
+    private async computer(): Promise<HostFolder> {
+        const tops = process.platform === "win32" ? (await windowsLetters()).map(({ letter }) => `${letter}:\\`) : ["/"];
+        return { path: COMPUTER, name: "This computer", parent: null, folders: tops.map((p) => ({ name: p, path: p })), cannotLink: "Pick a folder on one of its disks." };
+    }
+
+    /** Why a folder can't be linked (by its real path, and as it was named), or null when it can. */
+    private async cannotLink(real: string, named: string): Promise<string | null> {
+        const own = await fs.promises.realpath(this.options.root);
+        if (within(real, own) || within(own, real)) return "It holds Drive's own files, or is in them.";
+        const disk = this.disks.find((d) => d.mount === real || d.mount === named);
+        if (disk) return `“${disk.name}” is a disk: it's already under Drives.`;
+        if (this.linked.some((f) => f.path === real)) return `“${folderName(real)}” is already linked.`;
+        return null;
+    }
+
     /** Lets go of a place's drive: its uploads end, and the next call opens it again. */
     private async forget(id: string): Promise<void> {
-        const drive = this.opened.get(id);
+        const opening = this.opened.get(id);
         this.opened.delete(id);
         this.space.delete(id);
+        const drive = await opening?.catch(() => null); // quiet: a drive that never opened has nothing to let go
         await drive?.close();
     }
 
-    /** What's plugged in and what's there now: what left is let go, and what came is read. */
+    /**
+     * What's plugged in and what's there now: what left is let go, and what
+     * came is read. Everything is looked at before anything changes, so a
+     * look that fails leaves the places as they were.
+     */
     private async look(): Promise<void> {
         const now = await this.reader.read();
+        const linked = this.linked;
+        const there = await Promise.all(linked.map((f) => isFolder(f.path)));
         const gone = this.disks.filter((d) => !now.some((n) => n.mount === d.mount));
         const fresh = now.filter((n) => !this.disks.some((d) => d.mount === n.mount));
         this.disks = now;
         const arrived = fresh.map((d) => diskId(d.mount));
         const left = gone.map((d) => diskId(d.mount));
-        await Promise.all(
-            this.linked.map(async (f) => {
-                const there = await isFolder(f.path);
-                if (there === this.present.has(f.id)) return;
-                if (there) {
-                    this.present.add(f.id);
-                    arrived.push(f.id);
-                } else {
-                    this.present.delete(f.id);
-                    left.push(f.id);
-                }
-            }),
-        );
+        linked.forEach((f, i) => {
+            // a folder unlinked while this looked is no longer this look's to change
+            if (!this.linked.includes(f) || there[i] === this.present.has(f.id)) return;
+            if (there[i]) this.present.add(f.id);
+            else this.present.delete(f.id);
+            (there[i] ? arrived : left).push(f.id);
+        });
+        for (const d of gone) {
+            const id = diskId(d.mount);
+            if (!this.ejecting.delete(id)) this.options.onUnplugged({ id, name: d.name });
+        }
         await Promise.all(left.map((id) => this.forget(id)));
+        this.publish();
         await Promise.all(arrived.map((id) => this.readSpaceOf(id)));
         this.publish();
     }
 
     /** Work no one waits on: a failure is a problem the panel shows, until the same work next succeeds. */
-    private background(key: string, title: string, work: Promise<void>): void {
-        work.then(
+    private background(key: Problem, work: Promise<void>): Promise<void> {
+        return work.then(
             () => {
-                if (this.failing.delete(key)) this.options.onProblem(key, title, null);
+                if (this.failing.delete(key)) this.options.onProblem(key, PROBLEMS[key], null);
             },
             (err: unknown) => {
                 this.failing.add(key);
-                this.options.onProblem(key, title, err);
+                this.options.onProblem(key, PROBLEMS[key], err);
             },
         );
     }
@@ -311,11 +369,7 @@ export class Places {
     }
 
     private refreshSpace(): void {
-        this.background(
-            SPACE_PROBLEM,
-            "Drive can't read how much space is left",
-            this.readSpace().then(() => this.publish()),
-        );
+        void this.background("space", this.readSpace().then(() => this.publish()));
     }
 
     /** Reads how full a place is; a place that isn't there has none. */
@@ -332,8 +386,8 @@ export class Places {
             const st = await fs.promises.statfs(root);
             this.space.set(id, { free: st.bavail * st.bsize, total: st.blocks * st.bsize });
         } catch (err) {
-            // a folder gone since it was looked at has no space: the next look says it's missing
-            if (!isMissing(err)) throw err;
+            // a folder gone since it was looked at, or one this isn't allowed into, has no space it can read
+            if (!isUnreachable(err)) throw err;
             this.space.delete(id);
         }
     }

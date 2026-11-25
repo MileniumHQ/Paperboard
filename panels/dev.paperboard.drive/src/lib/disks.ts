@@ -6,8 +6,8 @@
 //   /mnt, where desktops and udisks put them, named by their folder (udisks
 //   names that after the disk's label).
 // - macOS: the folders in /Volumes on a disk other than the system's.
-// - Windows: the drive letters other than the system's that hold a disk,
-//   named by their label.
+// - Windows: the drive letters other than the system's that hold a local
+//   disk (not a network share: that's a folder to link), named by its label.
 //
 // Ejecting asks the system to let the disk go (udisksctl, diskutil, the
 // Windows shell), so it's safe to pull.
@@ -70,12 +70,35 @@ export function linuxDisks(mounts: LinuxMount[]): (Disk & { source: string })[] 
     return [...byMount.values()].map((d) => ({ mount: d.mount, name: path.basename(d.mount), source: d.source }));
 }
 
-async function windowsLabel(letter: string): Promise<string> {
-    const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-Volume -DriveLetter ${letter}).FileSystemLabel`], {
-        timeout: 10_000,
-        windowsHide: true,
-    });
-    return stdout.trim();
+// Win32_LogicalDisk's DriveType: removable (a USB stick, an SD card), local (a second disk) and a disc
+const WINDOWS_DISK_TYPES = new Set([2, 3, 5]);
+
+interface WindowsVolume {
+    disk: boolean;
+    label: string;
+}
+
+async function windowsVolume(letter: string): Promise<WindowsVolume> {
+    const query = `Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='${letter}:'" | Select-Object DriveType, VolumeName | ConvertTo-Json -Compress`;
+    const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", query], { timeout: 10_000, windowsHide: true });
+    const found = JSON.parse(stdout) as { DriveType?: number; VolumeName?: string | null } | null;
+    return { disk: WINDOWS_DISK_TYPES.has(found?.DriveType ?? 0), label: found?.VolumeName ?? "" };
+}
+
+/** The drive letters that hold something now, with what that is: a letter's device changes with what's put in it. */
+export async function windowsLetters(): Promise<{ letter: string; dev: number }[]> {
+    const present = await Promise.all(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(async (letter) => {
+            try {
+                return { letter, dev: (await fs.promises.stat(`${letter}:\\`)).dev };
+            } catch (err) {
+                // quiet: a letter with nothing in it (an empty card reader) holds no files
+                void err;
+                return null;
+            }
+        }),
+    );
+    return present.filter((p): p is { letter: string; dev: number } => p !== null);
 }
 
 export function windowsDiskName(letter: string, label: string): string {
@@ -84,8 +107,8 @@ export function windowsDiskName(letter: string, label: string): string {
 
 /** Reads the disks plugged in now, on this system. */
 export class DiskReader {
-    // a label is read once per letter and disk: PowerShell is slow to start
-    private labels = new Map<string, string>();
+    // a volume is read once per letter and disk: PowerShell is slow to start
+    private volumes = new Map<string, WindowsVolume>();
 
     async read(): Promise<Disk[]> {
         if (process.platform === "linux") return linuxDisks(parseMountInfo(await fs.promises.readFile("/proc/self/mountinfo", "utf8")));
@@ -101,8 +124,12 @@ export class DiskReader {
             names.map(async (name): Promise<Disk | null> => {
                 const mount = path.join("/Volumes", name);
                 // the system's own volume is a link back to /
-                const st = await fs.promises.lstat(mount);
-                if (!st.isDirectory() || st.dev === system) return null;
+                const st = await fs.promises.lstat(mount).catch((err: unknown) => {
+                    // a disk ejected between listing and looking isn't there
+                    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+                    throw err;
+                });
+                if (!st?.isDirectory() || st.dev === system) return null;
                 return { mount, name };
             }),
         );
@@ -111,28 +138,20 @@ export class DiskReader {
 
     private async windows(): Promise<Disk[]> {
         const system = (process.env.SystemDrive ?? "C:").slice(0, 1).toUpperCase();
-        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter((l) => l !== system);
-        const present = await Promise.all(
-            letters.map(async (letter) => {
-                try {
-                    const st = await fs.promises.stat(`${letter}:\\`);
-                    return { letter, key: `${letter}:${st.dev}` };
-                } catch (err) {
-                    // quiet: a letter with no disk in it (an empty card reader) is not a disk
-                    void err;
-                    return null;
-                }
-            }),
-        );
         const disks: Disk[] = [];
-        for (const p of present) {
-            if (!p) continue;
-            let label = this.labels.get(p.key);
-            if (label === undefined) {
-                label = await windowsLabel(p.letter);
-                this.labels.set(p.key, label);
+        for (const { letter, dev } of await windowsLetters()) {
+            if (letter === system) continue;
+            const key = `${letter}:${dev}`;
+            let volume = this.volumes.get(key);
+            if (!volume) {
+                volume = await windowsVolume(letter).catch((err: unknown) => {
+                    // quiet: a volume Windows can't describe is still a disk with files on it, named by its letter
+                    void err;
+                    return { disk: true, label: "" };
+                });
+                this.volumes.set(key, volume);
             }
-            disks.push({ mount: `${p.letter}:\\`, name: windowsDiskName(p.letter, label) });
+            if (volume.disk) disks.push({ mount: `${letter}:\\`, name: windowsDiskName(letter, volume.label) });
         }
         return disks;
     }

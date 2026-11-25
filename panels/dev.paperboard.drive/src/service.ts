@@ -1,7 +1,8 @@
 // Drive's background service: it owns the places Drive shows (its own
 // folder in the panel's data, the disks plugged in, the folders linked from
 // this computer), and does everything the page and the blocks ask of them.
-// The places live in the service's state, which every window mirrors. Each
+// The places live in the service's state, which every window mirrors; a disk
+// pulled out without Eject is said once, as an event, to every window. Each
 // change to files says which folders of which place it touched, so every
 // open window lists them again. Uploads a stop cut short leave their parts
 // behind, which a later list of their folder removes (Drive.list).
@@ -76,11 +77,14 @@ export default definePanelService({
     calls,
     async onInit(ctx) {
         context = ctx;
+        // a problem the last run left (Drive reports only its looks) is said again only if it's still one
+        problemsApi.clear(PANEL_ID);
         const data = await fileApi.getPath("", PANEL_ID);
         const opened = new Places({
             root: path.join(data, DRIVE_FOLDER),
             saved: path.join(data, PLACES_FILE),
             onChange: (list) => ctx.setState({ places: list }),
+            onUnplugged: (disk) => ctx.emit("unplugged", disk),
             onProblem: (key, title, error) => {
                 if (error === null) problemsApi.clear(PANEL_ID, key);
                 else problemsApi.report(PANEL_ID, { key, title, message: errorMessage(error) });
