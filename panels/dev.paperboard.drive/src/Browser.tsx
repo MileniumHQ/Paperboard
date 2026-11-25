@@ -34,7 +34,7 @@ import {
 } from "@mileniumhq/paperui";
 import { fileApi } from "@mileniumhq/paperapi";
 import { drive } from "./client";
-import { baseOf, DRIVE_FOLDER, PANEL_ID, parentOf, type DriveEntry, type Place } from "./lib/contract";
+import { baseOf, PANEL_ID, parentOf, type DriveEntry, type Place } from "./lib/contract";
 import { createFiles, mediaType, PREVIEW_MAX_BYTES, THUMBNAIL_MAX_BYTES } from "./lib/files";
 import { createUploads } from "./lib/uploads";
 import styles from "./Browser.module.css";
@@ -193,11 +193,10 @@ export default function Browser(props: BrowserProps) {
     }
 
     // ---------- changing files ----------
-    // a file outside Drive's own folder can't be saved from here yet: the export goes through the panel's storage
-    const canDownload = () => props.place.kind === "own";
     async function download(entry: PaperFileViewEntry) {
         try {
-            const result = await fileApi.exportFile(`${DRIVE_FOLDER}/${entry.path}`, PANEL_ID, { suggestedName: entry.name });
+            // by where it is on the computer: every place's files save the same way
+            const result = await fileApi.exportFile(`${props.place.location}/${entry.path}`, PANEL_ID, { suggestedName: entry.name });
             if (result.status === "exported") showToast({ title: `Downloaded “${entry.name}”`, icon: "download", variant: "success" });
         } catch (err) {
             showError(`Couldn't download “${entry.name}”`, err);
@@ -471,7 +470,7 @@ export default function Browser(props: BrowserProps) {
                                 <PaperContextMenuItem icon={entry().kind === "folder" ? "folder_open" : "visibility"} keybind="Enter" onClick={() => open(entry())}>
                                     Open
                                 </PaperContextMenuItem>
-                                <Show when={entry().kind === "file" && canDownload()}>
+                                <Show when={entry().kind === "file"}>
                                     <PaperContextMenuItem icon="download" onClick={() => void download(entry())}>
                                         Download
                                     </PaperContextMenuItem>
@@ -521,12 +520,10 @@ export default function Browser(props: BrowserProps) {
                     releaseLeaving = () => {};
                 }}
                 actions={
-                    <Show when={canDownload()}>
-                        <PaperButton size="small" onClick={() => look() && void download(look()!.entry)}>
-                            <PaperIcon zeroHeight>download</PaperIcon>
-                            Download
-                        </PaperButton>
-                    </Show>
+                    <PaperButton size="small" onClick={() => look() && void download(look()!.entry)}>
+                        <PaperIcon zeroHeight>download</PaperIcon>
+                        Download
+                    </PaperButton>
                 }
             />
         </PaperFlex>

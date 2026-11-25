@@ -13,7 +13,6 @@ async function openPlaces(dir = fs.mkdtempSync(path.join(os.tmpdir(), "drive-pla
     const pushes: Place[][] = [];
     const places = new Places({
         root: path.join(dir, "data/Drive"),
-        uploads: path.join(dir, "data/.uploads"),
         saved: path.join(dir, "data/places.json"),
         disks: { read: async () => [...plugged] },
         onChange: (list) => pushes.push(list),
@@ -55,7 +54,6 @@ describe("places", () => {
 
         const again = new Places({
             root: path.join(dir, "data/Drive"),
-            uploads: path.join(dir, "data/.uploads"),
             saved: path.join(dir, "data/places.json"),
             disks: { read: async () => [] },
             onChange: () => {},
@@ -166,7 +164,6 @@ describe("places", () => {
         let broken = false;
         const places = new Places({
             root: path.join(dir, "data/Drive"),
-            uploads: path.join(dir, "data/.uploads"),
             saved: path.join(dir, "data/places.json"),
             disks: {
                 read: async () => {

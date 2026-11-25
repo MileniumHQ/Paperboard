@@ -1,6 +1,5 @@
-// Uploads arrive in pieces into a hidden folder beside the drive (or, in a
-// linked folder or disk, a hidden part where they go), land under their name
-// only once whole, and leave nothing behind when they stop.
+// Uploads arrive in pieces into a hidden part in the folder they go to, land
+// under their name only once whole, and leave nothing behind when they stop.
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -17,19 +16,19 @@ async function send(drive: Drive, folder: string, name: string, data: Buffer) {
 
 describe("uploads", () => {
     test("a file sent in pieces lands whole, and only once it's whole", async () => {
-        const { drive, root, temp } = await openDrive();
+        const { drive, root, parts } = await openDrive();
         const data = randomBytes(CHUNK_BYTES * 2 + 123);
         const { id } = await drive.uploadBegin("", "film.mp4", data.length);
         await drive.uploadPut(id, 0, data.subarray(0, CHUNK_BYTES));
         // half-sent, it's not in the drive
         expect(await drive.list("")).toEqual([]);
-        expect(fs.readdirSync(temp)).toHaveLength(1);
+        expect(parts()).toHaveLength(1);
         await drive.uploadPut(id, CHUNK_BYTES, data.subarray(CHUNK_BYTES, CHUNK_BYTES * 2));
         await drive.uploadPut(id, CHUNK_BYTES * 2, data.subarray(CHUNK_BYTES * 2));
         const entry = await drive.uploadFinish(id);
         expect(entry).toMatchObject({ name: "film.mp4", path: "film.mp4", kind: "file", size: data.length });
         expect(fs.readFileSync(path.join(root, "film.mp4")).equals(data)).toBe(true);
-        expect(fs.readdirSync(temp)).toEqual([]);
+        expect(parts()).toEqual([]);
         expect(drive.uploading()).toBe(0);
     });
 
@@ -63,45 +62,33 @@ describe("uploads", () => {
     });
 
     test("canceling removes what was written, and the upload is gone", async () => {
-        const { drive, temp } = await openDrive();
+        const { drive, parts } = await openDrive();
         const { id } = await drive.uploadBegin("", "big.bin", CHUNK_BYTES * 3);
         await drive.uploadPut(id, 0, randomBytes(CHUNK_BYTES));
-        expect(fs.readdirSync(temp)).toHaveLength(1);
+        expect(parts()).toHaveLength(1);
         await drive.uploadCancel(id);
-        expect(fs.readdirSync(temp)).toEqual([]);
+        expect(parts()).toEqual([]);
         expect(await drive.list("")).toEqual([]);
         await expect(drive.uploadPut(id, CHUNK_BYTES, randomBytes(10))).rejects.toThrow("isn't under way");
         await expect(drive.uploadFinish(id)).rejects.toThrow("isn't under way");
     });
 
     test("pieces out of order, oversized or past the end are refused, and a short file doesn't finish", async () => {
-        const { drive, root } = await openDrive();
+        const { drive } = await openDrive();
         const { id } = await drive.uploadBegin("", "a.bin", 10);
         await expect(drive.uploadPut(id, 5, Buffer.alloc(5))).rejects.toThrow("Expected the piece at 0");
         await expect(drive.uploadPut(id, 0, Buffer.alloc(11))).rejects.toThrow("more than the file's size");
         await expect(drive.uploadPut(id, 0, Buffer.alloc(0))).rejects.toThrow("A piece is");
         await drive.uploadPut(id, 0, Buffer.alloc(4));
         await expect(drive.uploadFinish(id)).rejects.toThrow("has 4 of its 10 bytes");
-        expect(fs.readdirSync(root)).toEqual([]);
+        expect(await drive.list("")).toEqual([]);
         await expect(drive.uploadBegin("", "b.bin", -1)).rejects.toThrow("not a file's size");
         await expect(drive.uploadBegin("", "b.bin", 1.5)).rejects.toThrow("not a file's size");
         await expect(drive.uploadBegin("", "b.bin", Number.MAX_SAFE_INTEGER)).rejects.toThrow("There isn't room");
     });
 
-    test("parts a stop left behind are removed when the drive opens", async () => {
-        const { drive, root, temp } = await openDrive();
-        const { id } = await drive.uploadBegin("", "cut.bin", 100);
-        await drive.uploadPut(id, 0, Buffer.alloc(50));
-        expect(fs.readdirSync(temp)).toHaveLength(1);
-        // the next service start, over the same folders
-        const next = new Drive(root, { uploads: temp });
-        await next.open();
-        expect(fs.readdirSync(temp)).toEqual([]);
-        expect(await next.list("")).toEqual([]);
-    });
-
     test("a big file goes to disk piece by piece, and comes back the same way", async () => {
-        const { drive, root, temp } = await openDrive();
+        const { drive, root, parts } = await openDrive();
         const pieces = 24; // 96 MB
         const { id } = await drive.uploadBegin("", "big.bin", pieces * CHUNK_BYTES);
         const piece = Buffer.alloc(CHUNK_BYTES);
@@ -109,8 +96,8 @@ describe("uploads", () => {
             piece.fill(i);
             await drive.uploadPut(id, i * CHUNK_BYTES, piece);
             // each piece is on disk as soon as it's taken: nothing waits in memory for the rest
-            const [part] = fs.readdirSync(temp);
-            expect(fs.statSync(path.join(temp, part)).size).toBe((i + 1) * CHUNK_BYTES);
+            const [part] = parts();
+            expect(fs.statSync(path.join(root, part)).size).toBe((i + 1) * CHUNK_BYTES);
         }
         const entry = await drive.uploadFinish(id);
         expect(entry.size).toBe(pieces * CHUNK_BYTES);
@@ -129,16 +116,16 @@ describe("uploads", () => {
     });
 
     test("an upload into a folder that went away fails, and leaves nothing", async () => {
-        const { drive, temp } = await openDrive();
+        const { drive, root } = await openDrive();
         await drive.createFolder("", "Gone");
         const { id } = await drive.uploadBegin("Gone", "a.txt", 1);
         await drive.uploadPut(id, 0, Buffer.from("a"));
         await drive.delete(["Gone"]);
         await expect(drive.uploadFinish(id)).rejects.toThrow("isn't in the drive");
-        expect(fs.readdirSync(temp)).toEqual([]);
+        expect(fs.readdirSync(root)).toEqual([]);
     });
 
-    test("in a linked folder, a part waits hidden where it goes, and lands there whole", async () => {
+    test("a part waits hidden in the folder it goes to, and lands there whole", async () => {
         const { outside } = await openDrive();
         fs.mkdirSync(path.join(outside, "Photos"));
         const linked = new Drive(outside);
@@ -146,7 +133,7 @@ describe("uploads", () => {
         const data = randomBytes(CHUNK_BYTES + 10);
         const { id } = await linked.uploadBegin("Photos", "beach.jpg", data.length);
         await linked.uploadPut(id, 0, data.subarray(0, CHUNK_BYTES));
-        // the part is on the same disk as where it goes, and no list shows it
+        // the part is on the same disk as where it goes, so landing is a rename, and no list shows it
         const parts = fs.readdirSync(path.join(outside, "Photos"));
         expect(parts).toHaveLength(1);
         expect(parts[0].startsWith(PART_PREFIX)).toBe(true);
@@ -158,7 +145,7 @@ describe("uploads", () => {
         await linked.close();
     });
 
-    test("in a linked folder, a part a stop left goes once it has sat a while, and a live one stays", async () => {
+    test("a part a stop left goes with a list once it has sat a while, and a live one stays", async () => {
         const { outside } = await openDrive();
         const linked = new Drive(outside);
         await linked.open();
@@ -179,7 +166,7 @@ describe("uploads", () => {
         await linked.close();
     });
 
-    test("a linked folder that isn't there won't open, and is never made", async () => {
+    test("a folder that isn't there won't open as a drive, and is never made", async () => {
         const { outside } = await openDrive();
         const gone = path.join(outside, "Gone");
         await expect(new Drive(gone).open()).rejects.toThrow("isn't there");

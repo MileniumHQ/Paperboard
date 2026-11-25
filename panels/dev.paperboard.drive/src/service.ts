@@ -4,7 +4,7 @@
 // The places live in the service's state, which every window mirrors. Each
 // change to files says which folders of which place it touched, so every
 // open window lists them again. Uploads a stop cut short leave their parts
-// behind, which the next start (or list) removes (Drive.open, Drive.list).
+// behind, which a later list of their folder removes (Drive.list).
 import path from "node:path";
 import { blocksApi, definePanelService, errorMessage, fileApi, problemsApi, type CallHandlers, type ContractContext } from "@mileniumhq/paperapi";
 import { driveBlocks } from "./blocks";
@@ -13,8 +13,6 @@ import { Places } from "./lib/places";
 
 type Ctx = ContractContext<typeof driveContract>;
 
-/** Where Drive's own uploads wait beside it until they're whole. */
-const UPLOADS_FOLDER = ".uploads";
 /** Which folders are linked into Drive. */
 const PLACES_FILE = "places.json";
 
@@ -81,7 +79,6 @@ export default definePanelService({
         const data = await fileApi.getPath("", PANEL_ID);
         const opened = new Places({
             root: path.join(data, DRIVE_FOLDER),
-            uploads: path.join(data, UPLOADS_FOLDER),
             saved: path.join(data, PLACES_FILE),
             onChange: (list) => ctx.setState({ places: list }),
             onProblem: (key, title, error) => {

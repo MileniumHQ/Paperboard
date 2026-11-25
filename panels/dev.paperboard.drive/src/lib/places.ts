@@ -44,10 +44,8 @@ const isFolder = (p: string) =>
 const within = (inner: string, outer: string) => inner === outer || inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
 
 export interface PlacesOptions {
-    /** Drive's own folder */
+    /** Drive's own folder, made when it's missing */
     root: string;
-    /** where Drive's own uploads wait until whole */
-    uploads: string;
     /** where the linked folders are kept */
     saved: string;
     /** reads the disks plugged in; the system's, unless a test gives its own */
@@ -82,11 +80,12 @@ export class Places {
     private looking: Promise<void> | null = null;
 
     constructor(private readonly options: PlacesOptions) {
-        this.own = new Drive(options.root, { uploads: options.uploads });
+        this.own = new Drive(options.root);
         this.reader = options.disks ?? new DiskReader();
     }
 
     async open(): Promise<void> {
+        await fs.promises.mkdir(this.options.root, { recursive: true });
         await this.own.open();
         this.linked = await this.load();
         await this.readSpaceOf(OWN_PLACE);

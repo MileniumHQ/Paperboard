@@ -5,8 +5,8 @@ import { defineContract, shape, type Fields, type Infer } from "@mileniumhq/pape
 /** Passed explicitly to every API call: ambient scope resolves to the last panel imported. */
 export const PANEL_ID = "dev.paperboard.drive";
 
-/** The drive's folder in the panel's own data. */
-export const DRIVE_FOLDER = "Drive";
+/** Drive's own folder in the panel's storage: a folder like any linked one. */
+export const DRIVE_FOLDER = "files";
 /** The id of Drive's own folder among the places. */
 export const OWN_PLACE = "drive";
 
