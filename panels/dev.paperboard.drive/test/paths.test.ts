@@ -3,8 +3,9 @@
 // really a path.
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { nameProblem, pathParts } from "../src/lib/drive";
+import { Drive, nameProblem, pathParts, within } from "../src/lib/drive";
 import { openDrive } from "./helpers/drive";
 
 const ESCAPES = ["..", "../outside", "a/../../outside", "./a", "a/./b", "a//b", "a/", "/etc/passwd", "\\etc", "C:\\Windows", "C:/Windows", "a\0b"];
@@ -82,6 +83,38 @@ describe("paths", () => {
             await expect(drive.uploadBegin("", bad, 1)).rejects.toThrow();
         }
         expect(fs.readdirSync(root)).toEqual(["a.txt"]);
+    });
+
+    test("a drive at the top of a disk reaches the files on it", async () => {
+        expect(within(`${path.sep}tmp`, path.sep)).toBe(true);
+        expect(within("E:\\Photos", "E:\\")).toBe(path.sep === "\\");
+        expect(within("/media/usb2", "/media/usb")).toBe(false);
+        const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "drive-top-")));
+        try {
+            fs.writeFileSync(path.join(dir, "photo.jpg"), "jpg");
+            const top = path.parse(dir).root;
+            const drive = new Drive(top);
+            await drive.open();
+            const rel = path.relative(top, path.join(dir, "photo.jpg")).split(path.sep).join("/");
+            expect(await drive.stat(rel)).toMatchObject({ name: "photo.jpg", kind: "file", size: 3 });
+            expect((await drive.list(path.relative(top, dir).split(path.sep).join("/"))).map((e) => e.name)).toEqual(["photo.jpg"]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("what can't be reached in a folder (a link round a loop, a folder it's not allowed in) doesn't stop it listing", async () => {
+        const { drive, root, put } = await openDrive();
+        put("notes.md", "x");
+        fs.symlinkSync("Loop", path.join(root, "Loop"));
+        fs.mkdirSync(path.join(root, "lost+found"), { mode: 0o000 });
+        try {
+            const listed = await drive.list("");
+            expect(listed.map((e) => e.name).sort()).toEqual(["lost+found", "notes.md"]);
+        } finally {
+            // the drive's folder is removed after the test, which needs into this one again
+            fs.chmodSync(path.join(root, "lost+found"), 0o755);
+        }
     });
 
     test("the drive itself can't be renamed, moved or deleted", async () => {

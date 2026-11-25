@@ -75,6 +75,11 @@ export function pathParts(rel: unknown): string[] {
 }
 
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException)?.code === "ENOENT";
+/** A file or folder this can't reach: not allowed in, or a link that loops. */
+const isUnreachable = (err: unknown) => ["EACCES", "EPERM", "ELOOP"].includes((err as NodeJS.ErrnoException)?.code ?? "");
+
+/** Whether `inner` is `outer` or in it; `outer` may end in a separator, as "/" and "E:\\" do. */
+export const within = (inner: string, outer: string) => inner === outer || inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
 
 /** "photo.jpg", then "photo 2.jpg", "photo 3.jpg"; a folder or a dotfile counts on its whole name. */
 export function numberedName(name: string, n: number): string {
@@ -121,7 +126,7 @@ export class Drive {
     // ---------------------------------------------------------------- paths
 
     private inside(real: string): boolean {
-        return real === this.realRoot || real.startsWith(this.realRoot + path.sep);
+        return within(real, this.realRoot);
     }
 
     /** Where a path in the drive is on disk, once it's checked: it must exist, and be in the drive through any links. */
@@ -157,8 +162,15 @@ export class Drive {
     private async entry(rel: string, full: string): Promise<DriveEntry> {
         const st = await fs.promises.stat(full);
         if (st.isDirectory()) {
-            const count = (await fs.promises.readdir(full)).length;
-            return { name: baseOf(rel), path: rel, kind: "folder", size: 0, modified: st.mtimeMs, count };
+            // a folder this isn't allowed into (lost+found on a disk) shows, without how much it holds
+            const count = await fs.promises.readdir(full).then(
+                (names) => names.length,
+                (err: unknown) => {
+                    if (isUnreachable(err)) return undefined;
+                    throw err;
+                },
+            );
+            return { name: baseOf(rel), path: rel, kind: "folder", size: 0, modified: st.mtimeMs, ...(count === undefined ? {} : { count }) };
         }
         return { name: baseOf(rel), path: rel, kind: "file", size: st.size, modified: st.mtimeMs };
     }
@@ -189,8 +201,9 @@ export class Drive {
                     if (!this.inside(real)) return null;
                     return await this.entry(rel, child);
                 } catch (err) {
-                    // a link to nothing, or a file deleted while listing: not there to show
-                    if (isMissing(err)) return null;
+                    // a link to nothing or round in a loop, a file deleted while listing, or one this
+                    // isn't allowed to look at: nothing here can open it
+                    if (isMissing(err) || isUnreachable(err)) return null;
                     throw err;
                 }
             }),
