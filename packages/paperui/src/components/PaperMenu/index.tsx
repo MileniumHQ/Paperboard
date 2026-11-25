@@ -284,7 +284,7 @@ export function PaperMenuLabel(props: ParentProps<PaperMenuLabelProps>) {
 }
 
 export interface PaperMenuItemProps
-    extends JSX.InputHTMLAttributes<HTMLInputElement> {
+    extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onContextMenu"> {
     value: string | number;
     description?: JSX.Element | string;
     icon?: JSX.Element | string;
@@ -294,6 +294,8 @@ export interface PaperMenuItemProps
         The menu's `value` still marks the matching entry as the current
         page (`aria-current="page"`). */
     href?: string;
+    /** A right-click or long press on the entry (its label, or its link), not on the hidden input. */
+    onContextMenu?: JSX.EventHandler<HTMLElement, MouseEvent>;
 }
 
 export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
@@ -410,10 +412,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                         );
                         activate();
                     }}
-                    onContextMenu={(e) =>
-                        // the menu is on the entry, not on its hidden input
-                        callEventHandler(local.onContextMenu as unknown as JSX.EventHandlerUnion<HTMLAnchorElement, MouseEvent>, e)
-                    }
+                    onContextMenu={(e) => local.onContextMenu?.(e)}
                 >
                     {content()}
                 </a>
@@ -425,7 +424,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 classList={local.classList}
                 style={style()}
                 onClick={activate}
-                onContextMenu={(e) => callEventHandler(local.onContextMenu as unknown as JSX.EventHandlerUnion<HTMLLabelElement, MouseEvent>, e)}
+                onContextMenu={(e) => local.onContextMenu?.(e)}
                 onKeyDown={(e) => {
                     if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();
