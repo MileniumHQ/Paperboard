@@ -16,6 +16,12 @@ export interface ExportFileOptions {
     /** the file name the dialog starts with; defaults to the source file's name */
     suggestedName?: string;
     filters?: FileTypeFilter[];
+    /**
+     * The source path is absolute and names a file anywhere on the panel's
+     * computer, not in its storage: for a panel that shows files outside it
+     * (Drive's disks and linked folders).
+     */
+    onComputer?: boolean;
 }
 
 export interface ImportFileOptions {
@@ -59,9 +65,6 @@ export class FileTransferError extends Error {
     }
 }
 
-// Every path below is in the panel's storage, or, when it's absolute ("/…",
-// "C:\\…"), anywhere on the panel's computer: a panel that shows files outside
-// its storage (Drive's disks and linked folders) saves and opens them the same way.
 function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Promise<T> {
     const selection = fields.selection;
     return requestShell<T>({
@@ -83,8 +86,8 @@ function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Pro
 
 /**
  * Asks the user where to save a copy of a file from the panel's storage,
- * or from anywhere on its computer given an absolute path. Resolves with what the user chose; throws FileTransferError when the
- * copy failed.
+ * or, with onComputer, of a file anywhere on its computer. Resolves with
+ * what the user chose; throws FileTransferError when the copy failed.
  */
 export function exportFile(sourcePath: string, appId: string, options: ExportFileOptions = {}): Promise<ExportFileResult> {
     return ask<ExportFileResult>("export", {
@@ -92,6 +95,7 @@ export function exportFile(sourcePath: string, appId: string, options: ExportFil
         path: sourcePath,
         suggestedName: options.suggestedName,
         filters: options.filters,
+        onComputer: options.onComputer,
     });
 }
 

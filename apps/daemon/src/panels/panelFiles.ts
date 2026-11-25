@@ -4,10 +4,11 @@
 // (engine.resolveSecureTargetPath). Host credential only: the shell asks on
 // behalf of the panel frame the user is looking at.
 //
-// /panel-files/<panelId>?path=<absolute path>: a file anywhere on this
+// /panel-files/<panelId>?path=<absolute path>: reads a file anywhere on this
 // computer, for a panel that shows files outside its storage (Drive's
 // disks and linked folders). Panels are trusted and their services already
-// reach every file, so this only lets the save and open dialogs reach them too.
+// reach every file, so this only lets the save dialog reach them too. Only
+// the panel's storage is written to.
 import type * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
@@ -111,15 +112,18 @@ async function servePanelFile(
     // panel's service would read it; only the panel's storage is a boundary
     let validate: () => string;
     if (parsed.absolute) {
-        let real = parsed.filePath;
-        if (method === "GET" || method === "HEAD") {
-            try {
-                real = fs.realpathSync(parsed.filePath);
-            } catch (err) {
-                if (!isMissingPathError(err)) throw err;
-                reply(res, 404, "No such file");
-                return;
-            }
+        if (method !== "GET" && method !== "HEAD") {
+            req.resume();
+            reply(res, 405, "Only a file in the panel's storage can be written", { Allow: "GET, HEAD" });
+            return;
+        }
+        let real: string;
+        try {
+            real = fs.realpathSync(parsed.filePath);
+        } catch (err) {
+            if (!isMissingPathError(err)) throw err;
+            reply(res, 404, "No such file");
+            return;
         }
         validate = () => real;
     } else {

@@ -310,7 +310,7 @@ describe("panel assets and /panel-files", () => {
 		expect(fs.readdirSync(path.join(files, "moved"))).toEqual([]);
 	});
 
-	test("an absolute path reaches a file anywhere on the computer, through its links, for the host credential only", async () => {
+	test("an absolute path reads a file anywhere on the computer, through its links, for the host credential only", async () => {
 		const daemon = await withPanel();
 		const port = daemon.instance.localPort;
 		const auth = bearer(daemon.token);
@@ -328,8 +328,8 @@ describe("panel assets and /panel-files", () => {
 		expect((await request(port, { path: at(outside), headers: auth })).status).toBe(403);
 
 		const put = await request(port, { method: "PUT", path: at(path.join(outside, "new.txt")), headers: auth, body: "uploaded" });
-		expect(put.status).toBe(201);
-		expect(fs.readFileSync(path.join(outside, "new.txt"), "utf8")).toBe("uploaded");
+		expect(put.status).toBe(405);
+		expect(fs.existsSync(path.join(outside, "new.txt"))).toBe(false);
 
 		// only an absolute path rides in the query, and only with no path after the panel id
 		expect((await request(port, { path: "/panel-files/test.assets?path=doc.txt", headers: auth })).status).toBe(400);

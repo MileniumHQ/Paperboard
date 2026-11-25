@@ -77,20 +77,26 @@ describe("panel file export and import", () => {
 		expect(fs.readdirSync(path.dirname(dest))).toEqual(["world.dat"]);
 	});
 
-	test("export and import reach a file anywhere on the computer by its absolute path", async () => {
+	test("an export onComputer saves a file from anywhere on the computer; without it, and for an import, a path stays in storage", async () => {
 		const outside = tempDir();
 		const content = bytes(50_000, 3);
-		fs.writeFileSync(path.join(outside, "photo.jpg"), content);
+		const photo = path.join(outside, "photo.jpg");
+		fs.writeFileSync(photo, content);
 		const dest = path.join(tempDir(), "photo.jpg");
-		const exported = await runPanelExport({ computerId: "local", panelId: PANEL, path: path.join(outside, "photo.jpg") }, deps({ save: dest }));
+		const exported = await runPanelExport({ computerId: "local", panelId: PANEL, path: photo, onComputer: true }, deps({ save: dest }));
 		expect(exported).toEqual({ status: "exported", name: "photo.jpg", bytes: content.length });
 		expect(fs.readFileSync(dest).equals(content)).toBe(true);
 
+		// a leading slash alone still names the panel's storage
+		const plain = await runPanelExport({ computerId: "local", panelId: PANEL, path: photo }, deps({ save: path.join(tempDir(), "x.jpg") }));
+		expect(plain).toMatchObject({ status: "failed", code: "not-found" });
+		expect(await runPanelExport({ computerId: "local", panelId: PANEL, path: "photo.jpg", onComputer: true }, deps({ save: dest }))).toMatchObject({ status: "failed", code: "invalid-request" });
+
 		const source = path.join(tempDir(), "notes.txt");
 		fs.writeFileSync(source, "picked");
-		const imported = await runPanelImport({ computerId: "local", panelId: PANEL, path: path.join(outside, "notes.txt") }, deps({ open: source }));
-		expect(imported).toEqual({ status: "imported", name: "notes.txt", bytes: 6 });
-		expect(fs.readFileSync(path.join(outside, "notes.txt"), "utf8")).toBe("picked");
+		const imported = await runPanelImport({ computerId: "local", panelId: PANEL, path: path.join(outside, "notes.txt"), onComputer: true }, deps({ open: source }));
+		expect(imported).toMatchObject({ status: "failed", code: "invalid-request" });
+		expect(fs.readdirSync(outside)).toEqual(["photo.jpg"]);
 	});
 
 	test("a canceled export and a transfer cut off midway leave the chosen file as it was", async () => {
