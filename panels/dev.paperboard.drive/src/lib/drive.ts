@@ -192,9 +192,12 @@ export class Drive {
                 const rel = joinPath(folder as string, name);
                 const child = path.join(full, name);
                 try {
-                    const real = await fs.promises.realpath(child);
-                    // a link that leads out of the drive isn't part of it, so it isn't shown
-                    if (!this.inside(real)) return null;
+                    // only a link can lead out of the drive: anything else in a folder of it is in it. Resolving
+                    // a folder that can't be opened fails on macOS, and that folder (lost+found) still shows
+                    if ((await fs.promises.lstat(child)).isSymbolicLink()) {
+                        // a link that leads out of the drive isn't part of it, so it isn't shown
+                        if (!this.inside(await fs.promises.realpath(child))) return null;
+                    }
                     return await this.entry(rel, child);
                 } catch (err) {
                     // a link to nothing or round in a loop, a file deleted while listing, or one this
