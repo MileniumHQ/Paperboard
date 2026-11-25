@@ -88,8 +88,11 @@ describe("panel file export and import", () => {
 		expect(fs.readFileSync(dest).equals(content)).toBe(true);
 
 		// a leading slash alone still names the panel's storage
-		const plain = await runPanelExport({ computerId: "local", panelId: PANEL, path: photo }, deps({ save: path.join(tempDir(), "x.jpg") }));
-		expect(plain).toMatchObject({ status: "failed", code: "not-found" });
+		fs.writeFileSync(path.join(storage, "photo.jpg"), "in storage");
+		const inStorage = path.join(tempDir(), "photo.jpg");
+		const plain = await runPanelExport({ computerId: "local", panelId: PANEL, path: "/photo.jpg" }, deps({ save: inStorage }));
+		expect(plain).toEqual({ status: "exported", name: "photo.jpg", bytes: 10 });
+		expect(fs.readFileSync(inStorage, "utf8")).toBe("in storage");
 		expect(await runPanelExport({ computerId: "local", panelId: PANEL, path: "photo.jpg", onComputer: true }, deps({ save: dest }))).toMatchObject({ status: "failed", code: "invalid-request" });
 
 		const source = path.join(tempDir(), "notes.txt");
