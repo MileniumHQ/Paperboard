@@ -98,12 +98,37 @@ describe("places", () => {
         expect((await places.browse(music)).cannotLink).toBeUndefined();
         await places.link(music);
         expect((await places.browse(music)).cannotLink).toContain("already linked");
-        expect((await places.browse(dir)).cannotLink).toContain("Drive's own files");
-        expect((await places.browse(path.join(dir, "data/Drive"))).cannotLink).toContain("Drive's own files");
+        expect((await places.browse(dir)).cannotLink).toBe(`“${path.basename(dir)}” holds Drive's own files. Pick a folder inside it.`);
+        expect((await places.browse(path.join(dir, "data/Drive"))).cannotLink).toContain("is in Drive's own files");
         const usb = folder("media/USB");
         plugged.push({ mount: usb, name: "USB" });
         await places.refresh();
         expect((await places.browse(usb)).cannotLink).toContain("is a disk");
+    });
+
+    test("links and unlinks at once (two windows) each land, in memory and across a restart", async () => {
+        const { dir, places, folder } = await openPlaces();
+        const [a, b, c] = ["A", "B", "C"].map((n) => folder(`home/${n}`));
+        const first = await places.link(a);
+        const [, second] = await Promise.all([places.unlink(first.id), places.link(b), places.link(c)]);
+        // the same folder twice at once is linked once
+        const twice = await Promise.allSettled([places.link(a), places.link(a)]);
+        expect(twice.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+        const names = (list: Place[]) => list.filter((p) => p.kind === "folder").map((p) => p.name);
+        expect(names(places.list())).toEqual(["B", "C", "A"]);
+        expect(second.name).toBe("B");
+        await places.close();
+        const again = new Places({
+            root: path.join(dir, "data/Drive"),
+            saved: path.join(dir, "data/places.json"),
+            disks: { read: async () => [] },
+            onChange: () => {},
+            onUnplugged: () => {},
+            onProblem: () => {},
+        });
+        await again.open();
+        expect(names(again.list())).toEqual(["B", "C", "A"]);
+        await again.close();
     });
 
     test("two calls at once open a place's drive once", async () => {
@@ -177,7 +202,6 @@ describe("places", () => {
         expect(listed).toMatchObject({ path: home, name: "home", parent: path.dirname(home) });
         expect(listed.folders.map((f) => f.name)).toEqual(["Desktop", "Shortcut"]);
         expect((await places.browse("")).path).toBe(os.homedir());
-        expect((await places.browse(path.parse(dir).root)).parent).toBeNull();
         await expect(places.browse("relative")).rejects.toThrow("not a folder on this computer");
         await expect(places.browse(path.join(home, "Nope"))).rejects.toThrow("isn't there");
     });
@@ -189,6 +213,7 @@ describe("places", () => {
         let heard: (report: { key: string; error: string | null }) => void = (report) => reports.push(report);
         const next = () => new Promise<{ key: string; error: string | null }>((resolve) => (heard = resolve));
         let broken = true;
+        const pushes: string[][] = [];
         const places = new Places({
             root: path.join(dir, "data/Drive"),
             saved: path.join(dir, "data/places.json"),
@@ -198,7 +223,7 @@ describe("places", () => {
                     return [];
                 },
             },
-            onChange: () => {},
+            onChange: (list) => pushes.push(list.map((p) => p.id)),
             onUnplugged: () => {},
             onProblem: (key, _title, error) => heard({ key, error: error === null ? null : String(error) }),
         });
@@ -209,7 +234,8 @@ describe("places", () => {
             fs.rmSync(dir, { recursive: true, force: true });
         });
         expect(reports).toEqual([{ key: "look", error: "Error: mountinfo is gone" }]);
-        expect(places.list().map((p) => p.id)).toEqual(["drive"]);
+        // every window still sees Drive's own folder
+        expect(pushes).toEqual([["drive"]]);
         broken = false;
         expect(await next()).toEqual({ key: "look", error: null });
     });

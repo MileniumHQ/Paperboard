@@ -91,6 +91,8 @@ export class Places {
     private looking: Promise<void> | null = null;
     /** the look asked for while one was under way: it starts once that one is done */
     private queued: Promise<void> | null = null;
+    /** links and unlinks, one at a time: each saves the list the one before it left */
+    private changing: Promise<unknown> = Promise.resolve();
 
     constructor(private readonly options: PlacesOptions) {
         this.own = new Drive(options.root);
@@ -102,6 +104,8 @@ export class Places {
         await this.own.open();
         this.linked = await this.load();
         await this.readSpaceOf(OWN_PLACE);
+        // the windows see Drive's own folder and the linked ones before any disk is looked at
+        this.publish();
         // the first look fails the way every later one can: as a problem, with Drive's own folder still open
         await this.background("look", this.refresh());
         // the poll skips a turn while a look is under way
@@ -164,7 +168,25 @@ export class Places {
     }
 
     /** Links a folder on this computer; the place it is now. */
-    async link(folder: string): Promise<Place> {
+    link(folder: string): Promise<Place> {
+        return this.oneAtATime(() => this.linkNow(folder));
+    }
+
+    /** Stops showing a linked folder; its files stay where they are. */
+    unlink(id: string): Promise<void> {
+        return this.oneAtATime(() => this.unlinkNow(id));
+    }
+
+    private oneAtATime<T>(change: () => Promise<T>): Promise<T> {
+        const next = this.changing.then(change, change);
+        this.changing = next.then(
+            () => undefined,
+            () => undefined, // quiet: the caller of that change hears why it failed
+        );
+        return next;
+    }
+
+    private async linkNow(folder: string): Promise<Place> {
         if (!path.isAbsolute(folder)) throw new Error("Pick a folder to link.");
         const st = await fs.promises.stat(folder).catch((err: unknown) => {
             if (isMissing(err)) throw new Error(`“${folder}” isn't there.`);
@@ -183,8 +205,7 @@ export class Places {
         return this.list().find((p) => p.id === linked.id)!;
     }
 
-    /** Stops showing a linked folder; its files stay where they are. */
-    async unlink(id: string): Promise<void> {
+    private async unlinkNow(id: string): Promise<void> {
         if (!this.linked.some((f) => f.id === id)) throw new Error("That folder isn't linked.");
         const rest = this.linked.filter((f) => f.id !== id);
         await this.save(rest);
@@ -299,7 +320,9 @@ export class Places {
     /** Why a folder can't be linked (by its real path, and as it was named), or null when it can. */
     private async cannotLink(real: string, named: string): Promise<string | null> {
         const own = await fs.promises.realpath(this.options.root);
-        if (within(real, own) || within(own, real)) return "It holds Drive's own files, or is in them.";
+        const name = `“${folderName(named)}”`;
+        if (within(real, own)) return `${name} is in Drive's own files: they're under Drive already.`;
+        if (within(own, real)) return `${name} holds Drive's own files. Pick a folder inside it.`;
         const disk = this.disks.find((d) => d.mount === real || d.mount === named);
         if (disk) return `“${disk.name}” is a disk: it's already under Drives.`;
         if (this.linked.some((f) => f.path === real)) return `“${folderName(real)}” is already linked.`;
