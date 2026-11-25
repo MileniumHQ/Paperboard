@@ -309,6 +309,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         "style",
         "href",
         "onClick",
+        "onContextMenu",
     ]);
 
     const { isSelected, select } = useSelectionItem(
@@ -409,6 +410,10 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                         );
                         activate();
                     }}
+                    onContextMenu={(e) =>
+                        // the menu is on the entry, not on its hidden input
+                        callEventHandler(local.onContextMenu as unknown as JSX.EventHandlerUnion<HTMLAnchorElement, MouseEvent>, e)
+                    }
                 >
                     {content()}
                 </a>
@@ -420,6 +425,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 classList={local.classList}
                 style={style()}
                 onClick={activate}
+                onContextMenu={(e) => callEventHandler(local.onContextMenu as unknown as JSX.EventHandlerUnion<HTMLLabelElement, MouseEvent>, e)}
                 onKeyDown={(e) => {
                     if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();

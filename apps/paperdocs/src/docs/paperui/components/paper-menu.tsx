@@ -195,6 +195,7 @@ export function Example() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
+                <PaperCode>onContextMenu</PaperCode> goes to the visible entry, so a right-click or long press on it opens your menu.
                 Any other prop goes to the hidden radio input, not to the visible entry. With <PaperCode>href</PaperCode> they go to the <PaperCode>a</PaperCode>, and its <PaperCode>onClick</PaperCode> runs on a click unless the entry is disabled.
             </PaperText>
 
