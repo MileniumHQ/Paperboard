@@ -29,6 +29,8 @@ export const TEXT_READ_BYTES = 4 * 1024 * 1024;
 /** What an upload's part in the folder it goes to is called before its id. */
 export const PART_PREFIX = ".paperboard-upload-";
 const PART_SUFFIX = ".part";
+/** an upload's id, in random bytes: its part is named by them in hex */
+const PART_ID_BYTES = 12;
 
 interface Upload {
     folder: string;
@@ -95,7 +97,8 @@ export interface Space {
 }
 
 // only the shape uploadBegin makes: a file of someone's own that merely starts the same way is theirs, never swept
-const PART_NAME = /^\.paperboard-upload-[0-9a-f]{24}\.part$/;
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const PART_NAME = new RegExp(`^${escape(PART_PREFIX)}[0-9a-f]{${PART_ID_BYTES * 2}}${escape(PART_SUFFIX)}$`);
 const isPart = (name: string) => PART_NAME.test(name);
 
 export class Drive {
@@ -341,7 +344,7 @@ export class Drive {
         const free = await fs.promises.statfs(into);
         const room = free.bavail * free.bsize;
         if (size > room) throw new Error(`There isn't room for “${clean}”: it needs ${size} bytes, and the disk has ${room} free.`);
-        const id = randomBytes(12).toString("hex");
+        const id = randomBytes(PART_ID_BYTES).toString("hex");
         const part = path.join(into, `${PART_PREFIX}${id}${PART_SUFFIX}`);
         const handle = await fs.promises.open(part, "wx");
         this.uploads.set(id, { folder: folder as string, name: clean, size, written: 0, part, handle, idle: this.idleTimer(id), busy: Promise.resolve() });
