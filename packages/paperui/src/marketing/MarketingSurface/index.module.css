@@ -1,0 +1,57 @@
+/* The site's backdrop as it sits below the hero: the accent deepening toward
+   the ink, with the grain over it. Depth sinks the whole surface further toward the ink, for a
+   screen that sits behind the one before it. */
+.surface {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--paper-on-color);
+    font-family: "Nunito", sans-serif;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--marketing-accent) 92%, var(--paper-marketing-ink)) 0%,
+        color-mix(in srgb, var(--marketing-accent) 84%, var(--paper-marketing-ink)) 55%,
+        color-mix(in srgb, var(--marketing-accent) 68%, var(--paper-marketing-ink)) 100%
+    );
+    transition:
+        --marketing-accent 1.1s var(--paper-ease-symmetric, ease),
+        --marketing-depth 1.1s var(--paper-ease-symmetric, ease);
+}
+
+.viewport {
+    position: fixed;
+    inset: 0;
+}
+
+.surface::before,
+.surface::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.surface::before {
+    background: color-mix(in srgb, var(--marketing-accent) 40%, var(--paper-marketing-ink));
+    opacity: calc(var(--marketing-depth) * 0.45);
+}
+
+.surface::after {
+    background-image: var(--marketing-surface-grain);
+    mix-blend-mode: overlay;
+    opacity: 0.4;
+}
+
+.content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .surface {
+        transition: none;
+    }
+}

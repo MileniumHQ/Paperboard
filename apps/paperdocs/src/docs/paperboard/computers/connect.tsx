@@ -15,6 +15,30 @@ export default function ConnectDoc() {
                 Pair a computer running the Paperboard server daemon with your Paperboard app, using a 6-digit code the daemon shows.
                 You pair each computer once. After that it stays in the rail and Paperboard reconnects to it on its own.
             </PaperText>
+            <PaperText preset="body" as="p">
+                If you can sign in to the computer over SSH, Paperboard does all of it for you, and installs the daemon there first if it isn&apos;t yet. See <PaperLink href="#over-ssh">Set it up over SSH</PaperLink>.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="over-ssh">Set it up over SSH</PaperText>
+            <PaperText preset="body" as="p">
+                Select <b>Add Computer</b>, pick the computer or type its address under <b>Custom IP</b>, and select <b>Next</b>.
+                When SSH answers there, <b>Setting Up</b> shows each step as it goes:
+            </PaperText>
+            <PaperTextList ordered>
+                <li><b>Connecting.</b> Paperboard checks the computer&apos;s SSH host key against the known_hosts files <PaperCode>ssh</PaperCode> reads (<PaperCode>~/.ssh/known_hosts</PaperCode>, the system&apos;s, and any your <PaperCode>~/.ssh/config</PaperCode> names). The first time, it adds the key to <PaperCode>~/.ssh/known_hosts</PaperCode>. If the key ever changes, setup stops and sends nothing.</li>
+                <li><b>Signing in.</b> Paperboard tries your SSH agent and keys, as the user and keys in <PaperCode>~/.ssh/config</PaperCode>. If they don&apos;t work, it asks for a username and password. The password is used for this setup only and never saved.</li>
+                <li><b>Looking for Paperboard Server.</b> If the Paperboard app is open on that computer, setup stops and asks for that computer&apos;s pairing code instead.</li>
+                <li><b>Installing Paperboard Server.</b> Only if it isn&apos;t there. Paperboard downloads the signed release for that computer, checks its signature, copies it to <PaperCode>~/.local/bin/papercrane</PaperCode> (on Windows, <PaperCode>%LOCALAPPDATA%\Paperboard\bin</PaperCode>), and sets it up as a service. See below for what each system needs.</li>
+                <li><b>Pairing.</b> Paperboard opens pairing there and pairs with the certificate the server names over SSH, so no other computer can answer in its place.</li>
+            </PaperTextList>
+            <PaperTextList>
+                <li>On Linux, the service runs as your account. Paperboard turns on lingering so it keeps running after you sign out, using your password with <PaperCode>sudo</PaperCode> if it needs to. If it can&apos;t, Paperboard says so once the computer is added. Signed in as root, the service is a system service that starts at boot and runs as root, so every panel on that computer runs as root too. Sign in as your own account to avoid that.</li>
+                <li>On macOS, with a password, the service starts at boot. Signed in with a key, it runs while you are signed in to that Mac.</li>
+                <li>On Windows, the account has to be an administrator, because the service starts at boot. For other accounts, setup asks for the pairing code instead.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                To skip SSH, select <b>Connect with pairing code</b> on the <b>Setting Up</b> step, then follow the steps below. It&apos;s there while setup runs, while it asks for a password, and after it stops.
+            </PaperText>
 
             <PaperText preset="subheader" as="h2" id="before-you-start">Before you start</PaperText>
             <PaperTextList>

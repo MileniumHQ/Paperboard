@@ -64,7 +64,7 @@ export default function ChecklistDoc() {
                 <li>One writer per config document, usually the service.</li>
                 <li>Settings and state survive <PaperCode>bunx paperapi restart</PaperCode>.</li>
                 <li>Nothing the panel does on stop, update or uninstall deletes the person's data.</li>
-                <li>A service that holds data in memory or runs a program that writes files gets ready in <PaperCode>beforeBackup</PaperCode>.</li>
+                <li>A service that offers backups names its files in <PaperCode>beforeBackup</PaperCode>, gets ready there if it holds data in memory or runs a program that writes files, and picks up from a restore in <PaperCode>afterRestore</PaperCode>.</li>
                 <li>Tests never reach <PaperCode>~/.paperboard</PaperCode>.</li>
             </PaperTextList>
 

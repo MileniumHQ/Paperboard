@@ -43,10 +43,10 @@ assert.ok(
 const docs = flatten(await read("docs/index.html"));
 assert.ok(!docs.includes(INDEPENDENT), "the docs pages must not carry the marketing notice");
 
-// The decorative heading, button, and overlay elements must be defined in
-// the head, so they render as the parser creates them instead of painting
-// their fallbacks first and swapping in after the body has loaded.
-const ELEMENT_SCRIPTS = ["/js/bg-overlay.js", "/js/styled-text.js", "/js/paper-button.js"];
+// The decorative heading and overlay elements must be defined in the head, so
+// they render as the parser creates them instead of painting their fallbacks
+// first and swapping in after the body has loaded.
+const ELEMENT_SCRIPTS = ["/js/bg-overlay.js", "/js/marketing-elements.js"];
 function assertElementsInHead(name, raw) {
     const head = raw.slice(0, raw.indexOf("<body"));
     for (const script of ELEMENT_SCRIPTS) {

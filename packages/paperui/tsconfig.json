@@ -16,7 +16,9 @@
     "paths": {
       "@mileniumhq/paperui/style.css": ["./src/styles/styles.css"],
       "@mileniumhq/paperui": ["./src/index.ts"],
-      "@mileniumhq/paperui/headless": ["./src/headless.ts"]
+      "@mileniumhq/paperui/headless": ["./src/headless.ts"],
+      "@mileniumhq/paperui/marketing": ["./src/marketing/index.ts"],
+      "@mileniumhq/paperui/marketing/elements": ["./src/marketing/elements/index.ts"]
     }
   },
   "include": ["src"]

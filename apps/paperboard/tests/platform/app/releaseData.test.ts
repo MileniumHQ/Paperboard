@@ -54,10 +54,11 @@ describe("release data from a shipped release", () => {
             expect(parseHomeLayout(layout.data)).toHaveLength(layout.data.items.length);
             const { claims } = await host.call("ports:all");
             expect(claims).toEqual(readJson(snapshot, "ports.json").claims);
+            // the old format of backup is not recognised: it is not listed, and it is left as it was
             const record = written.find((rel) => rel.startsWith(`backups/panels/${PANEL}/`) && rel.endsWith(".json"))!;
-            const { backups } = await host.call("backup:list", { panelId: PANEL });
-            expect(backups.map((b: any) => b.id)).toEqual([path.basename(record, ".json")]);
-            expect(await host.call("backup:status", { panelId: PANEL })).toMatchObject({ destination: { id: "local", kind: "local" } });
+            expect(await host.call("backup:list", { panelId: PANEL })).toEqual({ backups: [] });
+            expect(await host.call("backup:status", { panelId: PANEL })).toMatchObject({ location: { id: "local", kind: "local" } });
+            expect(written).toContain(record.replace(/\.json$/, ".pbbackup"));
             host.close();
             await daemon.stop();
 

@@ -18,7 +18,7 @@ import type {
 } from "../../../shared/shellContract";
 import type { PanelPermission, PermissionAnswer } from "../../../shared/panelPermissions";
 
-export type { ComputerInfo, ComputerListResult, ComputerProbeResult, DiscoveredComputer } from "../../../shared/shellContract";
+export type { ComputerInfo, ComputerListResult, ComputerProbeResult, ComputerSetupState, DiscoveredComputer, SetupStep } from "../../../shared/shellContract";
 
 export interface ShellIpc {
     invoke<K extends ShellCall>(channel: K, ...args: Given<CallArgs<K>>): Promise<CallAnswer<K>>;
@@ -138,6 +138,15 @@ export const computersApi = {
     /** every computer's id, in the rail's new order */
     reorder: (ids: string[]) => shellIpc().invoke("computer-reorder", { ids }),
     onChanged: (cb: (data: { computers: ComputerInfo[]; activeId: string }) => void) => shellIpc().on("computers-changed", cb),
+};
+
+// Setting a computer up over SSH: main runs one setup at a time and pushes its whole state
+export const computerSetupApi = {
+    sshCheck: (host: string) => shellIpc().invoke("computer-ssh-check", { host }),
+    start: (host: string, name?: string) => shellIpc().invoke("computer-setup-start", { host, name }),
+    signIn: (jobId: string, username: string, password: string) => shellIpc().invoke("computer-setup-sign-in", { jobId, username, password }),
+    cancel: (jobId: string) => shellIpc().invoke("computer-setup-cancel", { jobId }),
+    onChanged: (cb: (state: PushPayload<"computer-setup-changed">) => void) => shellIpc().on("computer-setup-changed", cb),
 };
 
 // Nearby PaperCrane machines found via mDNS/Bonjour browsing in main.

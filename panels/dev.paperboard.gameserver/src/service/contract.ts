@@ -9,6 +9,7 @@
 // server at a time so a busy console never resends the other servers'.
 import { defineContract, shape, type CallDefinition, type Infer, type Shape } from "@mileniumhq/paperapi";
 import { parseModpackRecord } from "../core/modpack";
+import { ROUTINE_BACKUP_HOURS, readBackupSchedule } from "../backupSchedule";
 
 export const PANEL_ID = "dev.paperboard.gameserver";
 
@@ -246,6 +247,22 @@ const sourceMapCycle = shape.object({
 });
 const steamId = shape.object({ steamId: shape.text() });
 
+/** one of a server's backups, as Paperboard keeps its record */
+const backupRecord = shape.object({
+    format: shape.oneOf(2),
+    id: shape.text(),
+    panelId: shape.text(),
+    target: shape.nullable(shape.text()),
+    createdAt: shape.text(),
+    size: shape.number(),
+    sha256: shape.text(),
+    panelVersion: shape.nullable(shape.text()),
+    label: shape.nullable(shape.text()),
+    paths: texts,
+    exclude: texts,
+});
+const backupSchedule = shape.read(readBackupSchedule);
+
 // ─── The calls ──────────────────────────────────────────────────────────────
 
 /** The saved servers, and the pictures every page shows: no server's game answers these. */
@@ -259,6 +276,17 @@ const serversCalls = {
     readServerConfig: { output: options },
     /** sets up a server whose setup failed again */
     retryInitialize: { output: done },
+    /** backs the server up now, as Back Up Now does; the copy and its upload outlast 30 s */
+    backUp: { input: shape.object({ label: shape.optional(shape.text()) }), output: backupRecord, timeoutMs: null },
+    /** puts one of the server's backups back, its files and its settings; a running server stops for it and starts again */
+    restoreBackup: { input: shape.object({ backupId: shape.text() }), output: backupRecord, timeoutMs: null },
+    /** the server's routine backups; null when it has none */
+    readBackupSchedule: { output: shape.nullable(backupSchedule) },
+    /** turns the server's routine backups on, changes them, or (with null) turns them off; gives what was saved */
+    writeBackupSchedule: {
+        input: shape.object({ schedule: shape.nullable(shape.object({ everyHours: shape.oneOf(...ROUTINE_BACKUP_HOURS), keep: shape.number() })) }),
+        output: shape.nullable(backupSchedule),
+    },
     /** a picture from elsewhere as a data: address: a page never loads an address it was handed (service/pictures.ts) */
     servedPicture: { input: shape.object({ from: shape.oneOf("modrinth", "steam-workshop", "web"), url: shape.text() }), output: text, unscoped: true },
     /** a Steam account's profile picture as a data: address, null for an account with no profile (service/steamAvatars.ts); the account is its 17-digit Steam id, the size 64 px (`medium`, for a list's rows) or 184 px */

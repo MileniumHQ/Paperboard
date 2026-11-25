@@ -188,24 +188,22 @@ export const RPC_ROUTES = {
     "secrets-delete": route("secrets:delete", (r) => r.deleted),
     "secrets-list": route("secrets:list", (r) => r.keys),
     "secrets-purge": route("secrets:purge", (r) => r.purged),
-    "backup-source-define": route("backup:source-define", done),
     "backup-status": route("backup:status", (r) => r),
     "backup-progress": route("backup:progress", (r) => r.progress),
-    // a backup copies and uploads the panel's data, a restore downloads and
-    // swaps it in: both take as long as the bytes do
+    // a backup copies and uploads the panel's files, a restore downloads and
+    // swaps them in: both take as long as the bytes do
     "backup-create": route("backup:create", (r) => r, { timeoutMs: null }),
     "backup-list": route("backup:list", (r) => r.backups),
     "backup-restore": route("backup:restore", (r) => r, { timeoutMs: null }),
     "backup-delete": route("backup:delete", done),
-    "backup-schedule-set": route("backup:schedule-set", (r) => r),
-    "backup-locations": route("backup:destinations", (r) => r.destinations),
-    "backup-locations-problem": route("backup:destinations-problem", (r) => r.problem ?? null),
-    "backup-locations-recover": route("backup:destinations-recover", (r) => ({ keptAs: r.keptAs })),
-    "backup-location-usage": route("backup:destination-usage", (r) => r),
+    "backup-locations": route("backup:locations", (r) => r.locations),
+    "backup-locations-problem": route("backup:locations-problem", (r) => r.problem ?? null),
+    "backup-locations-recover": route("backup:locations-recover", (r) => ({ keptAs: r.keptAs })),
+    "backup-location-usage": route("backup:location-usage", (r) => r),
     // adding checks the location is reachable with its credentials
-    "backup-location-add": route("backup:destination-add", (r) => r, { timeoutMs: 120_000 }),
-    "backup-location-remove": route("backup:destination-remove", done),
-    "backup-panel-location-set": route("backup:panel-destination-set", (r) => r),
+    "backup-location-add": route("backup:location-add", (r) => r, { timeoutMs: 120_000 }),
+    "backup-location-remove": route("backup:location-remove", done),
+    "backup-panel-location-set": route("backup:panel-location-set", (r) => r),
     "problems-list": route("problems:list", (r) => r.problems),
     "problems-every": route("problems:every", (r) => r.panels),
     "ports-claim": route("ports:claim", (r) => r),

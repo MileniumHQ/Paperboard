@@ -278,9 +278,9 @@ export default function ServicesDoc() {
 
             <PaperText preset="subheader" as="h2" id="backups">Backups</PaperText>
             <PaperText preset="body" as="p">
-                A backup of the panel is one archive of its config and its files folder, copied while its service is stopped.
-                A service that holds data in memory writes it out in <PaperCode>beforeBackup</PaperCode>. A service that runs a program that writes files makes it save and stop writing there, as the Game Servers panel does with a running game server.
-                Weather saves on every change and writes no files, so it needs neither hook.
+                A backup of the panel is one archive of the files its service names in its files folder, and a little JSON it hands over. The service keeps running.
+                A service that holds data in memory writes it out in <PaperCode>beforeBackup</PaperCode>, which also returns the files to keep. A service that runs a program that writes files makes it save and stop writing there, as the Game Servers panel does with a running game server, and carries on in <PaperCode>afterBackup</PaperCode>. A panel without <PaperCode>beforeBackup</PaperCode> can't be backed up, and one without <PaperCode>afterRestore</PaperCode> can't restore.
+                Weather keeps only the cities it follows, in its config, so it has neither hook and can't be backed up.
                 The hooks and their limits are on the <PaperLink href="/docs/paperapi/service/#lifecycle">service reference</PaperLink>.
             </PaperText>
 

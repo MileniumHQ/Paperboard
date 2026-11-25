@@ -107,9 +107,9 @@ $ bunx paperapi call dev.example.weather command.follow-city '{"city":"Oslo"}'
             </PaperText>
             <PaperCode block language="text">
 {`05:54:57.678  host                      blocks:call                          0.2 ms  ✗ INTERNAL Weather already follows Oslo  panelId=dev.example.weather entry=‹19 chars› request={inputs} timeoutMs=30000
-05:54:57.736  dev.example.weather       config:set                           0.3 ms  ok  id=dev.example.weather data={cities,units} duringCall=‹41 chars›
-05:54:57.736  dev.example.weather       blocks:emit                          0.0 ms  ok  panelId=dev.example.weather entry=‹25 chars› payload={state} duringCall=‹41 chars›
-05:54:57.736  dev.example.weather       secrets:get                          0.0 ms  ok  name=openweather-key duringCall=‹41 chars›
+05:54:57.736  dev.example.weather       config:set                           0.3 ms  ok  id=dev.example.weather data={cities,units}
+05:54:57.736  dev.example.weather       blocks:emit                          0.0 ms  ok  panelId=dev.example.weather entry=‹25 chars› payload={state}
+05:54:57.736  dev.example.weather       secrets:get                          0.0 ms  ok  name=openweather-key
 05:54:57.735  host                      blocks:call                         11.5 ms  ok  panelId=dev.example.weather entry=‹22 chars› request={inputs} timeoutMs=30000
 05:55:13.000  dev.example.weather       service stopped                   code null
 05:55:13.000  dev.example.weather       service starting                  pid 2547010
@@ -119,7 +119,6 @@ $ bunx paperapi call dev.example.weather command.follow-city '{"city":"Oslo"}'
                 <li>A button that does nothing shows here: either no call line appears, so the page never called, or a line with <PaperCode>✗</PaperCode> shows the call failed and why.</li>
                 <li>A service that keeps crashing shows as <PaperCode>service exited</PaperCode> and <PaperCode>service starting</PaperCode> lines. Its own output is in the log, below.</li>
                 <li>Only PaperAPI traffic shows. A <PaperCode>fetch</PaperCode> the service makes to a website does not, so log its failures and put them in the state.</li>
-                <li><PaperCode>duringCall</PaperCode> marks a call the panel made while it was answering another, such as the <PaperCode>config:set</PaperCode> inside <PaperCode>setUnits</PaperCode>.</li>
                 <li>Secret values, file contents, config documents, block inputs and results never appear. <PaperLink href="/docs/paperapi/cli/#monitor-redaction">What the monitor shows</PaperLink> lists what does.</li>
             </PaperTextList>
 

@@ -42,16 +42,6 @@ export interface PendingActionCall {
     // the socket the block is registered on: the only socket whose
     // action_reply may settle this call
     targetWs: WebSocket;
-    // an operation the target requested while answering this call is running
-    // and will stop the target (carryCall): the call outlives the target's
-    // socket until that operation answers it
-    carried?: boolean;
-}
-
-/** how a carried call is answered when its operation ends */
-export interface CarriedOutcome {
-    result?: unknown;
-    error?: string;
 }
 
 // result of a namespace write; ok:false with code "CONFLICT" means the name
@@ -245,8 +235,6 @@ export class BlocksRegistry {
                 pending.reject(
                     new Error(`Block call "${pending.panelId}:${pending.action}" aborted: caller socket closed`),
                 );
-            } else if (pending.carried && pending.targetWs === ws) {
-                // the operation that stopped this socket answers the call (carryCall)
             } else {
                 const key = this.actionKey(pending.panelId, pending.action);
                 const reg = this.actions.get(key);
@@ -341,7 +329,7 @@ export class BlocksRegistry {
         return true;
     }
 
-    private settle(pending: PendingActionCall, { result, error }: CarriedOutcome): void {
+    private settle(pending: PendingActionCall, { result, error }: { result?: unknown; error?: string }): void {
         this.pendingCalls.delete(pending.callId);
         clearTimeout(pending.timer);
         if (error) {
@@ -349,28 +337,6 @@ export class BlocksRegistry {
         } else {
             pending.resolve(result);
         }
-    }
-
-    /**
-     * For a service asking for something that stops the service itself (a
-     * backup pauses its panel's service): the service cannot answer the block
-     * call it is in the middle of, since it will be gone. The call stays
-     * pending past the service's socket, and the returned function answers it
-     * with the operation's outcome when the service did go away.
-     */
-    public carryCall(callId: string, fromWs: WebSocket): ((outcome: CarriedOutcome) => void) | null {
-        const pending = this.pendingCalls.get(callId);
-        if (!pending) return null;
-        if (pending.targetWs !== fromWs) {
-            throw new RpcError(ErrorCode.FORBIDDEN, "That block call was not sent to this connection");
-        }
-        pending.carried = true;
-        return (outcome) => {
-            const current = this.pendingCalls.get(callId);
-            if (current !== pending || !pending.carried) return;
-            pending.carried = false;
-            if (pending.targetWs.readyState !== WebSocket.OPEN) this.settle(pending, outcome);
-        };
     }
 
     public list(

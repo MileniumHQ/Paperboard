@@ -15,6 +15,8 @@ CSS_RULES = [
     ("scale", re.compile(r"\bscale\(\s*(?!1\s*\)|0\s*\))[\d.]+")),
 ]
 TSX_RULES = [
+    # getVarCss("name") builds this string; written by hand it skips the name check
+    ("token", re.compile(r"""var\(\s*--paper-""")),
     ("size", re.compile(r"""["'`][^"'`]*(?<![\w.#-])-?\d*\.?\d+(?:px|rem|em|ms)\b""")),
     ("color", re.compile(r"""["'`]#[0-9a-fA-F]{3,8}["'`]|\brgba?\(|\bhsla?\(""")),
     ("z-index", re.compile(r"""["']?z-?[iI]ndex["']?\s*:\s*\d""")),

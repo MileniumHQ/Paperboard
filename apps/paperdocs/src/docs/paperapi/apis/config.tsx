@@ -82,7 +82,7 @@ configApi.set(data: any, id: string, path?: string, scope?: string): Promise<tru
                 <li><PaperCode>set</PaperCode> replaces the whole document. It does not merge, so read, change and write back the complete value.</li>
                 <li>The main document is stored at <PaperCode>configs/&lt;id&gt;.json</PaperCode> in the Paperboard data folder, and a <PaperCode>path</PaperCode> document at <PaperCode>files/&lt;id&gt;/&lt;path&gt;</PaperCode>, beside the panel's <PaperLink href="/docs/paperapi/file/">files</PaperLink>. Each write replaces the file in one step, so a crash never leaves half a document.</li>
                 <li>Two writers at once: the last <PaperCode>set</PaperCode> wins. Keep one owner for each document, usually the service.</li>
-                <li>Backups include both kinds of document. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
+                <li>A backup holds files, not config documents: a service that wants a document kept hands it over as the backup's <PaperCode>data</PaperCode>. See <PaperLink href="/docs/paperapi/backups/">backupApi</PaperLink>.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="errors">Errors</PaperText>

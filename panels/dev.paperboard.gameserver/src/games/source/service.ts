@@ -172,7 +172,7 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                     save: async () => {},
                     clean: releaseFiles,
                 })
-                : { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: (work) => work() },
+                : { mode: "quiesce", before: async () => {}, after: async () => {} },
         };
     };
 }

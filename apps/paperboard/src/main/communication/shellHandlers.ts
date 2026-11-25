@@ -8,6 +8,7 @@
 import * as path from "path";
 import connectionPool, { LOCAL_COMPUTER_NAME } from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
+import { computerSetups, sshAnswers } from "../computerSetup";
 import { getPaperboardDir, getFilesDir, getLogsDir, ensureDir } from "daemon/core/paths";
 import { buildDetails, localScrubber, readLogTail, type DetailsInput } from "../issueDetails";
 import { sanitizeId } from "daemon/core/storage";
@@ -106,6 +107,10 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "computer-reorder": ({ ids }) => connectionPool.reorderComputers(ids),
 
         "discovery-list": () => discovery.look(),
+        "computer-ssh-check": async ({ host }) => ({ ssh: await sshAnswers(host) }),
+        "computer-setup-start": ({ host, name }) => computerSetups.start(host, name),
+        "computer-setup-sign-in": ({ jobId, username, password }) => computerSetups.signIn(jobId, username, password),
+        "computer-setup-cancel": ({ jobId }) => computerSetups.cancel(jobId),
 
         // local dir or panel files dir; remotes mount an ephemeral session
         // base64 so both transports (IPC structured clone, browser-mode

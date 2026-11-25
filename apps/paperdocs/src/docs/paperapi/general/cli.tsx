@@ -362,8 +362,8 @@ $ bunx paperapi restart dev.example.nothing
 Watching every panel on Paperboard at 127.0.0.1:47911. Press Ctrl+C to stop.
 04:50:13.009  host                      blocks:call                          1.0 ms  ok  panelId=dev.example.weather entry=‹20 chars› request={inputs} timeoutMs=30000
 04:50:13.010  dev.example.weather       event blocks:dev.example.weather:event.panel-state-changed  109 B → 0 sockets
-04:50:13.048  dev.example.weather       secrets:set                          0.8 ms  ok  name=apiKey value=‹15 chars› duringCall=‹41 chars›
-04:50:13.049  dev.example.weather       config:set                           0.6 ms  ok  id=dev.example.weather data={city,units} duringCall=‹41 chars›
+04:50:13.048  dev.example.weather       secrets:set                          0.8 ms  ok  name=apiKey value=‹15 chars›
+04:50:13.049  dev.example.weather       config:set                           0.6 ms  ok  id=dev.example.weather data={city,units}
 04:50:13.089  dev.example.weather       service stopped                   code null
 04:50:13.089  dev.example.weather       service starting                  pid 2510149
 04:50:13.150  dev.example.weather       service ready                     pid 2510149`}
@@ -380,7 +380,7 @@ Watching every panel on Paperboard at 127.0.0.1:47911. Press Ctrl+C to stop.
             </PaperText>
             <PaperCode block language="text">
 {`panelId action event trigger project id name computerId packageName version
-backupId sourceId destinationId downloadId appId signal cols rows timeoutMs
+backupId target locationId downloadId appId signal cols rows timeoutMs
 stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd command`}
             </PaperCode>
             <PaperText preset="body" as="p">
@@ -394,7 +394,7 @@ stdin consoleInput inputEncoding allowDowngrade deleteData targetPath path cwd c
                 <PaperCode>--json</PaperCode> prints one record per line. <PaperCode>at</PaperCode> is epoch milliseconds and <PaperCode>panel</PaperCode> is <PaperCode>null</PaperCode> for the host.
             </PaperText>
             <PaperCode block language="json">
-{`{"type":"rpc","at":1793796613048,"panel":"dev.example.weather","method":"secrets:set","target":"dev.example.weather","ms":0.8,"ok":true,"args":{"name":"apiKey","value":{"type":"string","size":15},"panelId":"dev.example.weather","duringCall":{"type":"string","size":41}}}
+{`{"type":"rpc","at":1793796613048,"panel":"dev.example.weather","method":"secrets:set","target":"dev.example.weather","ms":0.8,"ok":true,"args":{"name":"apiKey","value":{"type":"string","size":15},"panelId":"dev.example.weather"}}
 {"type":"service","panel":"dev.example.weather","state":"starting","pid":2510149,"at":1793796613089}`}
             </PaperCode>
             <PaperTable>

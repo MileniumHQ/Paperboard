@@ -1,22 +1,34 @@
-// Panel backups. A backup copies the panel's file storage and config
-// document (never its vault secrets) to the backup location the user chose
-// for the panel: this computer, an S3-compatible bucket, or Google Drive.
-// The user chooses the location in a window Paperboard shows; a panel can
-// open it with chooseLocation, never set it itself.
+// Panel backups. A backup is a copy of files from a panel's storage, plus a
+// little JSON the panel hands over, kept at the backup location the user
+// chose for the panel: this computer, an S3-compatible bucket, or Google
+// Drive. The panel's service decides what goes in (its beforeBackup hook)
+// and keeps running throughout:
+//
+// 1. a backup is started, from anywhere (the panel, Blocks, the service)
+// 2. beforeBackup stops what would write over the copy, and names its files
+// 3. the files are copied as they are
+// 4. afterBackup lets the panel carry on
+// 5. the copy is uploaded
+//
+// A restore runs the other way: beforeRestore stops what uses the files,
+// they are swapped for the backup's, and afterRestore hands the panel its
+// JSON back to pick up from. The user chooses the location in a window
+// Paperboard shows; a panel opens it with chooseLocation, never sets it.
 import { getTransport, RPC_ROUTES } from "./ipc";
-import type { BackupStatusAnswer } from "./protocol";
+import { BACKUP_TARGET_RE, type BackupStatusAnswer } from "./protocol";
 import { BACKUP_PROGRESS_EVENT } from "./channels";
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
 import { currentFrameSession, frameSessionArrived, type FrameSession } from "./frameSession";
 
 export interface BackupRecord {
-    format: 1;
+    format: 2;
     /** sorts by creation time */
     id: string;
     panelId: string;
-    /** Present for backups made from a named source. */
-    sourceId?: string;
+    /** what of the panel it is a backup of, as the panel names it (a game
+     * server's id); null for a backup of the panel as a whole */
+    target: string | null;
     /** ISO timestamp */
     createdAt: string;
     /** archive bytes */
@@ -26,7 +38,36 @@ export interface BackupRecord {
     /** the panel version that made the backup */
     panelVersion: string | null;
     label: string | null;
+    /** the files and folders of the panel's storage it holds; "" is all of it */
+    paths: string[];
+    /** paths under those that were left out, and that a restore leaves as they are */
+    exclude: string[];
 }
+
+/** What a backup holds, as the panel's beforeBackup names it. */
+export interface BackupContents {
+    /** files and folders in the panel's storage, relative to it with "/"
+     * between names; "" is the whole storage. None may hold another. It
+     * may be empty when `data` is all there is to keep. */
+    paths: string[];
+    /** paths under `paths` to leave out; a restore leaves them as they are
+     * (a game install the panel downloads again) */
+    exclude?: string[];
+    /** file names left out wherever they are, such as a lock a running
+     * program holds */
+    skip?: string[];
+    /** JSON the panel gets back in afterRestore, such as the settings the
+     * files go with */
+    data?: unknown;
+}
+
+/** How the copy of a backup ended, as afterBackup hears it: carry on either way. */
+export type BackupCopied = { target: string | null } & ({ ok: true } | { ok: false; error: string });
+
+/** How a restore ended, as afterRestore hears it. On ok the files are the
+ * backup's and data is what beforeBackup handed over (null when none); on
+ * failure they are back as they were. */
+export type RestoreEnded = { target: string | null; backup: BackupRecord } & ({ ok: true; data: unknown } | { ok: false; error: string });
 
 export interface BackupLocation {
     id: string;
@@ -38,68 +79,48 @@ export interface BackupLocation {
     removable: boolean;
 }
 
-/** how often routine backups may run, in hours */
-export const ROUTINE_BACKUP_HOURS = [1, 3, 6, 12, 24, 48, 168] as const;
-/** the most routine backups a schedule keeps */
-export const MAX_ROUTINE_BACKUPS_KEPT = 100;
-/** the label routine backups carry; a backup someone makes cannot use it */
-export const ROUTINE_BACKUP_LABEL = "Routine backup";
-
-export interface BackupScheduleResult {
-    /** ISO time the last routine backup finished */
-    at: string;
-    ok: boolean;
-    /** why it failed; null when it worked */
-    message: string | null;
+export function isBackupTarget(value: unknown): value is string {
+    return typeof value === "string" && BACKUP_TARGET_RE.test(value);
 }
 
-/** Routine backups the computer's Paperboard Server makes, app open or not */
-export interface BackupSchedule {
-    everyHours: (typeof ROUTINE_BACKUP_HOURS)[number];
-    /** routine backups beyond the newest this many are deleted; other
-     * backups are never deleted by a schedule */
-    keep: number;
-    /** ISO time the next one is due */
-    nextRunAt: string;
-    last: BackupScheduleResult | null;
+/** a path in a panel's storage as backups name it: relative, "/" between
+ * names, none of them empty, "." or ".."; "" is the storage itself */
+export function isBackupPath(value: unknown): value is string {
+    if (typeof value !== "string" || value.length > 1024) return false;
+    if (value === "") return true;
+    // eslint-disable-next-line no-control-regex
+    if (/[\\\u0000-\u001f]/.test(value)) return false;
+    return value.split("/").every((name) => name !== "" && name !== "." && name !== "..");
 }
 
 /**
  * What a running backup or restore is doing:
- * - `preparing`: the panel's service gets ready (a game server saves its world)
- * - `copying`: the files are copied aside
- * - `packing`: the copy is compressed into one archive
+ * - `preparing`: the panel gets ready (a game server saves its world)
+ * - `packing`: the files are compressed into one archive
+ * - `resuming`: the panel carries on
  * - `saving`: the archive goes to the backup location
  * - `downloading`, `checking`, `unpacking`: a restore fetches, verifies and opens the archive
- * - `restoring`: the panel's data is swapped for the backup's
+ * - `restoring`: the panel's files are swapped for the backup's
  */
-export type BackupStep = "preparing" | "copying" | "packing" | "saving" | "downloading" | "checking" | "unpacking" | "restoring";
+export type BackupStep = "preparing" | "packing" | "resuming" | "saving" | "downloading" | "checking" | "unpacking" | "restoring";
 
 export interface BackupProgress {
-    /** the panel whose data is backed up */
     panelId: string;
-    /** the named source being backed up; null for the panel's own backups */
-    sourceId: string | null;
+    /** as in BackupRecord */
+    target: string | null;
     kind: "create" | "restore";
     step: BackupStep;
     /** bytes done and expected in this step; null when the step cannot be measured */
     done: number | null;
     total: number | null;
-    /** true while the step holds the panel's service stopped */
-    servicePaused: boolean;
 }
 
 /** a change in a panel's running backup; progress is null once it ends */
 export interface BackupProgressChange {
     panelId: string;
-    sourceId: string | null;
+    target: string | null;
     progress: BackupProgress | null;
 }
-
-/** how a backup or restore of a panel's data ended, as its service hears it
- * (afterBackup, afterRestore). sourceId names the source it was of, and is
- * absent for the panel's own data. */
-export type BackupEnded = { sourceId?: string } & ({ ok: true; backup: BackupRecord } | { ok: false; error: string });
 
 /** the share of the step done, from 0 to 1; null when it cannot be measured */
 export function backupProgressFraction(progress: Pick<BackupProgress, "done" | "total">): number | null {
@@ -110,8 +131,8 @@ export function backupProgressFraction(progress: Pick<BackupProgress, "done" | "
 
 const STEP_LABELS: Record<BackupStep, string> = {
     preparing: "Getting ready",
-    copying: "Copying files",
     packing: "Compressing",
+    resuming: "Finishing up",
     saving: "Saving",
     downloading: "Downloading",
     checking: "Checking",
@@ -133,43 +154,11 @@ export function backupProgressText(progress: Pick<BackupProgress, "step" | "done
 /** why a running backup's progress can't be heard; null once it can again */
 export type BackupProgressLost = (why: string | null) => void;
 
-// one listener per panel (and source) on the computer's backup event. The
-// event flows only to a connected socket that declared it: one that can't
-// connect yet, or dropped, tells onLost why and keeps trying, and tells it
-// null once it is back. What it missed meanwhile is read again with
-// progress() or status().
-function listenProgress(scope: string | undefined, panelId: string, sourceId: string | null | undefined, listener: (change: BackupProgressChange) => void, onLost?: BackupProgressLost): () => void {
-    const transport = getTransport(scope);
-    const off = transport.subscribeEvent(BACKUP_PROGRESS_EVENT, (change) => {
-        if (change.panelId !== panelId) return;
-        if (sourceId !== undefined && (change.sourceId ?? null) !== sourceId) return;
-        listener({ panelId: change.panelId, sourceId: change.sourceId ?? null, progress: change.progress ?? null });
-    });
-    let lost: string | null = null;
-    const status = (s: { connected: boolean; error?: string }) => {
-        const why = s.connected ? null : (s.error ?? "The connection to the Paperboard Server dropped");
-        // a drop that is still a drop says nothing new
-        if ((why === null) === (lost === null)) return;
-        lost = why;
-        onLost?.(why);
-    };
-    if (onLost) transport.onStatus(status);
-    transport.keepConnected();
-    return () => {
-        off();
-        if (onLost) transport.offStatus(status);
-    };
-}
-
 export interface BackupStatus {
     /** null until the user chooses where this panel's backups go */
     location: BackupLocation | null;
-    /** a backup being made or restored for this panel right now */
-    running: "create" | "restore" | null;
-    /** how far along that backup is; null when none is running */
+    /** the backup or restore of this target running now; null when none is */
     progress: BackupProgress | null;
-    /** null when the panel has no routine backups */
-    schedule: BackupSchedule | null;
 }
 
 export interface BackupLocationUsage {
@@ -200,90 +189,80 @@ export function backupLocationLabel(location: Pick<BackupLocation, "kind" | "lab
 
 const named = (location: BackupLocation, session: FrameSession | null): BackupLocation => ({ ...location, label: backupLocationLabel(location, session?.computerName) });
 
-const status = async (r: BackupStatusAnswer): Promise<BackupStatus> => ({ location: r.destination ? named(r.destination, await frameSessionArrived()) : null, running: r.running ?? null, progress: r.progress ?? null, schedule: r.schedule ?? null });
+const status = async (r: BackupStatusAnswer): Promise<BackupStatus> => ({ location: r.location ? named(r.location, await frameSessionArrived()) : null, progress: r.progress });
 
-/** A named subset of a panel's files and config, with its own backup history. */
-export interface BackupSource {
-    id: string;
-    directory: string;
-    /** Property keys, or an array entry selected by its stable id. */
-    config: Array<string | { id: string }>;
-    processes: string[];
-    exclude?: string[];
-    /** File names left out of copies wherever they are, such as a lock a running program holds. May change between definitions. */
-    skip?: string[];
-    /** One source may retain the panel's original backup history and schedule. */
-    legacy?: boolean;
+/** which of the panel's backups a call means: a target, or the panel's own */
+export interface BackupTarget {
+    /** the panel's own name for what is backed up (a game server's id);
+     * left out for backups of the panel as a whole */
+    target?: string;
 }
 
-function requireSourceId(value: unknown): string {
-    if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)) throw new Error("Choose an explicit backup source id");
-    return value;
+function targetOf(options: BackupTarget | undefined): { target?: string } {
+    if (options?.target === undefined) return {};
+    if (!isBackupTarget(options.target)) throw new Error("A backup target is a short id: letters, digits, '.', '_' and '-'");
+    return { target: options.target };
 }
 
 export const backupApi = {
-    defineSource: (appId: string, source: BackupSource, scope?: string): Promise<void> =>
-        RPC_ROUTES["backup-source-define"].call(scope, { panelId: requirePanelId(appId), source }),
-    forSource: (appId: string, sourceId: string, scope?: string) => {
-        const identity = { panelId: requirePanelId(appId), sourceId: requireSourceId(sourceId) };
-        return {
-            status: async (): Promise<BackupStatus> => status(await RPC_ROUTES["backup-status"].call(scope, identity)),
-            list: (): Promise<BackupRecord[]> => RPC_ROUTES["backup-list"].call(scope, identity),
-            create: (options: { label?: string } = {}): Promise<BackupRecord> => RPC_ROUTES["backup-create"].call(scope, { ...identity, label: options.label }),
-            restore: (backupId: string): Promise<BackupRecord> => RPC_ROUTES["backup-restore"].call(scope, { ...identity, backupId }),
-            delete: (backupId: string): Promise<void> => RPC_ROUTES["backup-delete"].call(scope, { ...identity, backupId }),
-            setSchedule: async (schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null): Promise<BackupStatus> => status(await RPC_ROUTES["backup-schedule-set"].call(scope, { ...identity, schedule })),
-            chooseLocation: (): Promise<ChooseBackupLocationResult> => backupApi.chooseLocation(appId, sourceId),
-            /** hears this source's running backup or restore move on, and end;
-             * onLost hears why it can't be heard, and null once it can again */
-            onProgress: (listener: (change: BackupProgressChange) => void, onLost?: BackupProgressLost): (() => void) =>
-                listenProgress(scope, identity.panelId, identity.sourceId, listener, onLost),
-        };
-    },
-    /** where this panel's backups go, and whether one is running */
-    status: async (appId: string, scope?: string): Promise<BackupStatus> =>
-        status(await RPC_ROUTES["backup-status"].call(scope, { panelId: requirePanelId(appId) })),
+    /** where the panel's backups go, and the target's running backup */
+    status: async (appId: string, options?: BackupTarget, scope?: string): Promise<BackupStatus> =>
+        status(await RPC_ROUTES["backup-status"].call(scope, { panelId: requirePanelId(appId), ...targetOf(options) })),
 
-    /** every backup or restore running now for the panel's data, its
-     * named sources included */
+    /** the target's backups, newest first */
+    list: (appId: string, options?: BackupTarget, scope?: string): Promise<BackupRecord[]> =>
+        RPC_ROUTES["backup-list"].call(scope, { panelId: requirePanelId(appId), ...targetOf(options) }),
+
+    /** backs the target up now, as the panel's beforeBackup names it */
+    create: (appId: string, options: BackupTarget & { label?: string } = {}, scope?: string): Promise<BackupRecord> =>
+        RPC_ROUTES["backup-create"].call(scope, { panelId: requirePanelId(appId), ...targetOf(options), label: options.label }),
+
+    /** puts the target's files back as the backup has them */
+    restore: (appId: string, backupId: string, options?: BackupTarget, scope?: string): Promise<BackupRecord> =>
+        RPC_ROUTES["backup-restore"].call(scope, { panelId: requirePanelId(appId), ...targetOf(options), backupId }),
+
+    delete: (appId: string, backupId: string, options?: BackupTarget, scope?: string): Promise<void> =>
+        RPC_ROUTES["backup-delete"].call(scope, { panelId: requirePanelId(appId), ...targetOf(options), backupId }),
+
+    /** every backup or restore running now for the panel, any target */
     progress: (appId: string, scope?: string): Promise<BackupProgress[]> =>
         RPC_ROUTES["backup-progress"].call(scope, { panelId: requirePanelId(appId) }),
 
-    /** hears the panel's running backups and restores (its named sources
-     * included) move on a step, and end; returns the unsubscribe. onLost
-     * hears why progress can't be heard (the connection failed or dropped),
-     * and null once it can again: show it, then read progress() again. */
-    onProgress: (appId: string, listener: (change: BackupProgressChange) => void, scope?: string, onLost?: BackupProgressLost): (() => void) =>
-        listenProgress(scope, requirePanelId(appId), undefined, listener, onLost),
-
-    /** backs up the panel's files and config now. The panel's service is
-     * stopped while its data is copied, then started again. */
-    create: (appId: string, options: { label?: string } = {}, scope?: string): Promise<BackupRecord> =>
-        RPC_ROUTES["backup-create"].call(scope, { panelId: requirePanelId(appId), label: options.label }),
-
-    /** newest first */
-    list: (appId: string, scope?: string): Promise<BackupRecord[]> =>
-        RPC_ROUTES["backup-list"].call(scope, { panelId: requirePanelId(appId) }),
-
-    /** replaces the panel's files and config with the backup's */
-    restore: (appId: string, backupId: string, scope?: string): Promise<BackupRecord> =>
-        RPC_ROUTES["backup-restore"].call(scope, { panelId: requirePanelId(appId), backupId }),
-
-    delete: (appId: string, backupId: string, scope?: string): Promise<void> =>
-        RPC_ROUTES["backup-delete"].call(scope, { panelId: requirePanelId(appId), backupId }),
-
-    /** turns routine backups on, changes them, or (with null) turns them
-     * off. The first runs one interval from now; a backup location must be
-     * chosen first. Changing only `keep` leaves the next one when it was. */
-    setSchedule: async (appId: string, schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null, scope?: string): Promise<BackupStatus> =>
-        status(await RPC_ROUTES["backup-schedule-set"].call(scope, { panelId: requirePanelId(appId), schedule })),
+    /**
+     * Hears the panel's running backups and restores (any target) move on a
+     * step, and end; returns the unsubscribe. onLost hears why progress
+     * can't be heard (the connection failed or dropped), and null once it
+     * can again: show it, then read progress() again.
+     */
+    onProgress: (appId: string, listener: (change: BackupProgressChange) => void, options: { onLost?: BackupProgressLost; scope?: string } = {}): (() => void) => {
+        const panelId = requirePanelId(appId);
+        const transport = getTransport(options.scope);
+        const off = transport.subscribeEvent(BACKUP_PROGRESS_EVENT, (change) => {
+            if (change.panelId === panelId) listener({ panelId, target: change.target, progress: change.progress });
+        });
+        const onLost = options.onLost;
+        let lost: string | null = null;
+        const onStatus = (s: { connected: boolean; error?: string }) => {
+            const why = s.connected ? null : (s.error ?? "The connection to the Paperboard Server dropped");
+            // a drop that is still a drop says nothing new
+            if ((why === null) === (lost === null)) return;
+            lost = why;
+            onLost?.(why);
+        };
+        if (onLost) transport.onStatus(onStatus);
+        transport.keepConnected();
+        return () => {
+            off();
+            if (onLost) transport.offStatus(onStatus);
+        };
+    },
 
     /** shows Paperboard's backup location window for this panel. Call it
      * from the panel page, not a widget. */
-    chooseLocation: (appId: string, sourceId?: string): Promise<ChooseBackupLocationResult> =>
+    chooseLocation: (appId: string): Promise<ChooseBackupLocationResult> =>
         requestShell<ChooseBackupLocationResult>({
             type: "paperboard:backup-location",
-            fields: { panelId: requirePanelId(appId), ...(sourceId !== undefined ? { sourceId: requireSourceId(sourceId) } : {}) },
+            fields: { panelId: requirePanelId(appId) },
             unavailable: () => new BackupLocationError("unavailable", "Choosing a backup location needs a panel shown in Paperboard"),
             widget: () => new BackupLocationError("unavailable", "A widget cannot choose a backup location; open its panel instead"),
             busy: () => new BackupLocationError("busy", "The backup location window is already open"),
@@ -312,13 +291,10 @@ export const backupLocationsApi = {
     /** sets an unreadable locations file aside (it is kept) and starts a
      * fresh list; panels that used a location choose again */
     recover: (scope?: string): Promise<{ keptAs: string }> => RPC_ROUTES["backup-locations-recover"].call(scope, {}),
-    usage: (locationId: string, scope?: string): Promise<BackupLocationUsage> =>
-        RPC_ROUTES["backup-location-usage"].call(scope, { destinationId: locationId }),
-    add: (location: NewBackupLocation, scope?: string): Promise<BackupLocation> =>
-        RPC_ROUTES["backup-location-add"].call(scope, { destination: location }),
-    remove: (locationId: string, scope?: string): Promise<void> =>
-        RPC_ROUTES["backup-location-remove"].call(scope, { destinationId: locationId }),
-    /** null clears the panel's choice */
-    setForPanel: async (panelId: string, locationId: string | null, scope?: string, sourceId?: string): Promise<BackupStatus> =>
-        status(await RPC_ROUTES["backup-panel-location-set"].call(scope, { panelId: requirePanelId(panelId), destinationId: locationId, sourceId })),
+    usage: (locationId: string, scope?: string): Promise<BackupLocationUsage> => RPC_ROUTES["backup-location-usage"].call(scope, { locationId }),
+    add: (location: NewBackupLocation, scope?: string): Promise<BackupLocation> => RPC_ROUTES["backup-location-add"].call(scope, { location }),
+    remove: (locationId: string, scope?: string): Promise<void> => RPC_ROUTES["backup-location-remove"].call(scope, { locationId }),
+    /** where the panel's backups go; null clears the choice */
+    setForPanel: async (panelId: string, locationId: string | null, scope?: string): Promise<BackupStatus> =>
+        status(await RPC_ROUTES["backup-panel-location-set"].call(scope, { panelId: requirePanelId(panelId), locationId })),
 };

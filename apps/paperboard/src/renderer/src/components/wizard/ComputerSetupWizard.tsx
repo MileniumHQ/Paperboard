@@ -1,4 +1,4 @@
-import { type Component, createSignal, createEffect, on, Show, For, onCleanup } from "solid-js";
+import { type Component, createSignal, createEffect, on, Show, For, Index, onCleanup, batch } from "solid-js";
 import {
     PaperWizard,
     PaperWizardStep,
@@ -8,13 +8,21 @@ import {
     PaperFlex,
     PaperQuote,
     PaperText,
+    PaperButton,
+    PaperError,
+    PaperLoader,
+    PaperLoaderGroup,
     useWizard,
     createRead,
+    showError,
+    showToast,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
+    computerSetupApi,
     discoveryApi,
     logToMain,
+    type ComputerSetupState,
     type DiscoveredComputer,
 } from "../../lib/shell";
 import frameStyles from "./wizardFrame.module.css";
@@ -25,6 +33,12 @@ export interface ComputerSetupWizardProps {
     onClose: () => void;
     onComplete: (computer: { id: string }) => void;
 }
+
+// the wizard's steps; a listed computer skips DETAILS, and one without SSH skips SETUP
+const CHOOSE = 0;
+const DETAILS = 1;
+const SETUP = 2;
+const CODE = 3;
 
 export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     props,
@@ -59,6 +73,16 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const [checking, setChecking] = createSignal<{ host: string; port: string } | null>(null);
     // empty means the default; anything else is checked as typed
     const probe = createRead(({ host, port }) => computers.probe(host, port === "" ? undefined : port), { source: checking });
+    // whether SSH answers there too: then the computer is set up over SSH
+    const ssh = createRead(({ host }) => computerSetupApi.sshCheck(host), { source: checking });
+    const sshAvailable = () => !ssh.loading() && ssh.error() === null && ssh.value()?.ssh === true;
+    // a check that can't run (an ssh config it can't read) says why where the
+    // address is, for as long as it holds, or SSH setup would just not be offered
+    const SshProblem: Component = () => (
+        <Show when={ssh.error()}>
+            {(err) => <PaperError title="Couldn't check for SSH" error={err()} />}
+        </Show>
+    );
     // a computer picked from the nearby list counts as reachable while it is checked
     const [picked, setPicked] = createSignal(false);
     const answered = () => !probe.loading() && (probe.value() !== undefined || probe.error() !== null);
@@ -89,6 +113,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         clearTimeout(probeTimeout);
         setChecking(null);
         probe.set(undefined);
+        ssh.set(undefined);
         const host = target?.host.trim();
         if (host) setChecking({ host, port: target!.port.trim() });
     };
@@ -126,6 +151,88 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         field.value = grouped;
         setCode(grouped);
     };
+
+    // ── setting up over SSH ──
+    const [setup, setSetup] = createSignal<ComputerSetupState | null>(null);
+    const [username, setUsername] = createSignal("");
+    const [password, setPassword] = createSignal("");
+    const [signingIn, setSigningIn] = createSignal(false);
+    // why the pairing code is the way left, shown on the code step
+    const [codeHint, setCodeHint] = createSignal("");
+    let jobId: string | null = null;
+    // a start the wizard has since left (or started again) is cancelled when it answers
+    let startToken = 0;
+    // pushes that came before the start's answer named their job: the newest is kept
+    let early: ComputerSetupState | null = null;
+    // the newer state of the job this wizard started; anything else goes nowhere
+    const take = (state: ComputerSetupState) => {
+        if (state.jobId !== jobId) return;
+        const shown = setup();
+        if (shown?.jobId === state.jobId && shown.revision >= state.revision) return;
+        setSetup(state);
+    };
+    onCleanup(computerSetupApi.onChanged((state) => {
+        if (jobId === null && startToken > 0 && (!early || early.jobId !== state.jobId || early.revision < state.revision)) early = state;
+        take(state);
+    }));
+    const cancelJob = (id: string) => {
+        void computerSetupApi.cancel(id).catch((err) => showError("Couldn't stop setting up the computer", err));
+    };
+    const startSetup = () => {
+        const token = ++startToken;
+        jobId = null;
+        early = null;
+        batch(() => {
+            setSetup(null);
+            setPassword("");
+            // each computer asks with its own account (its ~/.ssh/config User)
+            setUsername("");
+            setSigningIn(false);
+        });
+        const target = host().trim();
+        computerSetupApi.start(target, name().trim() || undefined).then(
+            (started) => {
+                if (token !== startToken) return cancelJob(started.jobId);
+                jobId = started.jobId;
+                take(started);
+                if (early) take(early);
+                early = null;
+            },
+            (err) => {
+                if (token !== startToken) return;
+                setSetup({ jobId: "", revision: 0, host: target, steps: [], signIn: null, result: { failed: errorMessage(err) } });
+            },
+        );
+    };
+    const stopSetup = () => {
+        startToken++;
+        early = null;
+        setSetup(null);
+        if (!jobId) return;
+        const id = jobId;
+        jobId = null;
+        cancelJob(id);
+    };
+    onCleanup(stopSetup);
+    const signIn = async () => {
+        const state = setup();
+        if (!state?.signIn || !jobId) return;
+        setSigningIn(true);
+        try {
+            await computerSetupApi.signIn(jobId, username().trim(), password());
+            setPassword("");
+        } finally {
+            setSigningIn(false);
+        }
+    };
+    // what stopped the setup, when something did
+    const failure = () => {
+        const result = setup()?.result;
+        return result && "failed" in result ? result.failed : null;
+    };
+    createEffect(on(() => setup()?.signIn?.username, (asked) => {
+        if (asked !== undefined && !username()) setUsername(asked);
+    }));
 
     const canProceedFromStep2 = () => {
         return code().replace(/\s+/g, "").length === 6 && !isPairing();
@@ -183,25 +290,54 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         }
     }));
 
-    // Helper inside PaperWizard to seamlessly skip the IP step for discovered computers
+    // the step after choosing the computer (and its address): SSH sets it up, else its code pairs it
+    const afterAddress = () => (sshAvailable() ? SETUP : CODE);
+    // moves the wizard from outside it; set once it is up
+    let goTo: ((step: number) => void) | undefined;
+
+    // Routes the wizard's Next and Back: a listed computer skips its
+    // address, and one without SSH skips the setup
     const WizardStepRouter: Component = () => {
         const wizard = useWizard();
-        let previousStep = 0;
+        let previousStep = CHOOSE;
 
         if (!wizard) return null;
+        const go = (to: number) => {
+            previousStep = to;
+            wizard.setCurrentStep(to);
+        };
+        goTo = go;
+        // the step before the setup or the code: the address, or the list
+        const beforeConnecting = () => (method() === "custom" ? DETAILS : CHOOSE);
         createEffect(on(wizard.currentStep, (step) => {
             const prev = previousStep;
             previousStep = step;
-
-            if (method() !== "custom") {
-                // Forward navigation from Step 0 -> Step 1: skip directly to Step 2 (Pairing)
-                if (prev === 0 && step === 1) {
-                    wizard.setCurrentStep(2);
-                }
-                // Backward navigation from Step 2 -> Step 1: skip back to Step 0 (Method choice)
-                else if (prev === 2 && step === 1) {
-                    wizard.setCurrentStep(0);
-                }
+            // a move go() made itself: already routed
+            if (step === prev) return;
+            const forward = step > prev;
+            if (prev === SETUP) stopSetup();
+            if (forward) {
+                if (prev === CHOOSE && step === DETAILS && method() !== "custom") go(afterAddress());
+                else if (prev === DETAILS && step === SETUP) go(afterAddress());
+                return;
+            }
+            if (step === DETAILS && method() !== "custom") go(CHOOSE);
+            else if (prev === CODE && step === SETUP) go(beforeConnecting());
+            else if (prev === SETUP) go(beforeConnecting());
+        }));
+        // the setup ends on its own: paired goes to the computer, the code is the way left goes to the code step
+        createEffect(on(() => setup()?.result, (result) => {
+            if (!result) return;
+            // the setup is over: nothing is left to cancel
+            jobId = null;
+            if ("paired" in result) {
+                props.onComplete({ id: result.paired.id });
+                props.onClose();
+                // said where it outlives the wizard
+                if (result.paired.notice) showToast({ variant: "warning", title: `${name() || host()} is added`, message: result.paired.notice });
+            } else if ("useCode" in result) {
+                setCodeHint(result.useCode);
+                go(CODE);
             }
         }));
 
@@ -211,13 +347,14 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     return (
         <PaperWizard
             onComplete={handleFinish}
+            nextLabel={setup()?.signIn ? "Sign In" : undefined}
             finishLabel="Add Computer"
             finishVariant="success"
             class={frameStyles.wizard}
         >
             <WizardStepRouter />
 
-            <PaperWizardStep index={0} canProceed={method() !== ""}>
+            <PaperWizardStep index={CHOOSE} canProceed={method() !== ""}>
                 <PaperFlex center fullWidth fullHeight padding="full">
                     <PaperFlex
                         direction="column"
@@ -277,7 +414,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 </PaperFlex>
             </PaperWizardStep>
 
-            <PaperWizardStep index={1} canProceed={isReachable()}>
+            <PaperWizardStep index={DETAILS} canProceed={isReachable() || sshAvailable()}>
                 <PaperFlex center fullWidth fullHeight padding="full">
                     <PaperFlex
                         direction="column"
@@ -290,8 +427,9 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 Computer Details
                             </PaperText>
                             <PaperText preset="text">
-                                Enter the IP address of a computer running
-                                the Paperboard server daemon.
+                                Enter the address of a computer you can sign
+                                in to over SSH, or one running the Paperboard
+                                server daemon.
                             </PaperText>
                         </PaperFlex>
 
@@ -301,7 +439,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 label="Computer address"
                                 icon="language"
                                 value={host()}
-                                error={probeUnreachable() ? unreachableWords() : undefined}
+                                error={probeUnreachable() && !sshAvailable() && !ssh.loading() ? unreachableWords() : undefined}
                                 onInput={(e) =>
                                     handleIpInput(e.currentTarget.value)
                                 }
@@ -318,11 +456,94 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                         </PaperFlex>
+                        <SshProblem />
                     </PaperFlex>
                 </PaperFlex>
             </PaperWizardStep>
 
-            <PaperWizardStep index={2} canProceed={canProceedFromStep2()}>
+            <PaperWizardStep
+                index={SETUP}
+                canProceed={Boolean(setup()?.signIn) && username().trim() !== "" && password() !== "" && !signingIn()}
+                onStepActive={startSetup}
+                // Next is Sign In here; the setup moves on by itself once it is done
+                onNext={() => {
+                    void signIn().catch((err) => showError("Couldn't sign in over SSH", err));
+                    return false;
+                }}
+            >
+                <PaperFlex center fullWidth fullHeight padding="full">
+                    <PaperFlex direction="column" gap="full" fullWidth maxWidth="panel-small">
+                        {/* the steps say what it does; the dialog keeps its height for them */}
+                        <PaperText preset="title">Setting Up {name() || host()}</PaperText>
+
+                        <PaperLoaderGroup>
+                            {/* a step shows once it starts, so the sign-in form has room below the
+                                ones under way; once it fails, only the step that failed stays beside
+                                the error. Steps start in order, so a row keeps its place (and its
+                                loader) as each push brings the steps again */}
+                            <Index each={(setup()?.steps ?? []).filter((step) => (failure() ? step.status === "error" : step.status !== "waiting"))}>
+                                {(step) => (
+                                    <PaperLoader
+                                        percent={step().percent}
+                                        // a step that can't say how far it is spins
+                                        loaderStatus={step().status === "loading" && step().percent === undefined ? "indeterminate" : step().status}
+                                        label={step().status === "loading" ? `${step().label}...` : step().label}
+                                    />
+                                )}
+                            </Index>
+                        </PaperLoaderGroup>
+
+                        <Show when={setup()?.signIn}>
+                            {(asked) => (
+                                <PaperFlex direction="column" gap="half">
+                                    <PaperInput
+                                        fullWidth
+                                        label="Username"
+                                        icon="person"
+                                        autocomplete="username"
+                                        value={username()}
+                                        onInput={(e) => setUsername(e.currentTarget.value)}
+                                    />
+                                    <PaperInput
+                                        fullWidth
+                                        type="password"
+                                        label="Password"
+                                        icon="key"
+                                        autocomplete="current-password"
+                                        autofocus
+                                        value={password()}
+                                        onInput={(e) => setPassword(e.currentTarget.value)}
+                                        error={asked().error}
+                                    />
+                                </PaperFlex>
+                            )}
+                        </Show>
+
+                        <Show when={failure()}>
+                            {(failed) => (
+                                <PaperError
+                                    title={`Couldn't set up ${name() || host()}`}
+                                    error={failed()}
+                                    action={{ label: "Try Again", onClick: startSetup }}
+                                />
+                            )}
+                        </Show>
+
+                        {/* the code is one click away whatever the setup is doing, failed included */}
+                        <PaperFlex>
+                            <PaperButton variant="text" size="small" onClick={() => {
+                                stopSetup();
+                                setCodeHint("");
+                                goTo?.(CODE);
+                            }}>
+                                Connect with pairing code
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperFlex>
+                </PaperFlex>
+            </PaperWizardStep>
+
+            <PaperWizardStep index={CODE} canProceed={canProceedFromStep2()}>
                 <PaperFlex center fullWidth fullHeight padding="full">
                     <PaperFlex
                         direction="column"
@@ -339,7 +560,18 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 Paperboard server daemon on{" "}
                                 {name() || host() || "the target computer"}.
                             </PaperText>
+                            <Show when={codeHint()}>
+                                <PaperText preset="hint">{codeHint()}</PaperText>
+                            </Show>
+                            <Show when={!codeHint() && sshAvailable() && probeUnreachable()}>
+                                <PaperText preset="hint">
+                                    Paperboard Server isn't running there yet. On that computer, run
+                                    npx @mileniumhq/paperboard install-service, then
+                                    npx @mileniumhq/paperboard pair for the code.
+                                </PaperText>
+                            </Show>
                         </PaperFlex>
+                        <SshProblem />
 
                         <PaperFlex direction="column" gap="half">
                             <PaperInput

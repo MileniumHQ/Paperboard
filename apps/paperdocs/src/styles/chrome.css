@@ -5,63 +5,37 @@
     width: 30px;
 }
 
-/* The "Paperboard" wordmark: the same styled-text paper texture as the
-   marketing headings (white glyphs, soft shadow, grain), but its inner-shadow
-   hue is pinned to the landing blue instead of inheriting each page's accent.
-   Shared by the landing chrome and the app topbar so the brand reads the same
-   on every page. */
+/* The "Paperboard" wordmark: PaperUI Marketing's lettering, the same as the
+   marketing headings (white glyphs, soft shadow, grain), but its inner-edge
+   hue is pinned to the landing blue instead of following each page's accent.
+   Shared by the landing chrome and the docs topbar so the brand reads the
+   same on every page. */
 .paper-wordmark {
-    position: relative;
     display: inline-flex;
     align-items: center;
-    --paper-site-accent: var(--paper-primary);
+    line-height: 0;
+    --marketing-accent: var(--paper-primary);
 }
 
-.paper-wordmark-label {
+/* The lettering's white glyphs are for dark bars. In light mode the docs
+   topbar's wordmark is a plain title, like every other heading; the landing
+   pages' own chrome stays dark and keeps the lettering. */
+.paper-wordmark-plain {
+    display: none;
     font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.02em;
-    /* On a dark bar it only shows before the script upgrades the texture,
-       then the white glyphs take over. The light topbar shows it as a plain
-       title instead (below). */
-    color: var(--paper-primary);
-}
-
-/* Until the styled-text script upgrades the tag it would flash unstyled; the
-   plain label stands in, then gives way to the textured glyphs. */
-.paper-wordmark styled-text:not(:defined) {
-    display: none;
-}
-
-.paper-wordmark:has(styled-text:defined) .paper-wordmark-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-}
-
-.paper-wordmark .styled-text-host {
-    display: inline-flex;
-    line-height: 0;
-}
-
-/* The texture's white glyphs are for dark bars. In light mode the topbar's
-   wordmark is a plain title, like every other heading. The landing pages'
-   own chrome stays dark and keeps the texture. */
-:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark .styled-text-host {
-    display: none;
-}
-
-:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark .paper-wordmark-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
+    line-height: normal;
     color: var(--paper-text);
     font-family: var(--paper-font-family-rounded);
+}
+
+:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark-lettering {
+    display: none;
+}
+
+:root[data-paperui-theme="light"] .topbar-brand .paper-wordmark-plain {
+    display: inline;
 }
 
 .paperui-root .topbar {

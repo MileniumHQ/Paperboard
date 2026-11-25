@@ -67,8 +67,16 @@ function writeSnapshotPanel(): void {
         service: "./dist/service.js",
     }, null, 4)}\n`);
     fs.writeFileSync(path.join(dir, "dist", "index.html"), "<!doctype html><title>Snapshot</title>\n");
-    fs.writeFileSync(path.join(dir, "dist", "service.js"),
-        `process.send({ type: "paperboard:service-ready", panelId: process.env.PAPERBOARD_PANEL_ID });\nsetInterval(() => {}, 1 << 30);\n`);
+    // the service takes part in a backup as definePanelService's beforeBackup does: the daemon
+    // refuses to back up a service that doesn't, and this backup is all the panel's data
+    fs.writeFileSync(path.join(dir, "dist", "service.js"), [
+        `process.on("message", (m) => {`,
+        `    if (m?.type === "paperboard:before-backup") process.send({ type: "paperboard:before-backup-done", requestId: m.requestId, result: { paths: [], data: { snapshot: true } } });`,
+        `});`,
+        `process.send({ type: "paperboard:service-ready", panelId: process.env.PAPERBOARD_PANEL_ID, beforeBackup: true });`,
+        `setInterval(() => {}, 1 << 30);`,
+        ``,
+    ].join("\n"));
 }
 
 class Socket {
@@ -140,8 +148,8 @@ async function main(): Promise<void> {
     await host.call("ports:claim", { panelId: SNAPSHOT_PANEL, name: "game", label: "Game", protocol: "tcp", preferred: free });
 
     // the panel backs up to this computer's own folder, and has a backup there
-    const { destinations } = await host.call("backup:destinations");
-    await host.call("backup:panel-destination-set", { panelId: SNAPSHOT_PANEL, destinationId: destinations[0].id });
+    const { locations } = await host.call("backup:locations");
+    await host.call("backup:panel-location-set", { panelId: SNAPSHOT_PANEL, locationId: locations[0].id });
     await host.call("backup:create", { panelId: SNAPSHOT_PANEL, label: "Before the update" });
 
     // a supervised workload: its record stays when the daemon stops

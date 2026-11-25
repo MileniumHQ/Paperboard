@@ -17,7 +17,7 @@ app.innerHTML = `
 <section aria-labelledby="files-title">
     <h2 id="files-title">Files</h2>
     <label for="note">The note, saved as ${NOTE} in this panel's storage</label>
-    <textarea id="note"></textarea>
+    <textarea id="note" rows="4"></textarea>
     <div class="row">
         <button type="button" data-do="save">Save note</button>
         <button type="button" data-do="export">Export note…</button>
@@ -66,7 +66,7 @@ async function loadBackups() {
     try {
         const status = await backupApi.status(PANEL_ID);
         $("[data-out=location]").textContent = status.location
-            ? `Backups go to ${status.location.label} (${status.location.detail}).${status.running ? ` A backup is ${status.running === "create" ? "being made" : "being restored"}.` : ""}`
+            ? `Backups go to ${status.location.label} (${status.location.detail}).${status.progress ? ` A backup is ${status.progress.kind === "create" ? "being made" : "being restored"}.` : ""}`
             : "No backup location chosen yet.";
         list.replaceChildren();
         if (!status.location) return;

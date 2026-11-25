@@ -330,6 +330,6 @@ export function cs2Service(ctx: Server): GameService {
             yield settingPort({ name: "game", label: CS2.name, protocol: "tcp+udp", key: "port", fallback: CS2.defaultPort }, ctx.settings);
         },
         // the server keeps no world; its files copy as it runs
-        backup: { mode: "quiesce", before: async () => {}, recover: async () => {}, withConsistentData: (work) => work() },
+        backup: { mode: "quiesce", before: async () => {}, after: async () => {} },
     };
 }

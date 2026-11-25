@@ -94,11 +94,6 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         showComputer(compId);
     };
 
-    const addComputer = async (newComp: { id: string }) => {
-        await refreshComputers();
-        await selectComputer(newComp.id);
-    };
-
     // a failed forget rejects with why, and a computer that couldn't be told
     // answers why; the dialog stays open showing either
     const forgetComputer = async (compId: string, evenIfUntold: boolean): Promise<string | null> => {
@@ -133,5 +128,5 @@ export function useComputerSelection(options: ComputerSelectionOptions) {
         },
     ));
 
-    return { supersedeSelection, selectComputer, showComputer, connectComputer, switchError, reconnected, addComputer, forgetComputer };
+    return { supersedeSelection, selectComputer, showComputer, connectComputer, switchError, reconnected, forgetComputer };
 }

@@ -12,6 +12,7 @@ import { PANEL_ID } from "../src/servers";
 import { TRIGGER_IDS } from "../src/service/contract";
 import { playerPoller } from "../src/games/serviceKit";
 import { sendServerCommand, startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { backupHooks } from "../src/service/backups";
 import { argValue, rconPasswordRule } from "../src/games/rust/service";
 import { parseBanList, parseBansCfg, steamId } from "../src/games/rust/roster";
 import { parseInfo, parsePlayers, RustRcon, RustRconSilent, RustRconUnreachable } from "../src/games/rust/webrcon";
@@ -202,7 +203,7 @@ describe("Rust", () => {
         }
     });
 
-    test("a backup refused after Rust stopped for it starts Rust again and drops its resume marker", async () => {
+    test("a backup that stopped Rust for its copy starts Rust again afterwards and drops its resume marker", async () => {
         const server = await rustServer();
         await online(server);
         const marker = path.join(process.env.PAPERBOARD_DIR!, "files", PANEL_ID, ".rust-resume", server.server.id);
@@ -211,11 +212,102 @@ describe("Rust", () => {
         expect(await exit).toBe(0);
         expect(server.server.state.serverStatus).toBe("offline");
         expect(fs.existsSync(marker)).toBe(true);
-        // the panel's backup is refused (another server would not stop): this one is put back as it was
-        await server.server.game.backup.recover();
+        // the copy is done (or the backup refused): Rust carries on as it was
+        await server.server.game.backup.after();
         await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again");
         expect(fs.existsSync(marker)).toBe(false);
         await stop(server);
+    });
+
+    test("a backup or restore holds the server from its stop to its end: nothing starts in between, and it starts again at the end", async () => {
+        const server = await rustServer();
+        const hooks = backupHooks({
+            server: () => server.server,
+            servers: () => [server.server],
+            panelFolders: () => [],
+            saveSchedule: () => Promise.reject(new Error("no schedules here")),
+            replaceSettings: async (s, settings) => void (await s.updateSettings(() => settings)),
+            reload: (s) => s.game.initialize(false),
+        });
+        const refused = () => startServerInstance(server.server).then(() => null, (err: Error) => err.message);
+        const runs = () => server.server.state.serverEntries.filter((e) => String(e.content).startsWith("Command Line:")).length;
+
+        await online(server);
+        await hooks.beforeBackup(server.server.id);
+        // stopped for the copy, its last run cleaned up, and held
+        expect(server.server.state.serverStatus).toBe("offline");
+        expect(server.server.backupHold).toBe("backup");
+        expect(await refused()).toContain("being backed up");
+        await hooks.afterBackup(server.server.id);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again after the copy");
+        expect(server.server.backupHold).toBeNull();
+
+        await server.server.waitFor(() => runs() === 2, "the second run's command line");
+        await hooks.beforeRestore(server.server.id);
+        expect(server.server.state.serverStatus).toBe("offline");
+        expect(await refused()).toContain("being restored");
+        expect(server.server.state.serverStatus).toBe("offline");
+        const record = { format: 2 as const, id: "b", panelId: PANEL_ID, target: server.server.id, createdAt: new Date().toISOString(), size: 0, sha256: "", panelVersion: null, label: null, paths: [], exclude: [] };
+        await hooks.afterRestore({ target: server.server.id, backup: record, ok: true, data: { ...server.server.settings, hostname: "Restored" } });
+        // the restart is not lost: it starts again on the backup's settings
+        await server.server.waitFor((s) => s.serverStatus === "online", "Rust to start again after the restore");
+        expect(server.server.settings.hostname).toBe("Restored");
+        await server.server.waitFor(() => runs() === 3, "the restored run's command line");
+        await stop(server);
+
+        // a restore of a server that was not running leaves it stopped
+        await hooks.beforeRestore(server.server.id);
+        await hooks.afterRestore({ target: server.server.id, backup: record, ok: false, error: "the swap failed" });
+        expect(server.server.backupHold).toBeNull();
+        expect(server.server.state.serverStatus).toBe("offline");
+    });
+
+    test("a restore that begins while a start prepares waits for it, and the start doesn't launch into the swap", async () => {
+        const server = await rustServer();
+        const hooks = backupHooks({
+            server: () => server.server,
+            servers: () => [server.server],
+            panelFolders: () => [],
+            saveSchedule: () => Promise.reject(new Error("no schedules here")),
+            replaceSettings: async (s, settings) => void (await s.updateSettings(() => settings)),
+            reload: (s) => s.game.initialize(false),
+        });
+        // the start stops part way through its preparation, as an update before the launch would
+        const game = server.server.game;
+        const prepareLaunch = game.prepareLaunch.bind(game);
+        let reached!: () => void;
+        const inPreparation = new Promise<void>((resolve) => (reached = resolve));
+        let go!: () => void;
+        const gate = new Promise<void>((resolve) => (go = resolve));
+        game.prepareLaunch = async () => {
+            reached();
+            await gate;
+            return prepareLaunch();
+        };
+
+        const starting = startServerInstance(server.server).then(() => null, (err: Error) => err.message);
+        await inPreparation;
+        // a second start meanwhile is the same start, and fails with it
+        const again = startServerInstance(server.server).then(() => null, (err: Error) => err.message);
+        expect(server.server.state.serverStatus).toBe("offline");
+        let restoring = false;
+        const before = hooks.beforeRestore(server.server.id).then(() => (restoring = true));
+        await new Promise((resolve) => setTimeout(resolve, 50)); // quiet: time for a restore that does not wait to show it
+        // the restore holds the server, but doesn't swap while the start may still write its folder
+        expect(server.server.backupHold).toBe("restore");
+        expect(restoring).toBe(false);
+
+        go();
+        expect(await starting).toContain("being restored");
+        expect(await again).toContain("being restored");
+        await before;
+        expect(server.server.state.serverStatus).toBe("offline");
+        expect(await server.server.process.exists(game.primaryProcessId)).toBe(false);
+        const record = { format: 2 as const, id: "b", panelId: PANEL_ID, target: server.server.id, createdAt: new Date().toISOString(), size: 0, sha256: "", panelVersion: null, label: null, paths: [], exclude: [] };
+        await hooks.afterRestore({ target: server.server.id, backup: record, ok: false, error: "the swap failed" });
+        expect(server.server.backupHold).toBeNull();
+        expect(server.server.state.serverStatus).toBe("offline");
+
     });
 
     test("the remote console never names its address in an error, tells an unknown command from a lost connection, and fails what is waiting when the server goes", async () => {

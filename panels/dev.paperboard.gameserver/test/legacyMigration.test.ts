@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { backupApi, backupLocationsApi, processApi } from "@mileniumhq/paperapi";
+import { backupLocationsApi, processApi } from "@mileniumhq/paperapi";
 import { serverCalls } from "./helpers/serverCall";
 import { startTestDaemon, type TestDaemon } from "./helpers/crane";
 import { installFakeJava } from "./helpers/fakeJava";
@@ -45,10 +45,8 @@ afterAll(async () => {
 
 // Game Server keeps servers, history and backups through restarts and migration.
 describe("v1 migration", () => {
-    test("a v1 config becomes the legacy server first, keeping its settings, running process and backup schedule; its calls act on it", async () => {
-        // what the v1 service left: its server running under the bare process id, a backup schedule on the panel
-        await backupLocationsApi.setForPanel(PANEL_ID, "local");
-        await backupApi.setSchedule(PANEL_ID, { everyHours: 12, keep: 5 });
+    test("a v1 config becomes the legacy server first, keeping its settings and running process; its calls act on it", async () => {
+        // what the v1 service left: its server running under the bare process id
         const java = path.join(dataDir, "packages", javaPackageFor("1.21.1")!, "bin", process.platform === "win32" ? "java.exe" : "java");
         await processApi.start({ id: "mc-server", command: java, args: ["-jar", "server.jar", "nogui"], cwd: legacyDir });
         await waitForFile(path.join(legacyDir, "runs.log"), (text) => text.trim().length > 0, "the v1 server to start");
@@ -64,12 +62,27 @@ describe("v1 migration", () => {
         const legacy = await servicesState().waitFor(id, (s) => s.serverStatus === "online" && s.onlinePlayers.includes("carol"), "the legacy server online with its player");
         expect(legacy.ramAllocation).toBe(3);
         expect(runs()).toEqual([pid!]);
-        expect((await backupApi.forSource(PANEL_ID, id).status()).schedule).toMatchObject({ everyHours: 12, keep: 5 });
 
         // a call for the migrated server reaches the process it already ran
         await serverCalls(id).runCommand({ command: "say from its page" });
         await waitForFile(path.join(legacyDir, "commands.log"), (text) => text.includes("say from its page"), "the call to reach the server");
         expect(fs.readFileSync(path.join(legacyDir, "world", "level.dat"), "utf8")).toBe("the v1 world");
+
+
+        // its folder is the panel's whole storage: its backup leaves out the other servers and the panel's own folders, and so does its restore
+        await backupLocationsApi.setForPanel(PANEL_ID, "local");
+        const backup = await serverCalls(id).backUp({ label: "legacy" });
+        expect(backup).toMatchObject({ target: id, label: "legacy", paths: [""] });
+        expect(backup.exclude).toEqual(expect.arrayContaining([saved.serversDirectory, ".steam", ".minecraft-resume"]));
+        const beside = path.join(legacyDir, saved.serversDirectory, "s-other", "world", "level.dat");
+        fs.mkdirSync(path.dirname(beside), { recursive: true });
+        fs.writeFileSync(beside, "another server's world");
+        fs.writeFileSync(path.join(legacyDir, "world", "level.dat"), "changed since the backup");
+        await serverCalls(id).restoreBackup({ backupId: backup.id });
+        expect(fs.readFileSync(path.join(legacyDir, "world", "level.dat"), "utf8")).toBe("the v1 world");
+        expect(fs.readFileSync(beside, "utf8")).toBe("another server's world");
+        // it was running, so it runs again on the restored files
+        await servicesState().waitFor(id, (s) => s.serverStatus === "online" && runs().length === 2, "the legacy server to start again");
 
         await serverCalls(id).stopServer();
         await servicesState().waitFor(id, (s) => s.serverStatus === "offline", "the legacy server to stop");

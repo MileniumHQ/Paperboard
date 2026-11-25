@@ -187,7 +187,7 @@ export default function TroubleshootingDoc() {
 
             <PaperText preset="title" as="h3" id="choose-location-first">Choose where this panel's backups are kept first</PaperText>
             <PaperText preset="body" as="p">
-                Routine backups need a location. Select <b>Choose</b> next to <b>Kept in</b>, pick a location, and turn routine backups on again.
+                Backups need a location. Select <b>Choose</b> next to <b>Kept in</b>, pick a location, and make the backup again.
             </PaperText>
 
             <PaperText preset="title" as="h3" id="newer-backup">This backup was made by version</PaperText>

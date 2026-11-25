@@ -81,6 +81,7 @@ papercrane --host 127.0.0.1             # only accept this computer`}
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>--data-dir &lt;path&gt;</PaperCode></td><td><PaperCode>~/.paperboard</PaperCode>, or <PaperCode>PAPERBOARD_DIR</PaperCode></td><td>Which daemon to pair: the one running for this data directory.</td></tr>
+                    <tr><td><PaperCode>--json</PaperCode></td><td>off</td><td>Prints <PaperCode>{"{"}code, listen, fingerprint{"}"}</PaperCode> on one line (the code, the address the daemon listens on and its certificate&apos;s SHA-256 fingerprint), then <PaperCode>{"{"}paired{"}"}</PaperCode> with the computer&apos;s name once one pairs. Paperboard uses it to set a computer up over SSH. Pairing closes when stdin ends, as it does when the SSH connection closes, so keep stdin open while waiting (<PaperCode>&lt; /dev/null</PaperCode> closes it at once). Refuses a daemon that only listens on <PaperCode>127.0.0.1</PaperCode>.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">

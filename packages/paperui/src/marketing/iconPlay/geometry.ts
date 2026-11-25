@@ -1,7 +1,6 @@
 // Convex silhouettes from an icon's visible pixels, and contacts between
-// them: ported from paperdocs' icon playground (public/js/icon-geometry.mjs).
-// Samples are bounded by the caller; faint painted shadows stay outside the
-// physical shape.
+// them, for the icon playground. Samples are bounded by the caller; faint
+// painted shadows stay outside the physical shape.
 
 export interface Point {
     x: number;

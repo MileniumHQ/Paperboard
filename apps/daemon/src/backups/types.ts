@@ -1,24 +1,17 @@
 // Shapes shared by the backup service and its stores. A backup is one
-// gzipped tar of a panel's file storage and config document, plus a record
-// describing it. Stores keep the record beside the archive; the record is
-// read back as untrusted data and checked before anything is restored.
+// gzipped tar of files from a panel's storage (and the JSON the panel handed
+// over), plus a record describing it. Stores keep the record beside the
+// archive; the record is read back as untrusted data and checked before
+// anything is restored.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { BACKUP_LABEL_MAX } from "@mileniumhq/paperapi/protocol";
+import { isBackupPath, isBackupTarget, type BackupRecord } from "@mileniumhq/paperapi/backups";
 
-export interface BackupRecord {
-    format: 1;
-    id: string;
-    panelId: string;
-    sourceId?: string;
-    /** ISO timestamp */
-    createdAt: string;
-    /** archive bytes */
-    size: number;
-    /** archive sha256, hex */
-    sha256: string;
-    panelVersion: string | null;
-    label: string | null;
-}
+// the record and progress shapes are PaperAPI's: the daemon sends them as they are
+export type { BackupContents, BackupCopied, BackupProgress, BackupProgressChange, BackupRecord, BackupStep, RestoreEnded } from "@mileniumhq/paperapi/backups";
+
+/** a backup's paths: at most this many, so its record stays small */
+export const MAX_BACKUP_PATHS = 64;
 
 export interface BackupUsage {
     /** bytes Paperboard backups take at this location */
@@ -30,15 +23,18 @@ export interface BackupUsage {
 /** called with the bytes handled so far */
 export type BytesProgress = (done: number) => void;
 
-// the progress shapes are PaperAPI's: the daemon sends them as they are
-export type { BackupEnded, BackupProgress, BackupProgressChange, BackupStep } from "@mileniumhq/paperapi/backups";
+/** the folder (or key, or tag) a store files a panel target's backups under */
+export function targetFolder(target: string | null): string {
+    // a target id starts with a letter or digit, so this is never one
+    return target ?? "_panel";
+}
 
 export interface BackupStore {
     /** proves the location is reachable with its credentials */
     check(): Promise<void>;
     usage(): Promise<BackupUsage>;
-    /** newest first, at most MAX_LISTED_BACKUPS */
-    list(panelId: string): Promise<BackupRecord[]>;
+    /** the target's backups, newest first, at most MAX_LISTED_BACKUPS */
+    list(panelId: string, target: string | null): Promise<BackupRecord[]>;
     /** onProgress hears the archive bytes sent so far */
     put(record: BackupRecord, archivePath: string, onProgress?: BytesProgress): Promise<void>;
     /** writes the archive to destPath; onProgress hears the bytes received so far */
@@ -77,29 +73,58 @@ export function newBackupId(now = new Date(), random = Math.floor(Math.random() 
     return `${stamp}-${random.toString(16).padStart(6, "0").slice(-6)}`;
 }
 
+/**
+ * Why a backup's paths and excludes can't be swapped safely; null when they
+ * can. A restore swaps each path whole and moves each exclude back, so: no
+ * path repeats or holds another, and each exclude sits strictly under one
+ * path and inside no other exclude. What a panel names and what a store's
+ * record says are both checked by it.
+ */
+export function backupPathsProblem(paths: unknown, exclude: unknown): string | null {
+    const list = (value: unknown, name: string): string | null => {
+        if (!Array.isArray(value) || value.length > MAX_BACKUP_PATHS) return `${name} must list at most ${MAX_BACKUP_PATHS} paths`;
+        const bad = value.find((entry) => !isBackupPath(entry));
+        if (bad !== undefined) return `${JSON.stringify(bad)} in ${name} is not a path in the panel's storage`;
+        if (new Set(value).size !== value.length) return `${name} lists a path twice`;
+        return null;
+    };
+    const problem = list(paths, "paths") ?? list(exclude, "exclude");
+    if (problem) return problem;
+    const inside = (child: string, parent: string) => child !== parent && (parent === "" || child.startsWith(`${parent}/`));
+    const named = paths as string[];
+    const left = exclude as string[];
+    for (const a of named) for (const b of named) if (inside(a, b)) return `${a} is inside ${b === "" ? "the whole storage" : b}, which it also names`;
+    for (const e of left) if (e === "" || !named.some((p) => inside(e, p))) return `${JSON.stringify(e)} in exclude is not under one of its paths`;
+    for (const a of left) for (const b of left) if (inside(a, b)) return `${a} in exclude is inside ${b}, which it also leaves out`;
+    return null;
+}
+
 /** a record read back from a store; null when it is not one of ours */
 export function parseBackupRecord(raw: unknown): BackupRecord | null {
     if (!raw || typeof raw !== "object") return null;
     const r = raw as Record<string, unknown>;
-    if (r.format !== 1) return null;
-    if (r.sourceId !== undefined && (typeof r.sourceId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(r.sourceId))) return null;
+    if (r.format !== 2) return null;
     if (typeof r.id !== "string" || !BACKUP_ID_RE.test(r.id)) return null;
     if (!isPanelId(r.panelId)) return null;
+    if (r.target !== null && !isBackupTarget(r.target)) return null;
     if (typeof r.createdAt !== "string" || Number.isNaN(Date.parse(r.createdAt))) return null;
     if (typeof r.size !== "number" || !Number.isSafeInteger(r.size) || r.size < 0 || r.size > BACKUP_ARCHIVE_MAX_BYTES) return null;
     if (typeof r.sha256 !== "string" || !SHA256_RE.test(r.sha256)) return null;
     if (r.panelVersion !== null && (typeof r.panelVersion !== "string" || r.panelVersion.length > 64)) return null;
     if (r.label !== null && (typeof r.label !== "string" || r.label.length > BACKUP_LABEL_MAX)) return null;
+    if (backupPathsProblem(r.paths, r.exclude) !== null) return null;
     return {
-        format: 1,
+        format: 2,
         id: r.id,
         panelId: r.panelId,
-        ...(typeof r.sourceId === "string" ? { sourceId: r.sourceId } : {}),
+        target: r.target,
         createdAt: r.createdAt,
         size: r.size,
         sha256: r.sha256,
         panelVersion: r.panelVersion as string | null,
         label: r.label as string | null,
+        paths: [...(r.paths as string[])],
+        exclude: [...(r.exclude as string[])],
     };
 }
 

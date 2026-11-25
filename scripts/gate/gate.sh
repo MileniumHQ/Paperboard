@@ -14,9 +14,10 @@
 #   section names, and the house rules that kept coming back (a catch that
 #   only logs, an effect without on(), <For> fed fresh rows, fixed sleeps in
 #   tests).
-#   paperboard, library and the panels also run an advisory styling
-#   check (scripts/gate/check-app-styling.sh): literal sizes, colors, motion,
-#   z-index and the like that have a PaperUI token. It warns, never fails.
+#   paperboard, library, issues, the panels and the create-panel template run
+#   the styling check (scripts/gate/check-app-styling.sh): literal sizes,
+#   colors, motion, z-index and the like that have a PaperUI token, and
+#   var(--paper-...) written by hand in TSX.
 #     create-panel   panel scaffolder: build, tests
 #     release        @mileniumhq/release (release key, signed messages, package
 #                    recipes, version order): typecheck, tests
@@ -166,17 +167,6 @@ gstep() {
     fi
 }
 
-# gwarn <target> <desc> <cmd...>: like gstep, but advisory. The command's
-# output is shown and a nonzero exit is reported, but never fails the gate.
-gwarn() {
-    local target="$1" desc="$2"
-    shift 2
-    if want "$target"; then
-        echo "--- gate (advisory): $desc"
-        "$@" || echo "warn: $desc exited nonzero (advisory, not failing the gate)" >&2
-    fi
-}
-
 # ── shared library artifacts ─────────────────────────────────────────────────
 # Test current shared artifacts, never whatever an earlier developer built.
 # CI may restore a library's dist from a cache keyed by every file in the
@@ -223,7 +213,7 @@ gstep paperboard "paperboard typecheck:tests" run_in "$ROOT/apps/paperboard" bun
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun run test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 gstep paperboard "paperboard code check" run_in "$ROOT" bun scripts/gate/check-solid.ts apps/paperboard/src apps/paperboard/tests apps/paperboard/scripts
-gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" apps/paperboard
+gstep paperboard "paperboard styling" bash "$ROOT/scripts/gate/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: typecheck, publisher release-math proofs, the browser
 # test drivers, code check. The compiler is packages/paperui's, the
@@ -246,6 +236,7 @@ gstep paperui "paperui code check" run_in "$ROOT" bun scripts/gate/check-solid.t
 gstep create-panel "create-panel typecheck:tests" run_in "$ROOT/packages/create-panel" bun run typecheck:tests
 gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
 gstep create-panel "create-panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts packages/create-panel/src packages/create-panel/bin packages/create-panel/test packages/create-panel/template
+gstep create-panel "create-panel template styling" bash "$ROOT/scripts/gate/check-app-styling.sh" packages/create-panel/template
 gstep release "release typecheck" run_in "$ROOT/packages/release" bunx tsc --noEmit
 gstep release "release typecheck:tests" run_in "$ROOT/packages/release" bun run typecheck:tests
 gstep release "release tests" run_in "$ROOT/packages/release" bun run test
@@ -277,14 +268,14 @@ gstep issues "issues typecheck" run_in "$ROOT/services/issues" bun run typecheck
 gstep issues "issues build" run_in "$ROOT/services/issues" bun run build
 gstep issues "issues tests" run_in "$ROOT/services/issues" bun run test
 gstep issues "issues code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/issues/src services/issues/test
-gwarn issues "issues styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/issues
+gstep issues "issues styling" bash "$ROOT/scripts/gate/check-app-styling.sh" services/issues
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────
 gstep library "library tests" run_in "$ROOT/services/library" bun run test
 gstep library "library build" run_in "$ROOT/services/library" bun run build
 gstep library "library code check" run_in "$ROOT" bun scripts/gate/check-solid.ts services/library/src services/library/test
-gwarn library "library styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" services/library
+gstep library "library styling" bash "$ROOT/scripts/gate/check-app-styling.sh" services/library
 
 # ── first-party panels: suite, typecheck, production build, store listing,
 # code check.
@@ -299,7 +290,7 @@ for short in agents blocks botcreator drive gameserver terminal; do
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel store listing" run_in "$ROOT" bun scripts/gate/check-store-listing.ts "$panel"
     gstep "$short" "$panel code check" run_in "$ROOT" bun scripts/gate/check-solid.ts "$panel"
-    gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
+    gstep "$short" "$panel styling" bash "$ROOT/scripts/gate/check-app-styling.sh" "$panel"
 done
 
 # ── cross-platform suites: what depends on the OS or CPU (booting and

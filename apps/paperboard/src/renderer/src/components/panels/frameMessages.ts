@@ -15,7 +15,6 @@ import type { BackupLocationChoice } from "../backups/BackupLocationChooser";
 
 /** the backup location window a document asked for, answered with `answer` */
 export interface ChooserRequest {
-    sourceId?: string;
     answer: (result: BackupLocationChoice) => void;
 }
 
@@ -95,7 +94,7 @@ export function createFrameDocument(options: FrameDocumentOptions) {
                 if (!request) return;
                 const answer = (result: BackupLocationChoice) => post(target, { type: BACKUP_LOCATION_RESULT, requestId: request.requestId, result });
                 if (request.refused) answer({ status: "failed", message: request.refused });
-                else options.onChooseLocation({ sourceId: request.sourceId, answer });
+                else options.onChooseLocation({ answer });
                 return;
             }
             case LOOPBACK_REDIRECT_REQUEST:
