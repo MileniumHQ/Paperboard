@@ -1,7 +1,8 @@
-// Moves one file between a panel's storage on a computer's daemon and the
-// disk of the machine running the shell. The daemon's /panel-files route
-// owns the path check; this module owns the local side: the dialog result
-// and a save that never leaves a half-written file at the chosen path.
+// Moves one file between a panel's storage (or, given an absolute path, any
+// file) on a computer's daemon and the disk of the machine running the shell.
+// The daemon's /panel-files route owns the path check; this module owns the
+// local side: the dialog result and a save that never leaves a half-written
+// file at the chosen path.
 // No Electron imports: Electron main and the browser-mode host share it,
 // each passing the daemon endpoint lookup (panelFileEndpoint.ts).
 import * as fs from "fs";
@@ -15,6 +16,7 @@ import { pinnedTlsOptions } from "daemon/security/pinnedTls";
 import { logger } from "daemon/core/logger";
 import {
     failedResult,
+    isHostPath,
     isImportableName,
     parsePanelFileTransferRequest,
     PanelFileTransferError,
@@ -45,6 +47,8 @@ export interface PanelFileTransferDeps {
 }
 
 function filePath(req: PanelFileTransferRequest): string {
+    // an absolute path rides in the query: its spelling is the computer's, and a URL path would normalize it
+    if (isHostPath(req.path)) return `/panel-files/${encodeURIComponent(req.panelId)}?path=${encodeURIComponent(req.path)}`;
     const segments = req.path.replace(/^[/\\]+/, "").split("/").map(encodeURIComponent);
     return `/panel-files/${encodeURIComponent(req.panelId)}/${segments.join("/")}`;
 }

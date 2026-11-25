@@ -77,6 +77,22 @@ describe("panel file export and import", () => {
 		expect(fs.readdirSync(path.dirname(dest))).toEqual(["world.dat"]);
 	});
 
+	test("export and import reach a file anywhere on the computer by its absolute path", async () => {
+		const outside = tempDir();
+		const content = bytes(50_000, 3);
+		fs.writeFileSync(path.join(outside, "photo.jpg"), content);
+		const dest = path.join(tempDir(), "photo.jpg");
+		const exported = await runPanelExport({ computerId: "local", panelId: PANEL, path: path.join(outside, "photo.jpg") }, deps({ save: dest }));
+		expect(exported).toEqual({ status: "exported", name: "photo.jpg", bytes: content.length });
+		expect(fs.readFileSync(dest).equals(content)).toBe(true);
+
+		const source = path.join(tempDir(), "notes.txt");
+		fs.writeFileSync(source, "picked");
+		const imported = await runPanelImport({ computerId: "local", panelId: PANEL, path: path.join(outside, "notes.txt") }, deps({ open: source }));
+		expect(imported).toEqual({ status: "imported", name: "notes.txt", bytes: 6 });
+		expect(fs.readFileSync(path.join(outside, "notes.txt"), "utf8")).toBe("picked");
+	});
+
 	test("a canceled export and a transfer cut off midway leave the chosen file as it was", async () => {
 		fs.writeFileSync(path.join(storage, "big.dat"), bytes(300_000, 3));
 		const dir = tempDir();

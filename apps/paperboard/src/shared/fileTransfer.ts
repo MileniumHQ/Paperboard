@@ -21,7 +21,7 @@ export interface ImportedPanelFile {
 export interface PanelFileTransferRequest {
     computerId: string;
     panelId: string;
-    /** a path in the panel's own file storage on that computer */
+    /** a path in the panel's own file storage on that computer, or an absolute path anywhere on it (isHostPath) */
     path: string;
     /** import only */
     selection: PanelImportSelection;
@@ -48,6 +48,15 @@ export class PanelFileTransferError extends Error {
 }
 
 export const PANEL_FILE_PATH_MAX = 1024;
+
+/**
+ * Whether a transfer's path is absolute: a file anywhere on the panel's
+ * computer rather than in its storage. Read here for any computer's system,
+ * which can differ from this one's: "/home/x", "C:\\x", "\\\\server\\share".
+ */
+export function isHostPath(p: string): boolean {
+    return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
+}
 
 /** A name from the user's disk that may become one path segment in a panel's storage. */
 export function isImportableName(name: string): boolean {
@@ -97,7 +106,7 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
     if (typeof computerId !== "string" || !computerId || computerId.length > 128) invalid("Invalid computer id");
     if (!isPanelId(panelId)) invalid("Invalid panel id");
     if (typeof path !== "string" || !path.trim() || path.length > PANEL_FILE_PATH_MAX || path.includes("\0")) {
-        invalid(`path must be a file path in the panel's storage, at most ${PANEL_FILE_PATH_MAX} characters`);
+        invalid(`path must be a file path in the panel's storage or an absolute one, at most ${PANEL_FILE_PATH_MAX} characters`);
     }
     if (selection !== "file" && selection !== "files" && selection !== "folder") invalid("selection must be file, files or folder");
     if (

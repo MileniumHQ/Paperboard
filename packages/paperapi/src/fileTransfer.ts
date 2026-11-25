@@ -59,6 +59,9 @@ export class FileTransferError extends Error {
     }
 }
 
+// Every path below is in the panel's storage, or, when it's absolute ("/…",
+// "C:\\…"), anywhere on the panel's computer: a panel that shows files outside
+// its storage (Drive's disks and linked folders) saves and opens them the same way.
 function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Promise<T> {
     const selection = fields.selection;
     return requestShell<T>({
@@ -79,8 +82,8 @@ function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Pro
 }
 
 /**
- * Asks the user where to save a copy of a file from the panel's storage.
- * Resolves with what the user chose; throws FileTransferError when the
+ * Asks the user where to save a copy of a file from the panel's storage,
+ * or from anywhere on its computer given an absolute path. Resolves with what the user chose; throws FileTransferError when the
  * copy failed.
  */
 export function exportFile(sourcePath: string, appId: string, options: ExportFileOptions = {}): Promise<ExportFileResult> {

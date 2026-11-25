@@ -128,6 +128,7 @@ interface ImportedFile {
             </PaperCode>
             <PaperText preset="body" as="p">
                 The shell opens the system dialog and copies the file. The panel names only the path in its own folder, and never learns where the person picked or saved.
+                An absolute path, such as <PaperCode>/media/usb/photo.jpg</PaperCode> or <PaperCode>C:\Users\You\Pictures</PaperCode>, names a file anywhere on the panel's computer instead, for a panel that shows files outside its folder.
                 A canceled dialog resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode>; it is not an error.
             </PaperText>
             <PaperTable>
