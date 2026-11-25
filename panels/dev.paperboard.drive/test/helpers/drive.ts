@@ -23,7 +23,7 @@ export async function openDrive(): Promise<TestDrive> {
     const temp = path.join(dir, ".uploads");
     const outside = path.join(dir, "outside");
     fs.mkdirSync(outside);
-    const drive = new Drive(root, temp);
+    const drive = new Drive(root, { uploads: temp });
     await drive.open();
     // a hook registered here at the top would run for the first test file only
     onTestFinished(async () => {

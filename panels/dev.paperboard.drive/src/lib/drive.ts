@@ -3,10 +3,17 @@
 // checked here before it touches the disk: no "..", no absolute paths, no
 // odd names, and nothing that resolves outside the drive through a link.
 //
-// Uploads arrive in pieces into a hidden folder beside the drive, so a
-// half-sent file is never in the drive, and land under their name only once
-// whole, beside any file already called that ("photo 2.jpg"). That folder is
+// A drive is one root: Drive's own folder in the panel's data, a folder
+// linked from this computer, or a plugged-in disk. Only Drive's own folder
+// is made when it's missing; a linked one that's gone stays gone.
+//
+// Uploads arrive in pieces and land under their name only once whole, beside
+// any file already called that ("photo 2.jpg"), so a half-sent file is never
+// in the drive. Drive's own folder keeps them in a hidden folder beside it,
 // emptied when the service starts: what is in it then was left by a stop.
+// Any other root keeps them as hidden parts in the folder they go to (on
+// the same disk, so landing is a rename); a list never shows them, and
+// clears the ones nothing has sent to for a while.
 
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -22,6 +29,9 @@ export const UPLOAD_IDLE_MS = 10 * 60_000;
 export const UPLOADS_AT_ONCE = 32;
 /** The most text a block reads from a file. */
 export const TEXT_READ_BYTES = 4 * 1024 * 1024;
+/** What an upload's part in the folder it goes to is called before its id. */
+export const PART_PREFIX = ".paperboard-upload-";
+const PART_SUFFIX = ".part";
 
 interface Upload {
     folder: string;
@@ -76,25 +86,58 @@ export function numberedName(name: string, n: number): string {
     return dot > 0 ? `${name.slice(0, dot)} ${n}${name.slice(dot)}` : `${name} ${n}`;
 }
 
+/** How much a disk holds, in bytes. */
+export interface Space {
+    free: number;
+    total: number;
+}
+
+export interface DriveOptions {
+    /**
+     * A folder of its own beside the root, on the same disk, where uploads
+     * are written until they're whole. With it the root is made when it's
+     * missing (Drive's own folder); without it the root must be there, and
+     * uploads wait as hidden parts in the folder they go to.
+     */
+    uploads?: string;
+}
+
+const isPart = (name: string) => name.startsWith(PART_PREFIX) && name.endsWith(PART_SUFFIX);
+
 export class Drive {
     private uploads = new Map<string, Upload>();
     private realRoot = "";
+    private readonly temp: string | null;
 
-    /**
-     * `root`: the drive's folder; `temp`: a folder of its own beside it, on
-     * the same disk, where uploads are written until they're whole.
-     */
     constructor(
         readonly root: string,
-        private readonly temp: string,
-    ) {}
+        options: DriveOptions = {},
+    ) {
+        this.temp = options.uploads ?? null;
+    }
 
-    /** Makes the drive's folders, and drops what uploads a stop left behind. */
+    /** Opens the root (making Drive's own), and drops what uploads a stop left behind. */
     async open(): Promise<void> {
-        await fs.promises.mkdir(this.root, { recursive: true });
+        if (this.temp !== null) {
+            await fs.promises.mkdir(this.root, { recursive: true });
+        } else {
+            const st = await fs.promises.stat(this.root).catch((err: unknown) => {
+                if (isMissing(err)) throw new Error(`“${this.root}” isn't there.`);
+                throw err;
+            });
+            if (!st.isDirectory()) throw new Error(`“${this.root}” isn't a folder.`);
+        }
         this.realRoot = await fs.promises.realpath(this.root);
-        await fs.promises.rm(this.temp, { recursive: true, force: true });
-        await fs.promises.mkdir(this.temp, { recursive: true });
+        if (this.temp !== null) {
+            await fs.promises.rm(this.temp, { recursive: true, force: true });
+            await fs.promises.mkdir(this.temp, { recursive: true });
+        }
+    }
+
+    /** How full the root's disk is. */
+    async space(): Promise<Space> {
+        const st = await fs.promises.statfs(this.root);
+        return { free: st.bavail * st.bsize, total: st.blocks * st.bsize };
     }
 
     /** Ends every upload under way, removing what they wrote. */
@@ -159,6 +202,10 @@ export class Drive {
         const names = await fs.promises.readdir(full);
         const entries = await Promise.all(
             names.map(async (name): Promise<DriveEntry | null> => {
+                if (this.temp === null && isPart(name)) {
+                    await this.sweepPart(path.join(full, name));
+                    return null;
+                }
                 // a name no path can carry (one with a "\\" or a newline, made outside the drive) can't be opened or changed here
                 if (nameProblem(name)) return null;
                 const rel = joinPath(folder as string, name);
@@ -176,6 +223,16 @@ export class Drive {
             }),
         );
         return entries.filter((e): e is DriveEntry => e !== null);
+    }
+
+    /** An upload's part that no upload here owns and nothing has written to for a while was left by a stop: it goes. */
+    private async sweepPart(part: string): Promise<void> {
+        if ([...this.uploads.values()].some((u) => u.part === part)) return;
+        const st = await fs.promises.lstat(part).catch((err: unknown) => {
+            if (isMissing(err)) return null;
+            throw err;
+        });
+        if (st?.isFile() && Date.now() - st.mtimeMs > UPLOAD_IDLE_MS) await fs.promises.rm(part, { force: true });
     }
 
     async stat(rel: unknown): Promise<DriveEntry> {
@@ -295,12 +352,13 @@ export class Drive {
         const clean = checkName(name);
         if (typeof size !== "number" || !Number.isSafeInteger(size) || size < 0) throw new Error("That's not a file's size.");
         if (this.uploads.size >= UPLOADS_AT_ONCE) throw new Error("That's a lot of files at once: wait for these to finish.");
-        await this.folder(folder);
-        const free = await fs.promises.statfs(this.temp);
+        const into = await this.folder(folder);
+        const partDir = this.temp ?? into;
+        const free = await fs.promises.statfs(partDir);
         const room = free.bavail * free.bsize;
         if (size > room) throw new Error(`There isn't room for “${clean}”: it needs ${size} bytes, and the disk has ${room} free.`);
         const id = randomBytes(12).toString("hex");
-        const part = path.join(this.temp, `${id}.part`);
+        const part = path.join(partDir, this.temp === null ? `${PART_PREFIX}${id}${PART_SUFFIX}` : `${id}${PART_SUFFIX}`);
         const handle = await fs.promises.open(part, "wx");
         this.uploads.set(id, { folder: folder as string, name: clean, size, written: 0, part, handle, idle: this.idleTimer(id), busy: Promise.resolve() });
         return { id };
@@ -369,7 +427,7 @@ export class Drive {
 
     private idleTimer(id: string) {
         const timer = setTimeout(() => {
-            // quiet: no one waits on an upload left idle; a part this can't remove is removed when the service next starts
+            // quiet: no one waits on an upload left idle; a part this can't remove goes when the service next starts, or with a later list of its folder
             this.drop(id).catch((err) => console.error(`[drive] an idle upload's part couldn't be removed:`, err));
         }, UPLOAD_IDLE_MS);
         timer.unref?.();

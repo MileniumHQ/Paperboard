@@ -1,11 +1,12 @@
-// Uploads arrive in pieces into a hidden folder beside the drive, land under
-// their name only once whole, and leave nothing behind when they stop.
+// Uploads arrive in pieces into a hidden folder beside the drive (or, in a
+// linked folder or disk, a hidden part where they go), land under their name
+// only once whole, and leave nothing behind when they stop.
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CHUNK_BYTES } from "../src/lib/contract";
-import { Drive, numberedName } from "../src/lib/drive";
+import { Drive, numberedName, PART_PREFIX, UPLOAD_IDLE_MS } from "../src/lib/drive";
 import { openDrive } from "./helpers/drive";
 
 async function send(drive: Drive, folder: string, name: string, data: Buffer) {
@@ -93,7 +94,7 @@ describe("uploads", () => {
         await drive.uploadPut(id, 0, Buffer.alloc(50));
         expect(fs.readdirSync(temp)).toHaveLength(1);
         // the next service start, over the same folders
-        const next = new Drive(root, temp);
+        const next = new Drive(root, { uploads: temp });
         await next.open();
         expect(fs.readdirSync(temp)).toEqual([]);
         expect(await next.list("")).toEqual([]);
@@ -135,5 +136,55 @@ describe("uploads", () => {
         await drive.delete(["Gone"]);
         await expect(drive.uploadFinish(id)).rejects.toThrow("isn't in the drive");
         expect(fs.readdirSync(temp)).toEqual([]);
+    });
+
+    test("in a linked folder, a part waits hidden where it goes, and lands there whole", async () => {
+        const { outside } = await openDrive();
+        fs.mkdirSync(path.join(outside, "Photos"));
+        const linked = new Drive(outside);
+        await linked.open();
+        const data = randomBytes(CHUNK_BYTES + 10);
+        const { id } = await linked.uploadBegin("Photos", "beach.jpg", data.length);
+        await linked.uploadPut(id, 0, data.subarray(0, CHUNK_BYTES));
+        // the part is on the same disk as where it goes, and no list shows it
+        const parts = fs.readdirSync(path.join(outside, "Photos"));
+        expect(parts).toHaveLength(1);
+        expect(parts[0].startsWith(PART_PREFIX)).toBe(true);
+        expect(await linked.list("Photos")).toEqual([]);
+        await linked.uploadPut(id, CHUNK_BYTES, data.subarray(CHUNK_BYTES));
+        expect((await linked.uploadFinish(id)).path).toBe("Photos/beach.jpg");
+        expect(fs.readdirSync(path.join(outside, "Photos"))).toEqual(["beach.jpg"]);
+        expect(fs.readFileSync(path.join(outside, "Photos/beach.jpg")).equals(data)).toBe(true);
+        await linked.close();
+    });
+
+    test("in a linked folder, a part a stop left goes once it has sat a while, and a live one stays", async () => {
+        const { outside } = await openDrive();
+        const linked = new Drive(outside);
+        await linked.open();
+        const stale = path.join(outside, `${PART_PREFIX}old.part`);
+        fs.writeFileSync(stale, "half");
+        const old = (Date.now() - UPLOAD_IDLE_MS - 1000) / 1000;
+        fs.utimesSync(stale, old, old);
+        const fresh = path.join(outside, `${PART_PREFIX}new.part`);
+        fs.writeFileSync(fresh, "half");
+        const { id } = await linked.uploadBegin("", "live.bin", 10);
+        await linked.uploadPut(id, 0, Buffer.alloc(5));
+        expect(await linked.list("")).toEqual([]);
+        // a part someone else may still be writing (another window's upload) is left alone until it's old
+        expect(fs.existsSync(stale)).toBe(false);
+        expect(fs.existsSync(fresh)).toBe(true);
+        await linked.uploadCancel(id);
+        expect(fs.readdirSync(outside).sort()).toEqual([`${PART_PREFIX}new.part`]);
+        await linked.close();
+    });
+
+    test("a linked folder that isn't there won't open, and is never made", async () => {
+        const { outside } = await openDrive();
+        const gone = path.join(outside, "Gone");
+        await expect(new Drive(gone).open()).rejects.toThrow("isn't there");
+        expect(fs.existsSync(gone)).toBe(false);
+        fs.writeFileSync(gone, "a file");
+        await expect(new Drive(gone).open()).rejects.toThrow("isn't a folder");
     });
 });
