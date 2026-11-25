@@ -1,6 +1,7 @@
 // The save and open dialogs a panel asks the shell for. The shell fills in
 // computerId and panelId from the frame that asked; the panel only names a
-// path in its own file storage and how the dialog should look. Electron
+// path (in its own file storage, or for an export onComputer, anywhere on
+// that computer) and how the dialog should look. Electron
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";

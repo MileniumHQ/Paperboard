@@ -1,7 +1,9 @@
 // Exporting and importing files: an export copies a file out of the panel's
-// storage to where the user chooses, an import copies a file the user picks
-// into it. The shell owns the picker window; the panel names only a path in
-// its own storage. The panel frame asks its shell through requestShell.
+// storage (or, with onComputer, any file on its computer) to where the user
+// chooses, an import copies a file the user picks into the panel's storage.
+// The shell owns the picker window; the panel names only the path, never
+// learning where the user saved or picked. The panel frame asks its shell
+// through requestShell.
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
 
