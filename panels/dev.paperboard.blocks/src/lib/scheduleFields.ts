@@ -37,7 +37,8 @@ export function showNextRun(block: Blockly.Block, text: string | null): void {
 /** "Next run today at 04:00", as a schedule hat says it, in the viewer's own time. */
 export function nextRunText(at: number, now = Date.now()): string {
     const date = new Date(at);
-    const time = date.toLocaleTimeString(undefined, { timeStyle: "short" });
+    // a schedule seconds apart says its seconds; one on the minute doesn't
+    const time = date.toLocaleTimeString(undefined, { timeStyle: date.getSeconds() ? "medium" : "short" });
     if (at <= now) return "Runs any moment now";
     const midnight = new Date(now);
     midnight.setHours(0, 0, 0, 0);
