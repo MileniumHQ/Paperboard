@@ -49,6 +49,34 @@ export const PRESETS: Record<PaperTextPreset, { size: number; weight: number }> 
     caption: { size: 1, weight: 500 },
 };
 
+/** what sets a text's inline style; PaperTextList gives its own to its items */
+type TextLook = Pick<PaperTextProps, "preset" | "size" | "weight" | "color" | "breakWord" | "truncate" | "style">;
+
+/** A text's inline style: its weight, size and colour, and how it wraps or truncates; `own` is the element's own. */
+export function textStyle(look: TextLook, defaultSize: number, own: JSX.CSSProperties = {}): JSX.CSSProperties | string {
+    const preset = look.preset ? PRESETS[look.preset] : undefined;
+    const extra: JSX.CSSProperties = {};
+    if (look.breakWord) {
+        extra["word-break"] = "break-word";
+        extra["overflow-wrap"] = "break-word";
+    }
+    if (typeof look.truncate === "number" && look.truncate > 1) {
+        Object.assign(extra, { display: "-webkit-box", "-webkit-line-clamp": look.truncate, "-webkit-box-orient": "vertical", overflow: "hidden", "text-overflow": "ellipsis" });
+    } else if (look.truncate) {
+        Object.assign(extra, { overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" });
+    }
+    return mergeStyle(
+        {
+            "font-weight": look.weight ?? preset?.weight ?? 400,
+            "font-size": getVarCss(`text-size-${look.size ?? preset?.size ?? defaultSize}`),
+            color: resolveColor(look.color),
+            ...own,
+            ...extra,
+        },
+        look.style,
+    );
+}
+
 export function PaperText(props: PaperTextProps) {
     const [local, rest] = splitProps(props, [
         "weight",
@@ -85,15 +113,6 @@ export function PaperText(props: PaperTextProps) {
         resetTimer = setTimeout(() => setCopied("idle"), 2000);
     };
 
-    const presetValues = () =>
-        local.preset ? PRESETS[local.preset] : undefined;
-    const effectiveSize = () => local.size ?? presetValues()?.size ?? 4;
-    const effectiveWeight = () => local.weight ?? presetValues()?.weight ?? 400;
-
-    const fontSizeVar = () => getVarCss(`text-size-${effectiveSize()}`);
-
-    const resolvedColor = () => resolveColor(local.color);
-
     const className = () =>
         cx(
             styles.PaperText,
@@ -106,39 +125,6 @@ export function PaperText(props: PaperTextProps) {
             local.class,
         );
 
-    const dynamicStyle = () => {
-        const extra: JSX.CSSProperties = {};
-
-        if (local.breakWord) {
-            extra["word-break"] = "break-word";
-            extra["overflow-wrap"] = "break-word";
-        }
-
-        if (local.truncate) {
-            if (typeof local.truncate === "number" && local.truncate > 1) {
-                extra.display = "-webkit-box";
-                extra["-webkit-line-clamp"] = local.truncate;
-                extra["-webkit-box-orient"] = "vertical";
-                extra.overflow = "hidden";
-                extra["text-overflow"] = "ellipsis";
-            } else {
-                extra.overflow = "hidden";
-                extra["text-overflow"] = "ellipsis";
-                extra["white-space"] = "nowrap";
-            }
-        }
-
-        return mergeStyle(
-            {
-                "font-weight": effectiveWeight(),
-                "font-size": fontSizeVar(),
-                color: resolvedColor(),
-                ...extra,
-            },
-            local.style,
-        );
-    };
-
     return (
         <Dynamic
             component={local.as || "span"}
@@ -146,7 +132,7 @@ export function PaperText(props: PaperTextProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={dynamicStyle()}
+            style={textStyle(local, 4)}
         >
             {local.children}
             <Show when={rest.id}>
