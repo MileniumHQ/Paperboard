@@ -56,7 +56,7 @@ export interface WorldsGame<W extends WorldEntry> {
     download(world: W, warn: (outcome: Outcome) => void): Promise<unknown>;
     switchTo(world: W): Promise<unknown>;
     remove(world: W): Promise<unknown>;
-    /** what deleting moves to the trash */
+    /** what deleting moves to the trash, and what the next start plays when it is the active world */
     deleteNote(world: W): JSX.Element;
     /** every name a new world cannot take */
     takenNames(worlds: readonly W[]): string[];
@@ -432,12 +432,7 @@ export default function WorldsPage<W extends WorldEntry>(props: { list: () => Pr
             >
                 <Show when={shown()}>
                     {(world) => (
-                        <PaperText preset="body">
-                            {props.game.deleteNote(world())}
-                            <Show when={world().active}>
-                                {" "}This is the active world. The server will generate a fresh one on the next start.
-                            </Show>
-                        </PaperText>
+                        <PaperText preset="body">{props.game.deleteNote(world())}</PaperText>
                     )}
                 </Show>
             </PaperModal>

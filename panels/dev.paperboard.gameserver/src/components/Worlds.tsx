@@ -74,7 +74,7 @@ export default function Worlds() {
                 switchTo: (world) => calls.setActiveWorld({ levelName: world.name, createOnly: false }),
                 remove: (world) => calls.deleteWorld({ levelName: world.name }),
                 deleteNote: (world) =>
-                    `This moves the overworld${world.hasNether ? ", nether" : ""}${world.hasEnd ? " and end" : ""} directories of "${world.name}" to trash, including all builds and items in them.`,
+                    `This moves the overworld${world.hasNether ? ", nether" : ""}${world.hasEnd ? " and end" : ""} directories of "${world.name}" to trash, including all builds and items in them.${world.active ? " This is the active world. The server will generate a fresh one on the next start." : ""}`,
                 // a world's Nether and End are folders of their own beside it
                 takenNames: (worlds) => worlds.flatMap((w) => DIMENSION_SUFFIXES.map((suffix) => `${w.name}${suffix}`)),
                 namePattern: WORLD_NAME_PATTERN,
