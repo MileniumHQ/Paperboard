@@ -5,7 +5,7 @@ import type { WidgetDeclaration } from "../widgetManifest";
 import type { BackupLocation, BackupLocationUsage, BackupProgress, BackupRecord, NewBackupLocation } from "../backups";
 import type { PortClaim, PortPolicy } from "../ports";
 import type { PanelProblem } from "../problemShape";
-import type { GpuInfo, UsageReport } from "../system";
+import type { GpuInfo, IdentityPart, UsageReport } from "../system";
 import type { InstalledPackageRecord, PendingPackageUpdate } from "../package";
 import type { BlockInfo, BlockProjectInfo, BlockTemplateInfo } from "../blocks";
 import type { BlockSchema, BlockTemplateSchema } from "../blocksSchema";
@@ -77,20 +77,14 @@ export interface BackupStatusAnswer {
     progress: BackupProgress | null;
 }
 
-export interface RpcIdentityPart {
-    id: string;
-    name: string;
-    version?: string;
-}
-
 export interface RpcOsFacts {
     osVersion?: string;
     distroId?: string;
     distroName?: string;
-    flavor?: RpcIdentityPart;
-    machine?: RpcIdentityPart;
+    flavor?: IdentityPart;
+    machine?: IdentityPart;
     board?: string;
-    operator?: RpcIdentityPart;
+    operator?: IdentityPart;
 }
 
 // the .local name a computer says it answers to: a hint, kept only once its

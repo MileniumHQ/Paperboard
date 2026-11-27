@@ -1,7 +1,7 @@
 // `papercrane identify`: the identity this daemon reports, read here and now
 import { EXIT } from "./cli";
 import { getDetailedOsInfo } from "../system/osInfo";
-import type { IdentityPart } from "../system/identity";
+import type { IdentityPart } from "@mileniumhq/paperapi";
 
 const named = (part: IdentityPart) => (part.version ? `${part.name} ${part.version}` : part.name);
 

@@ -6,6 +6,7 @@
 //
 // `browser` marks what browser mode serves too. Everything else needs a
 // window: updates, native dialogs, permissions and quitting.
+import type { IdentityPart } from "@mileniumhq/paperapi";
 import type { AppUpdateState } from "./appUpdate";
 import type { Graphics } from "./graphics";
 import type { LaunchOptions } from "./launchOptions";
@@ -22,13 +23,6 @@ export interface ComputerStatus {
     host: string;
     port: number;
     error?: string;
-}
-
-/** One named layer of a computer's identity (see the daemon's system/identity.ts). */
-export interface IdentityPart {
-    id: string;
-    name: string;
-    version?: string;
 }
 
 /** A paired computer as the shell shows it: never its token or pinned certificate. */

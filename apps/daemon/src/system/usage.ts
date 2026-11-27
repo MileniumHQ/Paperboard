@@ -12,6 +12,7 @@ import os from "os";
 import { logger } from "../core/logger";
 import { getPaperboardDir } from "../core/paths";
 import { errorCode } from "@mileniumhq/paperapi/errors";
+import type { UsageGroup, UsageReport as SdkUsageReport } from "@mileniumhq/paperapi";
 
 export interface ProcessSample {
     ppid: number;
@@ -29,28 +30,8 @@ export interface UsageRoots {
     panels: Map<string, number[]>;
 }
 
-export interface UsageGroup {
-    /** "paperboard", or a panel id */
-    id: string;
-    kind: "paperboard" | "panel";
-    memoryBytes: number;
-    /** share of the whole computer (every core), 0-100; null until a second sample */
-    cpuPercent: number | null;
-}
-
-export interface UsageReport {
-    sampledAt: number;
-    memory: { totalBytes: number; availableBytes: number; otherBytes: number };
-    /** null when no CPU interval could be measured */
-    cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
-    groups: UsageGroup[];
-    /** the drive holding Paperboard's data (panels and what they keep); null when it can't be read */
-    disk: DiskSpace | null;
-    /** traffic over the network adapters, bytes per second; null when it can't be measured */
-    network: { receivePerSecond: number; sendPerSecond: number } | null;
-    /** how long the computer has been running, in seconds */
-    uptimeSeconds: number;
-}
+/** PaperAPI's report, with every figure this server measures present: null where it can't be read */
+export type UsageReport = Required<SdkUsageReport>;
 
 export interface DiskSpace {
     totalBytes: number;

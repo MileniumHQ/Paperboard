@@ -19,7 +19,7 @@ import { shellServer } from "./shellServer";
 import type { SendArgs } from "../../shared/shellContract";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
-import type { FileTypeFilter } from "../../shared/fileTransfer";
+import type { FileTypeFilter } from "@mileniumhq/paperapi";
 import { cancelGoogleSignIn, paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import { googleSignInPage, loopbackRedirectPage } from "../googleSignInPage";
 import { catchLoopbackRedirect, LoopbackRedirectFailure } from "../loopbackRedirect";
