@@ -47,6 +47,8 @@ interface PortRequest {
     protocol: PortProtocol;
     /** the number the panel wants, 1 to 65535 */
     preferred: number;
+    /** ports in a row from the number, 1 to 16; 1 when left out */
+    count?: number;
 }
 
 interface PortClaim {
@@ -56,6 +58,8 @@ interface PortClaim {
     protocol: PortProtocol;
     /** the number the program opens */
     port: number;
+    /** how many ports in a row it holds, from port */
+    count: number;
 }`}
             </PaperCode>
             <PaperTable>
@@ -88,6 +92,18 @@ interface PortClaim {
                 <PaperCode>appId</PaperCode> is the panel id, and only the caller's own. <PaperCode>scope</PaperCode> is the computer to claim on, the one the document was granted by default.
             </PaperText>
 
+            <PaperText preset="subheader" as="h2" id="ports-in-a-row">Ports in a row</PaperText>
+            <PaperText preset="body" as="p">
+                Some servers open the ports after their own: Valheim listens on its port and the next one. Claim them as one with <PaperCode>count</PaperCode>,
+                and the claim holds <PaperCode>port</PaperCode> to <PaperCode>port + count - 1</PaperCode>. They are checked, refused and moved together,
+                so a taken port moves all of them to the next run of free ports, and they stay in a row. A claim's count is part of it: asking again with
+                another count checks the ports again.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`const { port } = await portApi.claim(PANEL_ID, { name: "valheim", label: "Valheim", protocol: "udp", preferred: 2456, count: 2 });
+// the server opens port and port + 1`}
+            </PaperCode>
+
             <PaperText preset="subheader" as="h2" id="taken-ports">Taken ports</PaperText>
             <PaperText preset="body" as="p">
                 A port is taken when another claim holds it, or when the daemon can't open it on every interface the way a server would.
@@ -103,7 +119,7 @@ interface PortClaim {
                 <tbody>
                     <tr>
                         <td><PaperCode>next-free</PaperCode> (default)</td>
-                        <td>The claim moves to the first free port of the next 100. When all of them are taken, the call is refused.</td>
+                        <td>The claim moves to the first free port of the next 100, or the first free run of its count. When none is free, the call is refused.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>refuse</PaperCode></td>
@@ -139,11 +155,12 @@ interface PortClaim {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperCode>&lt;label&gt; can't use port &lt;n&gt;: &lt;reason&gt;.</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>The port is taken and the policy is <PaperCode>refuse</PaperCode>.</td></tr>
+                    <tr><td><PaperCode>&lt;label&gt; can't use port &lt;n&gt;: &lt;reason&gt;.</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>The port is taken and the policy is <PaperCode>refuse</PaperCode>. A claim of several says <PaperCode>ports &lt;n&gt; to &lt;m&gt;</PaperCode>, and its reason ends with the port that is taken.</td></tr>
                     <tr><td><PaperCode>&lt;label&gt; can't use port &lt;n&gt; (&lt;reason&gt;), and ports &lt;n+1&gt; to &lt;m&gt; are taken too.</PaperCode></td><td><PaperCode>CONFLICT</PaperCode></td><td>The port and the next 100 are taken.</td></tr>
                     <tr><td><PaperCode>No port named "&lt;name&gt;" is claimed; claim it first.</PaperCode></td><td><PaperCode>NOT_FOUND</PaperCode></td><td><PaperCode>prepare</PaperCode> before <PaperCode>claim</PaperCode>.</td></tr>
                     <tr><td><PaperCode>Invalid port name: "&lt;name&gt;"</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A name outside the rule.</td></tr>
                     <tr><td><PaperCode>A port needs a label of at most 80 characters</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>An empty or long label.</td></tr>
+                    <tr><td><PaperCode>Invalid port count: &lt;value&gt;</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A count outside 1 to 16, or one that runs past 65535.</td></tr>
                     <tr><td><PaperCode>Invalid protocol: "&lt;value&gt;"</PaperCode>, <PaperCode>Invalid port: &lt;value&gt;</PaperCode></td><td><PaperCode>INVALID_PARAMS</PaperCode></td><td>A protocol other than the three, or a number outside 1 to 65535.</td></tr>
                     <tr><td><PaperCode>ports:all is host-only</PaperCode></td><td><PaperCode>FORBIDDEN</PaperCode></td><td>A panel called <PaperCode>portSettingsApi</PaperCode>.</td></tr>
                 </tbody>

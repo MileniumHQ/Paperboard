@@ -44,7 +44,7 @@ const isChat = (value: unknown): value is ChatMessage => {
 
 const isMove = (value: unknown): value is GameServerState["portMoves"][number] => {
     const m = value as GameServerState["portMoves"][number];
-    return !!m && typeof m === "object" && typeof m.label === "string" && Number.isInteger(m.from) && Number.isInteger(m.to) && typeof m.primary === "boolean";
+    return !!m && typeof m === "object" && typeof m.label === "string" && Number.isInteger(m.from) && Number.isInteger(m.to) && typeof m.primary === "boolean" && (m.count === undefined || Number.isInteger(m.count));
 };
 
 /** Only text lines are kept: a console line built from markup does not survive JSON. */

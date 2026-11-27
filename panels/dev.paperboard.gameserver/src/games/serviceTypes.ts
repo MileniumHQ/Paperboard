@@ -19,6 +19,11 @@ export interface PortSpec {
     protocol: "tcp" | "udp" | "tcp+udp";
     preferred: number | null;
     /**
+     * Ports in a row the server opens from this one, such as Valheim's port
+     * and the next; they are claimed, checked and moved together. 1 when unset.
+     */
+    count?: number;
+    /**
      * Set when the game reads this port only from a file the user keeps, so
      * it can't move for one run: a taken one refuses the start, and this says
      * what to do instead.

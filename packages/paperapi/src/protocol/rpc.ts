@@ -308,7 +308,7 @@ export const RPC = {
 
     // ports
     "ports:claim": {
-        params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>() }),
+        params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>(), count: shape.optional(typed<unknown>()) }),
     },
     "ports:prepare": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },
     "ports:release": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },
