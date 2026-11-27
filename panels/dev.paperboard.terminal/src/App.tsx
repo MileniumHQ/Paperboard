@@ -104,7 +104,20 @@ export default function App() {
     // what went wrong for the shell in front where no one was waiting on it;
     // each stands while it is true, and this window can put it away. Keyed
     // by session, kind and message, so a row keeps its identity while it stands.
-    const [putAway, setPutAway] = createStore<Record<string, true>>({});
+    const [putAway, setPutAway] = createStore<Record<string, true | undefined>>({});
+    // one that stops standing is forgotten, so it shows again if it comes back
+    createEffect(
+        on(
+            () => service.value()?.sessionErrors,
+            (errors) => {
+                if (!errors) return;
+                for (const key of Object.keys(putAway)) {
+                    const [session, kind, ...message] = key.split("\n");
+                    if (errors[session]?.[kind as SessionErrorKind] !== message.join("\n")) setPutAway(key, undefined);
+                }
+            },
+        ),
+    );
     const sessionErrors = () => {
         const session = currentSession();
         return Object.entries(service.value()?.sessionErrors[session] ?? {})
