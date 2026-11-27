@@ -224,7 +224,7 @@ interface CallDefinition {
     /** an object of fields; left out for a call that takes nothing */
     input?: ObjectShape;
     output: Shape;
-    /** milliseconds the page waits for the answer; defaults to 30_000, null waits it out */
+    /** milliseconds the page waits for the answer, at most 60_000; defaults to 30_000, null waits it out */
     timeoutMs?: number | null;
     /** a call the scope is not about: made without it, its handler given none */
     unscoped?: true;
@@ -268,7 +268,7 @@ interface CallDefinition {
                         <td><PaperCode>calls.x.timeoutMs</PaperCode></td>
                         <td><PaperCode>number | null</PaperCode></td>
                         <td><PaperCode>30_000</PaperCode></td>
-                        <td>How long the page waits for the answer. <PaperCode>null</PaperCode> waits as long as the call takes, for work such as an install.</td>
+                        <td>How long the page waits for the answer, at most a minute: a contract with a longer wait throws as it is defined. <PaperCode>null</PaperCode> waits as long as the call takes, for work such as an install.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>calls.x.unscoped</PaperCode></td>
