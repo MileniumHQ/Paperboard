@@ -1,6 +1,6 @@
 // The Blocks panel's service: it keeps the projects and their flows, listens
-// for the events the switched-on projects start from, and runs them, whether
-// or not a window is open (runtime.ts). The page edits one project's flows
+// for the events the switched-on projects start from, keeps their schedules
+// and their Data, and runs them, whether or not a window is open (runtime.ts). The page edits one project's flows
 // at a time and shows the run log this service keeps.
 import { blocksApi, config, definePanelService } from "@mileniumhq/paperapi";
 import { createRuntime } from "./runtime";

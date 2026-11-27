@@ -216,5 +216,9 @@ describe("schedules and backups", () => {
         await s.time.advance(HOUR);
         expect(runs(s, id)).toBe(1);
         expect(nextOf(s, id).map(at)).toEqual(["2026-06-11 04:00 EDT"]);
+        // the file says so too: a restart after the restore doesn't run it again
+        const after = await serviceAt("2026-06-10T09:00:00", s.files);
+        await after.time.advance(2 * HOUR);
+        expect(runs(after, id)).toBe(0);
     });
 });

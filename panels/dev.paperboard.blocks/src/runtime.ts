@@ -384,7 +384,7 @@ export function createRuntime({ storage, blocks, handle, clock = systemClock }: 
         resume: async (): Promise<void> => {
             if (store.paused) await store.resume(false);
             if (data.paused) await data.resume(false);
-            if (scheduler.paused) await scheduler.resume();
+            if (scheduler.paused) await scheduler.resume(false);
         },
         /**
          * The files are the backup's: the projects and their Data are read again from them and
@@ -396,7 +396,7 @@ export function createRuntime({ storage, blocks, handle, clock = systemClock }: 
             await store.resume(true);
             for (const run of runs.keys()) run.abort();
             await data.resume(true);
-            await scheduler.resume();
+            await scheduler.resume(true);
             setState({ projects: store.list(), projectsError: null, loaded: true });
             publishProjects();
         },

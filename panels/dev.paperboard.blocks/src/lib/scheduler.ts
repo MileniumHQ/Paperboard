@@ -181,9 +181,13 @@ export class Scheduler {
         return this.queue.pause();
     }
 
-    /** Lets the held write go: it writes the anchors as they are then, over whatever a restore put there. */
-    resume(): Promise<void> {
-        return this.queue.resume();
+    /**
+     * Lets the held write go. After a restore the file is the backup's, with when the schedules
+     * ran back then: the anchors kept here are written over it, so a restart doesn't run them again.
+     */
+    async resume(restored: boolean): Promise<void> {
+        await this.queue.resume();
+        if (restored) await this.write();
     }
 
     private nextOf(a: Armed): number {
