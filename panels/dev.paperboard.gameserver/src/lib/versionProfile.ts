@@ -399,13 +399,6 @@ export function versionSupports(
     return mcSatisfies(version, CAPABILITIES[capability]);
 }
 
-export function profileSupports(
-    profile: VersionProfile,
-    capability: CapabilityName,
-): boolean {
-    return versionSupports(profile.version, capability);
-}
-
 // ─── gamerule name/value translation ─────────────────────────────────
 function camelCase(name: string): string {
     return name.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());

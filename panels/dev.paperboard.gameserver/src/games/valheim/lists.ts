@@ -21,11 +21,6 @@ export const LISTS = {
 export type ValheimList = keyof typeof LISTS;
 export const isList = (value: unknown): value is ValheimList => typeof value === "string" && Object.hasOwn(LISTS, value);
 
-/** A platform id as Valheim writes it: the platform, an underscore and the account ("Steam_76561198000000001"). */
-export function platformId(value: unknown): string {
-    if (typeof value !== "string" || !/^[A-Za-z]{2,16}_[A-Za-z0-9-]{1,64}$/.test(value)) throw new Error("Choose a player by their Valheim platform id, as Steam_76561198000000001");
-    return value;
-}
 /** What a list entry can be: an id, or for a ban a player's name, one line with no comment. */
 export function listEntry(value: unknown): string {
     if (typeof value !== "string" || !value.trim() || /[\r\n\0]/.test(value) || value.trim().startsWith("//") || value.length > 80) throw new Error("A list entry is one player's id or name");

@@ -28,7 +28,3 @@ export function roleVars(role: PaperRole): RoleVars {
     };
 }
 
-/** base color only, for components that tint or border with it */
-export function roleBaseVar(role: PaperRole): string {
-    return getVarCss(role);
-}
