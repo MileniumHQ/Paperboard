@@ -126,7 +126,8 @@ export function CopyRow(props: { label: string; value: string }) {
 
 /** What kicking and banning mean in a game. */
 export interface RosterModeration<T> {
-    kick(player: T): Promise<unknown>;
+    /** left out by a game whose server can't disconnect a player short of banning them (Valheim): there is no Kick */
+    kick?(player: T): Promise<unknown>;
     ban(player: T): Promise<unknown>;
     unban(player: T): Promise<unknown>;
     /** the ban dialog's words: what the ban is bound to */
@@ -301,12 +302,16 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                                     <PaperSeparator />
 
                                     <PaperFlex direction="row" gap="half" wrap>
-                                        <PaperButton
-                                            disabled={props.state.busy() || serverStatus() !== "online" || !player().online}
-                                            onClick={() => void props.state.run(failure(player(), "kick"), () => props.moderation.kick(player()))}
-                                        >
-                                            Kick
-                                        </PaperButton>
+                                        <Show when={props.moderation.kick}>
+                                            {(kick) => (
+                                                <PaperButton
+                                                    disabled={props.state.busy() || serverStatus() !== "online" || !player().online}
+                                                    onClick={() => void props.state.run(failure(player(), "kick"), () => kick()(player()))}
+                                                >
+                                                    Kick
+                                                </PaperButton>
+                                            )}
+                                        </Show>
                                         <Show when={props.moderation.canBan?.(player()) ?? true}>
                                             <Show
                                                 when={!player().banned}

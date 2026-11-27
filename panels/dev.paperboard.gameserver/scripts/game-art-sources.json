@@ -40,5 +40,11 @@
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/252490/library_hero.jpg",
         "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/252490/acf87ad23570b3c81f8c9cfc19544a07edd8b632.ico"
+    },
+    "valheim": {
+        "taglineSource": "https://store.steampowered.com/app/892970/",
+        "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/892970/library_600x900_2x.jpg",
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/892970/library_hero.jpg",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/892970/e63a5c06f103cef62c44a492c48af7d0118c9421.ico"
     }
 }

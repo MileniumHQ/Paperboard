@@ -10,12 +10,13 @@ const accountId = (number: bigint): string | null => (number > 0n && number < AC
 
 /**
  * A person's 17-digit Steam id from how a game writes it: as it is, in
- * Source's `[U:1:n]` and `STEAM_0:y:z` forms, or after Palworld's `steam_`.
+ * Source's `[U:1:n]` and `STEAM_0:y:z` forms, or after Palworld's `steam_`
+ * and Valheim's `Steam_`.
  * Null for what is no person's Steam account, such as a bot or another
  * platform's player.
  */
 export function steamAccount(id: string): string | null {
-    const long = /^(?:steam_)?(\d{17})$/.exec(id);
+    const long = /^(?:steam_)?(\d{17})$/i.exec(id);
     if (long) return accountId(BigInt(long[1]!) - FIRST_ACCOUNT) ? long[1]! : null;
     const modern = /^\[U:1:(\d{1,10})\]$/.exec(id);
     if (modern) return accountId(BigInt(modern[1]!));

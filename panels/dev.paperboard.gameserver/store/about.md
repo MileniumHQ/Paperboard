@@ -1,4 +1,4 @@
-Run game servers on your own computer, no terminal needed. Game Server runs Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust, with their console, players, worlds and settings in one place.
+Run game servers on your own computer, no terminal needed. Game Server runs Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust and Valheim, with their console, players, worlds and settings in one place.
 
 - **All your servers** - Run as many as you like, of any game, side by side.
 - **No setup** - Pick a game and a version, and Paperboard downloads the rest.
@@ -20,3 +20,5 @@ Run game servers on your own computer, no terminal needed. Game Server runs Mine
 **Garry's Mod** - Any game mode, maps by picture, and add-ons from a Workshop collection.
 
 **Rust** - Set the map's size and seed, see it from above, and wipe in one click.
+
+**Valheim** - Set its world modifiers, turn on crossplay and share its join code, and manage admins, bans and who may join.

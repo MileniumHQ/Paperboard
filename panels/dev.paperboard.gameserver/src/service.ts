@@ -545,6 +545,8 @@ const serverCalls: Omit<Handlers, ServersCallName> = {
     // Rust's
     rustMetrics: game("rustMetrics"), rustMap: game("rustMap"), rustMapPicture: game("rustMapPicture"), rustMapDraw: game("rustMapDraw"), rustWipe: game("rustWipe"),
     rustPlayers: game("rustPlayers"), rustKick: game("rustKick"), rustBan: game("rustBan"), rustUnban: game("rustUnban"),
+    // Valheim's
+    valheimSession: game("valheimSession"), valheimPlayers: game("valheimPlayers"), valheimList: game("valheimList"),
 };
 export const gameServerService = definePanelService({
     contract: gameServerContract,

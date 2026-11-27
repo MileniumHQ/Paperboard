@@ -767,6 +767,26 @@ const rustCalls = {
     rustUnban: { input: steamId, output: done },
 } satisfies Record<string, CallDefinition>;
 
+const valheimPlayer = { name: shape.text(), id: shape.text() };
+const valheimCalls = {
+    /** the world it runs, and a running crossplay server's join code and public address once the relay registered it */
+    valheimSession: { output: shape.object({ world: text, crossplay: shape.boolean(), joinCode: shape.nullable(text), address: shape.nullable(text) }) },
+    valheimPlayers: {
+        output: shape.object({
+            seen: shape.list(shape.object({ ...valheimPlayer, lastSeen: shape.number() })),
+            online: shape.list(shape.object(valheimPlayer)),
+            admin: texts,
+            banned: texts,
+            permitted: texts,
+        }),
+    },
+    /** puts a player on one of the server's lists or takes them off, by platform id or, for a ban, by name */
+    valheimList: {
+        input: shape.object({ list: shape.oneOf("admin", "banned", "permitted"), id: shape.nullable(text), name: shape.nullable(text), on: shape.boolean() }),
+        output: done,
+    },
+} satisfies Record<string, CallDefinition>;
+
 // ─── The state the pages mirror ─────────────────────────────────────────────
 
 const serverStatus = shape.oneOf("offline", "starting", "online", "stopping", "restarting");
@@ -900,7 +920,7 @@ export type ServerSummary = Infer<typeof serverSummary>;
  */
 export const gameServerContract = defineContract(PANEL_ID, {
     scope: { server: shape.text() },
-    calls: { ...serversCalls, ...minecraftCalls, ...steamCalls, ...sourceCalls, ...terrariaCalls, ...palworldCalls, ...rustCalls },
+    calls: { ...serversCalls, ...minecraftCalls, ...steamCalls, ...sourceCalls, ...terrariaCalls, ...palworldCalls, ...rustCalls, ...valheimCalls },
     state: {
         shape: shape.object({
             servers: shape.list(serverSummary),
