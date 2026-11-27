@@ -7,10 +7,12 @@ import { createMetrics, createUptime, overviewStats } from "../../components/ove
 
 export default function ValheimOverview() {
     const { calls, gameSettings, serverStatus } = useServer();
-    // the world and, with crossplay, the join code the relay gives once the server registered with it
+    // with crossplay, the join code the relay gives once the server registered with it
     const session = createMetrics(calls.valheimSession);
     const uptime = createUptime();
     const world = () => String(gameSettings().world ?? "");
+    // the name players see in the server list
+    const name = () => String(gameSettings().name ?? "");
     const crossplay = () => gameSettings().crossplay === true;
     const joinCode = () => session.value()?.joinCode ?? null;
 
@@ -19,7 +21,7 @@ export default function ValheimOverview() {
             avatar={<PaperAvatar size="xlarge" shape="square" src={valheim.art.icon} alt="Valheim" fallbackIcon="forest" />}
             detail={
                 <PaperFlex direction="row" gap="half" align="center" wrap>
-                    <PaperText color="text-subtle">{world()}</PaperText>
+                    <PaperText color="text-subtle">{name()}</PaperText>
                     <Show when={joinCode()}>
                         {(code) => (
                             <PaperFlex direction="row" gap="onefourth" align="center">

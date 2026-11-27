@@ -70,7 +70,9 @@ export default function ValheimPlayers() {
             moderation={{
                 ban: (player) => calls.valheimList({ list: "banned", ...list(player), on: true }),
                 unban: (player) => calls.valheimList({ list: "banned", ...list(player), on: false }),
-                banNote: "Valheim bans the player's account, and the server removes them within seconds.",
+                banNote: "Valheim bans the player's account, wherever they join from.",
+                // the server reads its lists again within ten seconds, and checks for banned players every five
+                removal: "An online player is removed within about 15 seconds.",
             }}
             sections={(player) => (
                 <>

@@ -271,6 +271,7 @@ Original plan notes:
 - Crossplay: the server registers with Microsoft PlayFab's relay and logs `Session "<name>" registered with join code <n>` and its public address; the Overview shows the code (copyable) and says a crossplay server can't be joined at a local address (the manual's words).
 - Data: worlds are folders, `save/worlds_local/<world>/_main.<n>.{db2,fwl2,chunks,ok}`, renumbered at each save; the lists sit beside them. Backups are offline: the stop must log a world save, or the backup is refused.
 - Windows: not supported yet. The Windows server saves only when Ctrl+C reaches its console, and Paperboard's supervisor ends a Windows process with TerminateProcess, which would lose everything since the last autosave. macOS has no server; Linux ARM64 none either.
+- Through the panel in the app, the same day: setup read the size (2.0 GB), downloaded and set up; a public server with a password went online as `Loading: Done` came on a new world, and A2S_INFO on P+1 answered; a list entry written by hand showed in Players with its Admin badge after the roster was read again, and Permitted, Ban and Unban from the screen wrote the files with their comments kept; Stop logged `World save (5/5) done` and freed both ports; a backup by hand held the world; with P+1 held by another program, the next start moved the pair to 2458–2459, said so on the Overview, and A2S answered on 2459.
 - Not yet: BepInEx and Thunderstore mods, a Worlds tab (worlds are switched by name in Options), and a verified join from a client.
 
 ### Host support targets

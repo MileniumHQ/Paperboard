@@ -132,6 +132,8 @@ export interface RosterModeration<T> {
     unban(player: T): Promise<unknown>;
     /** the ban dialog's words: what the ban is bound to */
     banNote: string;
+    /** how soon a ban removes a player who is on, for a game that doesn't do it at once */
+    removal?: string;
     /** a game that bans only through its running server says so; Ban and Unban wait for it */
     needsServer?: string;
     /** false for a player the game cannot ban, such as a bot */
@@ -372,7 +374,7 @@ export default function GameRoster<T extends RosterPlayer>(props: {
                     </>
                 }
             >
-                <PaperText preset="body">{props.moderation.banNote} An online player is removed at once.</PaperText>
+                <PaperText preset="body">{props.moderation.banNote} {props.moderation.removal ?? "An online player is removed at once."}</PaperText>
             </PaperModal>
         </>
     );
