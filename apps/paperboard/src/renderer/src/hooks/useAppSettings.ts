@@ -28,15 +28,20 @@ export function useAppSettings(systemMotion: () => boolean = () => false) {
         showError("Graphics card not checked", `Animations and blur stay on unless you turn them off, even if this computer has no graphics card: ${errorMessage(err)}`);
     });
 
+    // what the window and its panels show: under the system's motion
+    // preference, the system's reduced motion is CSS's own to apply
+    const reducedMotion = () => !systemMotion() && look().disableAnimations;
+    const blurOff = () => look().disableBlur;
+
     // Mirrors the motion preference onto the document for PaperUI tokens
-    createEffect(on(() => !systemMotion() && look().disableAnimations, (reduced) => {
+    createEffect(on(reducedMotion, (reduced) => {
         if (typeof document === "undefined") return;
         if (reduced) document.documentElement.setAttribute("data-paperui-motion", "reduced");
         else document.documentElement.removeAttribute("data-paperui-motion");
     }));
 
     // Mirrors the blur preference the same way
-    createEffect(on(() => look().disableBlur, (off) => {
+    createEffect(on(blurOff, (off) => {
         if (typeof document === "undefined") return;
         if (off) document.documentElement.setAttribute("data-paperui-blur", "off");
         else document.documentElement.removeAttribute("data-paperui-blur");
@@ -135,6 +140,8 @@ export function useAppSettings(systemMotion: () => boolean = () => false) {
     return {
         appSettings,
         graphics,
+        reducedMotion,
+        blurOff,
         loadAppSettings,
         applyAppSettings,
         handleAppSettingsChange,

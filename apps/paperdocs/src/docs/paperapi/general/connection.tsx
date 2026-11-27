@@ -179,6 +179,9 @@ try {
                 The same message tells the page whether Paperboard is in <PaperLink href="/docs/paperui/utilities/#mobile-mode">mobile mode</PaperLink> (<PaperCode>mobile</PaperCode>). PaperAPI writes it as <PaperCode>data-paper-mobile</PaperCode> on the page's root, and again whenever the shell posts <PaperCode>paperboard:mobile</PaperCode> (<PaperCode>MOBILE_MODE_MESSAGE</PaperCode>) with the frame's generation. The shell has already stamped the same value on the document before it loaded.
             </PaperText>
             <PaperText preset="body" as="p">
+                It also says how the page looks (<PaperCode>look</PaperCode>, a <PaperCode>FrameLook</PaperCode>): the theme chosen in Paperboard's settings, and whether animations and blur are off. PaperAPI writes them as <PaperCode>data-paperui-theme</PaperCode> (removed when the theme follows the system), <PaperCode>data-paperui-motion</PaperCode> and <PaperCode>data-paperui-blur</PaperCode> on the page's root, and again whenever the shell posts <PaperCode>paperboard:look</PaperCode> (<PaperCode>FRAME_LOOK_MESSAGE</PaperCode>) with the frame's generation. Every host does this, so a panel in a browser tab matches the shell as it does in the desktop window.
+            </PaperText>
+            <PaperText preset="body" as="p">
                 A panel page that has not answered after 25 seconds is shown as failed with <PaperCode>The panel did not finish connecting to its service.</PaperCode> A page that never imports PaperAPI never answers. The internal block ids are exported as <PaperCode>STATE_VALUE</PaperCode> (<PaperCode>panel-state</PaperCode>), <PaperCode>STATE_EVENT</PaperCode> (<PaperCode>panel-state-changed</PaperCode>) and <PaperCode>WIDGET_CHOICES_COMMAND</PaperCode> (<PaperCode>widget-choices</PaperCode>).
             </PaperText>
 

@@ -33,6 +33,7 @@
         "./channels": "./src/channels.ts",
         "./config": "./src/config.ts",
         "./errors": "./src/errors.ts",
+        "./frameLook": "./src/frameLook.ts",
         "./internal": "./src/internal.ts",
         "./internal/paint": "./src/paintReady.ts",
         "./monitorProtocol": "./src/monitorProtocol.ts",

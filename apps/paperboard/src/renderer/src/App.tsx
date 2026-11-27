@@ -5,11 +5,11 @@
 import "@mileniumhq/paperui/style.css";
 import "./shell.css";
 
-import { type Component, createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
+import { type Component, createEffect, createMemo, createRenderEffect, createSignal, on, onCleanup, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { PaperProvider, PaperFlex, PaperModal, PaperSlidePage, showError } from "@mileniumhq/paperui";
 import { isBrowserShell, quitApi } from "./lib/shell";
-import { setMobileMode } from "./lib/mobileMode";
+import { setFrameLook, setMobileMode } from "./lib/frameLook";
 import { showsNoComputers } from "./lib/hostComputers";
 import { unsavedPanels } from "./lib/unsavedPanels";
 import AppSettings, { type HostSettingsGroup } from "./components/settings/AppSettings";
@@ -98,6 +98,8 @@ const App: Component<AppProps> = (props) => {
     const nav = useShellNavigation({ computers: computerState, panels: panelState, selection, panelName, layout: () => props.layout ?? "desktop", hidesThisComputer: () => props.hidesThisComputer ?? false });
     const { mobile, listedComputers } = nav;
     const theme = () => (props.appearance === "system" ? "system" : appSettings().darkMode);
+    // panels look like the shell; set before any frame is told
+    createRenderEffect(on(() => ({ theme: theme(), reducedMotion: settings.reducedMotion(), blurOff: settings.blurOff() }), setFrameLook));
     const noComputers = () => showsNoComputers(Boolean(props.noComputers), computersLoaded(), listedComputers().length);
     // the last computer forgotten: Home is what's left
     createEffect(on(noComputers, (none) => { if (none && nav.railMode() === "computer") nav.selectRail("__home"); }, { defer: true }));

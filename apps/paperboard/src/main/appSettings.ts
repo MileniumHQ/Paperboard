@@ -1,7 +1,7 @@
-import { BrowserWindow, app, nativeTheme, webContents, webFrameMain } from "electron";
+import { BrowserWindow, app, nativeTheme } from "electron";
 import * as path from "path";
 import * as fs from "fs";
-import type { WebFrameMain } from "electron";
+import type { FrameLook } from "@mileniumhq/paperapi/frameLook";
 import { logger } from "daemon/core/logger";
 import { setRunOnStartup } from "./loginItem";
 import { withAppSettingsDefaults } from "../shared/appSettingsDefaults";
@@ -13,9 +13,9 @@ import {
     TITLEBAR_SYMBOL_COLORS,
 } from "daemon/core/themeConstants";
 
-// theme via nativeTheme; reduced motion, blur AND the resolved theme are injected
-// into panel frames. <html data-paperui-theme> is what PaperProvider reads
-// when it has no explicit theme, and it also applies CSS tokens immediately.
+// the window's theme via nativeTheme; panel frames are told the theme, reduced
+// motion and blur by the shell (PaperAPI's FrameLook), stamped on each panel
+// document as it is served (servedFrameLook).
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     /** absent until chosen: off on a GPU, on without one (shared/graphics.ts) */
@@ -80,49 +80,20 @@ export function currentGraphics(): Graphics {
     return graphicsFrom(app.getGPUFeatureStatus().gpu_compositing);
 }
 
-// safe no-op for non-panel frames
-async function applyToFrame(frame: WebFrameMain): Promise<void> {
+/** How a panel frame looks before the shell tells it (PaperAPI's FrameLook):
+ * stamped on its document as it is served, so its first paint is right.
+ * Settings that can't be read leave it to the shell's challenge. */
+export function servedFrameLook(): FrameLook | null {
+    let settings: AppSettings;
     try {
-        if (!frame.url.startsWith("panel://")) return;
-        const settings = readAppSettings();
-        const look = effectiveLook(settings, currentGraphics());
-        // the OS media query is not a contract: Paperboard's forced theme
-        // may disagree with the OS, and nativeTheme propagation to custom
-        // protocol frames is implicit. Inject the resolved theme explicitly
-        // so a panel always matches the window it lives in.
-        const resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
-        const js = `
-            (() => {
-                document.documentElement.setAttribute('data-paperui-motion', ${JSON.stringify(
-                    look.disableAnimations ? "reduced" : "auto",
-                )});
-                document.documentElement.setAttribute('data-paperui-theme', ${JSON.stringify(
-                    resolvedTheme,
-                )});
-                document.documentElement.setAttribute('data-paperui-blur', ${JSON.stringify(
-                    look.disableBlur ? "off" : "auto",
-                )});
-            })();
-        `;
-        await frame.executeJavaScript(js, false);
-    } catch (err: any) {
-        // frames navigate/destroy mid-execution — routine
-        if (!frame.isDestroyed()) {
-            logger.warn(
-                "[AppSettings] applyToFrame failed:",
-                err?.message ?? err,
-            );
-        }
+        settings = readAppSettings();
+    } catch (err) {
+        // quiet: the shell says its settings couldn't load, and tells the frame the look it shows
+        logger.debug("[AppSettings] panel look not stamped:", err);
+        return null;
     }
-}
-
-export async function broadcastAppSettings(): Promise<void> {
-    // applyToFrame says why a frame refused; a window closed meanwhile has none
-    for (const wc of webContents.getAllWebContents()) {
-        if (wc.isDestroyed()) continue;
-        await applyToFrame(wc.mainFrame);
-        for (const frame of wc.mainFrame.frames) await applyToFrame(frame);
-    }
+    const look = effectiveLook(settings, currentGraphics());
+    return { theme: settings.darkMode, reducedMotion: look.disableAnimations, blurOff: look.disableBlur };
 }
 
 // shouldUseDarkColors is authoritative after themeSource applies
@@ -156,18 +127,8 @@ export function initAppSettingsSync(): void {
         logger.error("[AppSettings] settings not applied:", err?.message ?? err);
     }
 
-    app.on("web-contents-created", (_event, wc) => {
-        wc.on("did-frame-finish-load", (_e, _isMainFrame, processId, routingId) => {
-            const frame = webFrameMain.fromId(processId, routingId);
-            if (frame) void applyToFrame(frame);
-        });
-    });
-
-    // fires on OS flips too: under System the panels follow the OS with the shell
-    nativeTheme.on("updated", () => {
-        syncTitleBarOverlays();
-        broadcastAppSettings().catch((err) => logger.warn("[AppSettings] theme broadcast failed:", err));
-    });
+    // fires on OS flips too: under System the title bar follows the OS with the shell
+    nativeTheme.on("updated", syncTitleBarOverlays);
 
     // a GPU process that crashes for good leaves Chromium drawing in software
     let graphics = currentGraphics();
@@ -176,6 +137,5 @@ export function initAppSettingsSync(): void {
         if (next.gpu === graphics.gpu) return;
         graphics = next;
         pushToShells("graphics-changed", next);
-        broadcastAppSettings().catch((err) => logger.warn("[AppSettings] graphics broadcast failed:", err));
     });
 }

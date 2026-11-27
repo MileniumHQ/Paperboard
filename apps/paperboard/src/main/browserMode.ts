@@ -6,6 +6,7 @@ import { app, dialog, shell } from "electron";
 import * as path from "path";
 import { is } from "@electron-toolkit/utils";
 import { servePanelAsset } from "./panelServe";
+import { servedFrameLook } from "./appSettings";
 import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBrowser } from "./panelFileTransfer";
 import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
@@ -64,7 +65,7 @@ function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
             rendererDir: path.join(__dirname, "../renderer"),
             rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
             shell: shellServer<void>("browser", calls, { "renderer-log": logRendererMessage }),
-            servePanel: servePanelAsset,
+            servePanel: (computerId, panelId, pathname) => servePanelAsset(computerId, panelId, pathname, servedFrameLook()),
             panelFiles: {
                 stat: (args) => statPanelFileForBrowser(args, poolEndpoint),
                 read: (args) => readPanelFileForBrowser(args, poolEndpoint),

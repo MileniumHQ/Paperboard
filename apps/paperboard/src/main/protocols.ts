@@ -3,6 +3,7 @@
 // documents, with the same serving as the browser-mode host (panelServe.ts).
 import { protocol } from "electron";
 import { parsePanelHost, servePanelAsset } from "./panelServe";
+import { servedFrameLook } from "./appSettings";
 import { readShellFile, SHELL_HOST, SHELL_SCHEME } from "./shellAssets";
 
 // before the app is ready
@@ -36,7 +37,7 @@ export function handleAppProtocols(rendererDir: string): void {
         const url = new URL(request.url);
         const scope = parsePanelHost(url.hostname);
         if (!scope) return new Response("Malformed panel URL: missing computer scope prefix", { status: 400 });
-        return servePanelAsset(scope.comp, scope.panelId, url.pathname);
+        return servePanelAsset(scope.comp, scope.panelId, url.pathname, servedFrameLook());
     });
     protocol.handle(SHELL_SCHEME, async (request: Request) => {
         const url = new URL(request.url);
