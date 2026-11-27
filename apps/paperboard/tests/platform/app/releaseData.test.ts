@@ -53,7 +53,8 @@ describe("release data from a shipped release", () => {
             expect(layout).toEqual({ data: readJson(snapshot, "local/shell-home-layout.json") });
             expect(parseHomeLayout(layout.data)).toHaveLength(layout.data.items.length);
             const { claims } = await host.call("ports:all");
-            expect(claims).toEqual(readJson(snapshot, "ports.json").claims);
+            // a claim from before runs of ports holds the one port it named
+            expect(claims).toEqual(readJson(snapshot, "ports.json").claims.map((claim: object) => ({ ...claim, count: 1 })));
             // the old format of backup is not recognised: it is not listed, and it is left as it was
             const record = written.find((rel) => rel.startsWith(`backups/panels/${PANEL}/`) && rel.endsWith(".json"))!;
             expect(await host.call("backup:list", { panelId: PANEL })).toEqual({ backups: [] });
