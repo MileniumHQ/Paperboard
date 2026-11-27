@@ -3,7 +3,7 @@
 // change goes through the service, which writes the list and announces it.
 import { createRead } from "@mileniumhq/paperui";
 import { service, serviceState } from "../bridge";
-import type { ProjectSummary } from "../panel";
+import type { ProjectSummary, SavedFlows } from "../panel";
 
 export type ProjectsState = ReturnType<typeof createProjects>;
 
@@ -31,7 +31,8 @@ export function createProjects() {
         /** the projects Home shows: a draft is only seen in its editor */
         kept: () => state().projects.filter((p) => !p.draft),
         find: (id: string): ProjectSummary | undefined => state().projects.find((p) => p.id === id),
-        create: (name?: string) => service.createProject({ name }),
+        /** `flows`: what it starts with, as a template gives it */
+        create: (name?: string, flows?: SavedFlows) => service.createProject({ name, flows }),
         rename: (project: string, name: string) => service.updateProject({ project, name }),
         /** resolves once the list shows the switch where the service put it: a switch moves when its save is answered */
         setEnabled: async (project: string, enabled: boolean) => {

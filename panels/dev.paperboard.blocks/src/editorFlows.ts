@@ -73,6 +73,8 @@ export function createEditorFlows(options: {
     onNotice: (notice: Notice) => void;
     /** the flows are on the canvas */
     onLoaded: () => void;
+    /** the project was made with flows (a template) and has no miniature yet: its card gets one once they are drawn */
+    needsPreview: () => boolean;
 }) {
     const fail = (title: string) => (err: unknown) => options.onNotice({ kind: "failed", title, text: errorMessage(err) });
     const canvas = () => {
@@ -292,6 +294,10 @@ export function createEditorFlows(options: {
             setLoadError(null);
             setLoaded(true);
             stored = JSON.stringify(snapshot().workspace);
+            if (options.needsPreview() && workspace.getTopBlocks(false).length) {
+                stored = null;
+                saveNow().catch(notSaved);
+            }
             options.onLoaded();
         } catch (err) {
             if (current()) setLoadError(errorMessage(err));
