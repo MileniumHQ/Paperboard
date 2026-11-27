@@ -94,7 +94,7 @@ export function onReady(ctx: Server): void {
 }
 
 export function observeLine(ctx: Server, line: string, final = false): void {
-    // The old exit path only flushed chat and the last log entry.
+    // the unterminated line a stopped run left: its chat and the line itself, nothing it would set off
     if (final) {
         const chat = parseChatMessage(line);
         if (chat) ctx.setState({ chatMessages: appendCapped(ctx.state.chatMessages, chat) });

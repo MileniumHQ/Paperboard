@@ -300,6 +300,7 @@ async function dispose(server: Server): Promise<void> {
     for (const off of server.unsubscribe.splice(0)) off();
     cancelReadiness(server);
     cancelAutomation(server);
+    server.console.dispose();
     await server.game.dispose();
 }
 /** Sets up a server whose setup failed again, from nothing: what the failed setup started is undone first. */

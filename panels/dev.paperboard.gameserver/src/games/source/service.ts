@@ -11,7 +11,7 @@ import type { GameDefinition } from "../types";
 import type { GameService } from "../serviceTypes";
 import { rotatesMaps, type SourceGameSpec } from "./index";
 import { cvarValue, mapName } from "./config";
-import { consoleLine, isShaderNoise, linePlayer, parseLogLine } from "./log";
+import { consoleLine, isErrorLine, isShaderNoise, linePlayer, parseLogLine } from "./log";
 import { passwordReadAsTls, SourceRcon, RconError, RconNoAnswer } from "./rcon";
 import { SourceRoster } from "./roster";
 import { SourceGame } from "./instance";
@@ -101,7 +101,6 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                 game.connection?.close();
                 game.connection = null;
                 game.modsActive = false;
-                game.console.dispose();
             },
             prepareLaunch: () => prepareLaunch(game),
             afterStop: releaseFiles,
@@ -149,7 +148,8 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                 const event = parseLogLine(line);
                 if (event) game.players.observe(event);
                 if (!line.trim() || isShaderNoise(line)) return;
-                game.console.push(ctx, consoleLine(line));
+                const shown = consoleLine(line);
+                ctx.console.push(shown, isErrorLine(shown));
             },
             async assertFileAccess(file, write) {
                 if (typeof file !== "string") throw new Error("Choose a file");

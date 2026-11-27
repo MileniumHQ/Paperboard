@@ -9,7 +9,7 @@ import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, linkFolder, pushChat, redact, report, serverSecret, settingPort, settled, singleLine, writePrivate,
+    assertHost, exists, linkFolder, pushChat, redact, report, serverSecret, settingPort, settled, singleLine, writePrivate,
 } from "../serviceKit";
 import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
@@ -76,7 +76,6 @@ export function cs2Service(ctx: Server): GameService {
         /** the player rows of a `status` answer being printed; null outside one */
         status: null as string[] | null,
         secrets: [] as string[],
-        console: new ConsoleBuffer(isErrorLine),
     };
 
     // Layout: install/ is SteamCMD's folder, left out of backups; Paperboard's
@@ -230,7 +229,6 @@ export function cs2Service(ctx: Server): GameService {
         async beforeRemove() { if (local.busy) throw new Error("Wait for Counter-Strike 2's current operation"); },
         async dispose() {
             players.dispose();
-            local.console.dispose();
         },
         async prepareLaunch() {
             assertHost(cs2);
@@ -317,7 +315,8 @@ export function cs2Service(ctx: Server): GameService {
                     if (event) players.observe(event);
                 }
             }
-            local.console.push(ctx, consoleLine(line));
+            const shown = consoleLine(line);
+            ctx.console.push(shown, isErrorLine(shown));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

@@ -9,7 +9,7 @@ import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
+    assertHost, exclusive, exists, fileStamp, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
     serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil,
 } from "../serviceKit";
 import { trashDirName } from "../../service/trash";
@@ -69,6 +69,9 @@ export function wipedFiles(names: readonly string[], blueprints: boolean): strin
     return names.filter((name) => prefixes.some((prefix) => name.startsWith(prefix))).sort();
 }
 
+/** A console line Rust writes for a failure. */
+const isError = (line: string) => /^(Error|Exception|\w*Exception:)|\bfailed\b/i.test(line);
+
 /** One server's part of the game: its process, console, settings files and players are its own. */
 export function rustService(ctx: Server): GameService {
     const local = {
@@ -78,7 +81,6 @@ export function rustService(ctx: Server): GameService {
         /** the server has printed that it finished starting */
         started: false,
         secrets: [] as string[],
-        console: new ConsoleBuffer((line) => /^(Error|Exception|\w*Exception:)|\bfailed\b/i.test(line)),
     };
 
     // Layout: install/ is SteamCMD's folder and is left out of backups; the game
@@ -360,7 +362,6 @@ export function rustService(ctx: Server): GameService {
             players.stop();
             local.rcon?.close();
             local.rcon = null;
-            local.console.dispose();
         },
         async prepareLaunch() {
             assertHost(rust);
@@ -437,7 +438,7 @@ export function rustService(ctx: Server): GameService {
                 if (!(err instanceof RustRconSilent)) throw err;
                 throw new Error(`${err.message}. Rust answers nothing to a command it doesn't know.`);
             }
-            for (const line of reply.split(/\r?\n/)) if (line.trim()) local.console.push(ctx, redact(line, local.secrets));
+            for (const line of reply.split(/\r?\n/)) if (line.trim()) ctx.console.push(redact(line, local.secrets), isError(line));
         },
         async sendChat(message) {
             // the server pushes the line back as chat, which is what the chat shows
@@ -448,7 +449,7 @@ export function rustService(ctx: Server): GameService {
             const line = redact(raw.replace(/\r/g, "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ""), local.secrets);
             if (!line.trim()) return;
             if (line.trim() === STARTED) local.started = true;
-            local.console.push(ctx, line);
+            ctx.console.push(line, isError(line));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

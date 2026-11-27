@@ -360,7 +360,6 @@ export async function sendServerCommand(
     }
 }
 
-/** Log viewing is available even when a game has no command control. */
 export function handleProcessData(ctx: Server, chunk: string): void {
     ctx.lifecycle.lineBuffer += chunk;
     const lines = ctx.lifecycle.lineBuffer.split("\n");
@@ -382,6 +381,8 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
         ctx.lifecycle.lineBuffer = "";
     }
+    // the run's last output comes before what is said of its end
+    ctx.console.flush();
     // the run's moves end with it as it goes offline; the game is told them
     const moves = ctx.state.portMoves;
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { testServer } from "./helpers/scope";
 import { observeLine } from "../src/games/minecraft/observe";
+import { handleProcessData, handleProcessExit } from "../src/service/lifecycle";
 
 /** an offline scope fed console lines straight into the game's parser */
 function feed(version: string, lines: string[], software = "paper") {
@@ -26,5 +27,16 @@ describe("console parsing", () => {
         expect(scope.state.onlinePlayers).toEqual(["steve", "alex"]);
         const v26 = feed("26.3", [V26("There are 0 of a max of 8 players online:")]);
         expect(v26.state.maxPlayers).toBe(8);
+    });
+});
+
+// A game's output is published in batches; what the service says of the run's
+// end must still come after the run's last lines.
+describe("a stopped server's console", () => {
+    test("shows the run's last output before Process stopped", () => {
+        const server = testServer({ game: "valheim", directory: "servers/order" }, { serverStatus: "online" });
+        handleProcessData(server, "Saving world\nWorld saved\nShutting down");
+        handleProcessExit(server, 0);
+        expect(server.state.serverEntries.map((e) => e.content)).toEqual(["Saving world", "World saved", "Shutting down", "[Server] Process stopped."]);
     });
 });

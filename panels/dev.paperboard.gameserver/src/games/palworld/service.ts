@@ -11,7 +11,7 @@ import { provideWindowsRuntime } from "../windowsRuntimeInstall";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
+    assertHost, exists, fileStamp, hostSupportHere, linkFolder, offlineBackup, playerPoller, pushChat, redact, report,
     serverSecret, settingPort, settled, singleLine, waitUntil, writePrivate,
 } from "../serviceKit";
 import { palworld, options, PALWORLD_APP_ID } from "./index";
@@ -39,6 +39,9 @@ export function palworldPlatform(os: string) {
 }
 const platform = () => palworldPlatform(process.platform);
 
+/** A console line Palworld writes for a failure. */
+const isError = (line: string) => /error|exception|\bfail/i.test(line);
+
 /** One server's part of the game: its process, console, settings files and players are its own. */
 export function palworldService(ctx: Server): GameService {
     const local = {
@@ -48,7 +51,6 @@ export function palworldService(ctx: Server): GameService {
         secrets: [] as string[],
         // the settings file is read, changed and written back; two of those at once lose one
         ini: Promise.resolve() as Promise<unknown>,
-        console: new ConsoleBuffer((line) => /error|exception|\bfail/i.test(line)),
     };
 
     // Layout: install/ is SteamCMD's folder and is left out of backups; the game
@@ -258,7 +260,6 @@ export function palworldService(ctx: Server): GameService {
         async beforeRemove() { if (local.busy) throw new Error("Wait for Palworld's current operation"); },
         async dispose() {
             players.stop();
-            local.console.dispose();
         },
         async prepareLaunch() {
             assertHost(palworld);
@@ -343,7 +344,7 @@ export function palworldService(ctx: Server): GameService {
                 const said = parseChat(line, players.online().map((p) => p.name));
                 if (said) ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender: said.sender, content: said.content, text: `<${said.sender}> ${said.content}` }));
             } catch (err) { report(ctx, "Could not read a chat message", err); }
-            local.console.push(ctx, line);
+            ctx.console.push(line, isError(line));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

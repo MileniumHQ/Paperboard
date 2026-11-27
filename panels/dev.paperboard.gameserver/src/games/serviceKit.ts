@@ -10,7 +10,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { fileApi as rawFiles, problemsApi, secretsApi, errorMessage } from "@mileniumhq/paperapi";
 import { TRIGGER_IDS } from "../service/contract";
-import { appendCapped, PANEL_ID, type ChatMessage, type ConsoleLine } from "../service/types";
+import { appendCapped, PANEL_ID, type ChatMessage } from "../service/types";
 import { chatId } from "../lib/logs";
 import type { GameDefinition, GameOptions } from "./types";
 import type { GameService, PortSpec } from "./serviceTypes";
@@ -198,73 +198,6 @@ export function settled(ctx: Server, game: string): boolean {
 export function redact(line: string, secrets: readonly string[]): string {
     for (const secret of secrets) if (secret) line = line.replaceAll(secret, "[redacted]");
     return line;
-}
-
-const CONSOLE_LINES = 1000;
-const PERCENT = /\d{1,3}(?:\.\d+)?%/g;
-
-/**
- * A progress line's step: the line with its counts masked, so "Loading world
- * data: 27%" and a new world's "95.4% - Clean up - 63.9%" (overall and step
- * count) each match their next count. Null for a line that doesn't end in one.
- */
-export function progressStep(line: string): string | null {
-    const trimmed = line.trim();
-    if (!/\d{1,3}(?:\.\d+)?%$/.test(trimmed)) return null;
-    return trimmed.replace(PERCENT, "%");
-}
-
-// how far back a progress line looks for its step's earlier count
-const PROGRESS_LOOKBACK = 32;
-
-/**
- * Adds a line to a console's lines. A progress line replaces its step's
- * earlier count when only progress lines stand between them, so a start
- * shows "Loading world data: 100%" once, not a hundred times, even while
- * Terraria reprints "Finalizing world" between each of its other counts.
- * Any other line in between keeps the earlier count.
- */
-function addConsoleLine<T>(lines: T[], line: T, text: (line: T) => string): T[] {
-    const step = progressStep(text(line));
-    if (step !== null) {
-        for (let i = lines.length - 1; i >= Math.max(0, lines.length - PROGRESS_LOOKBACK); i--) {
-            const earlier = progressStep(text(lines[i]!));
-            if (earlier === null) break;
-            if (earlier === step) return [...lines.slice(0, i), ...lines.slice(i + 1), line];
-        }
-    }
-    return [...lines, line];
-}
-
-/**
- * Console lines gathered for a tenth of a second and published together, so a
- * chatty server costs one state update per batch rather than one per line.
- */
-export class ConsoleBuffer {
-    private pending: string[] = [];
-    private timer: ReturnType<typeof setTimeout> | null = null;
-    constructor(private readonly isError: (line: string) => boolean) {}
-    push(ctx: Server, line: string) {
-        // a game's first line can start with byte order marks (Terraria writes one each start): they are no text
-        line = line.replace(/^\uFEFF+/, "");
-        if (!line) return;
-        this.pending = addConsoleLine(this.pending, line, String).slice(-CONSOLE_LINES);
-        if (this.timer) return;
-        this.timer = setTimeout(() => {
-            this.timer = null;
-            const lines = this.pending;
-            this.pending = [];
-            // added to what is published now: a line written in between keeps the old progress line
-            let entries: ConsoleLine[] = ctx.state.serverEntries;
-            for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
-            ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
-        }, 100);
-    }
-    dispose() {
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = null;
-        this.pending = [];
-    }
 }
 
 /** Ports a game keeps in its settings, as the Port API claims them; the launch opens `ctx.runPort(name, saved)`. */
