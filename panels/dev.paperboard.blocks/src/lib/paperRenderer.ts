@@ -199,8 +199,9 @@ class PaperConstants extends Blockly.zelos.ConstantProvider {
             // an empty field says what goes in it, as PaperUI's placeholders do
             `${selector} .${PLACEHOLDER_CLASS} { fill: ${getVarCss("text-faint")} !important; font-weight: ${getVarCss("weight-regular")}; }`,
             // a typed-in value (a shadow that's only its text field) is PaperUI's field. Blockly paints it
-            // with the colour it had when the field was first drawn, so the theme is followed here instead
-            `${selector} .blocklyShadow:has(> .blocklyEditableField > text:not(.blocklyDropdownText)) > .blocklyPath { fill: ${getVarCss("field")}; }`,
+            // with the colour it had when the field was first drawn, so the theme is followed here
+            // instead; on the canvas the block takes the click, so its field is marked non-editable
+            `${selector} .blocklyShadow:has(> .blocklyInputField) > .blocklyPath { fill: ${getVarCss("field")}; }`,
             // every block and every field has an edge, so each reads apart from what it sits on
             `${selector} .blocklyPath { stroke-width: ${getVarCss("border-width")}; }`,
             `${selector} .blocklyShadow>.blocklyPath, ${selector} .blocklyNonEditableField>rect:not(.blocklyDropdownRect), ${selector} .blocklyEditableField>rect:not(.blocklyDropdownRect) { stroke: ${getVarCss("border-strong")}; stroke-width: ${getVarCss("border-width")}; }`,
