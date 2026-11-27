@@ -1,8 +1,7 @@
 // Turns a usage report into donut segments: each panel, Paperboard,
 // everything else, and what's free. Pure, so the arithmetic is tested.
 import type { UsageReport } from "@mileniumhq/paperapi";
-import { getVarCss } from "@mileniumhq/paperui";
-import { formatBytes } from "../../../lib/formatBytes";
+import { formatBytes, getVarCss } from "@mileniumhq/paperui";
 
 export type UsageMetric = "cpu" | "memory";
 

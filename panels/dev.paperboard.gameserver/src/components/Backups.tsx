@@ -1,22 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import {
-    PaperButton,
-    PaperError,
-    PaperFlex,
-    PaperIcon,
-    PaperModal,
-    PaperPageHeader,
-    PaperQuote,
-    PaperSectionHeader,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
-    PaperSettingItem,
-    PaperSettingList,
-    PaperText,
-    PaperToggle,
-    createRead,
-    showError,
-} from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperFlex, PaperIcon, PaperModal, PaperPageHeader, PaperQuote, PaperSectionHeader, PaperSelectMenu, PaperSelectMenuItem, PaperSettingItem, PaperSettingList, PaperText, PaperToggle, createRead, formatBytes, showError } from "@mileniumhq/paperui";
 import { backupApi, backupProgressText, type BackupRecord } from "../lib/api";
 import { ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL, type BackupScheduleChoice } from "../backupSchedule";
 import { useServer } from "../lib/server";
@@ -39,12 +22,6 @@ const everyText = (hours: number) =>
     : hours === 168 ? "Every week"
     : hours % 24 === 0 ? `Every ${hours / 24} days`
     : `Every ${hours} hours`;
-
-function sizeText(bytes: number): string {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-    return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-}
 
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 
@@ -137,7 +114,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         if (!(await ensureLocation())) return null;
         setBusy("create");
         const record = await server.calls.backUp({});
-        return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
+        return { title: "Backed up", message: `Backed up the server (${formatBytes(record.size)}).` };
     });
 
     const schedule = () => read.value()?.schedule ?? null;
@@ -200,7 +177,7 @@ export default function Backups(props: { active: boolean; whileRunning: "quiesce
         record.label === ROUTINE_BACKUP_LABEL || !record.label ? `the backup from ${dateText(record.createdAt)}` : `“${record.label}”`;
     const recordTitle = (record: BackupRecord) => record.label === ROUTINE_BACKUP_LABEL || !record.label ? dateText(record.createdAt) : record.label;
     const recordDetail = (record: BackupRecord) =>
-        [record.label === ROUTINE_BACKUP_LABEL ? "Routine" : record.label ? dateText(record.createdAt) : "Made by hand", sizeText(record.size)].join(" · ");
+        [record.label === ROUTINE_BACKUP_LABEL ? "Routine" : record.label ? dateText(record.createdAt) : "Made by hand", formatBytes(record.size)].join(" · ");
 
     return (
         <>

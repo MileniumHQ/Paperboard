@@ -29,10 +29,12 @@ export function formatByteProgress(done: number, total: number): string {
 /** A size as people read it: "820 bytes", "48 KB", "1.2 GB", in the same units and rounding as formatByteProgress. */
 export function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes < 0) throw new Error(`formatBytes needs a size, got ${bytes}`);
-    if (bytes < STEP) return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
+    const whole = Math.round(bytes);
+    if (whole < STEP) return `${whole} ${whole === 1 ? "byte" : "bytes"}`;
     let unit = 0;
     let value = bytes / STEP;
-    while (unit < UNITS.length - 1 && value >= STEP) {
+    // promoted on the amount shown, so 1023.6 KB reads "1 MB", not "1024 KB"
+    while (unit < UNITS.length - 1 && Math.round(value) >= STEP) {
         unit += 1;
         value /= STEP;
     }

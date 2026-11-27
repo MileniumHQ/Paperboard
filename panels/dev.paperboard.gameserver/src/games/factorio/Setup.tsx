@@ -1,9 +1,8 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { PaperButton, PaperCenteredInterface, PaperEmptyState, PaperError, PaperWizard, PaperWizardStep } from "@mileniumhq/paperui";
+import { PaperButton, PaperCenteredInterface, PaperEmptyState, PaperError, PaperWizard, PaperWizardStep, formatBytes } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import InstallLoaders from "../../components/InstallLoaders";
 import { UnsupportedHost, type HostSupport } from "../../components/InstallNotices";
-import { formatSize } from "../../lib/addons/presentation";
 import { errorMessage } from "../../lib/failure";
 import { useServer } from "../../lib/server";
 import { createFactorioInstall } from "./installRows";
@@ -67,7 +66,7 @@ function InstallStep() {
                             <PaperEmptyState
                                 icon="download"
                                 title="Factorio isn't downloaded yet"
-                                description={`Its free headless server is ${formatSize(info().size)} from factorio.com. Players join with their own copy of the game.`}
+                                description={`Its free headless server is ${formatBytes(info().size)} from factorio.com. Players join with their own copy of the game.`}
                             >
                                 <PaperButton onClick={download}>Download Factorio {info().latest}</PaperButton>
                             </PaperEmptyState>

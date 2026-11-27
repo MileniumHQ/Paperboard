@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { PaperBadge, PaperCopyButton, PaperFlex, PaperQuote, PaperTable } from "@mileniumhq/paperui";
+import { PaperBadge, PaperCopyButton, PaperFlex, PaperQuote, PaperTable, formatBytes } from "@mileniumhq/paperui";
 import { PANEL_ID } from "../../service/contract";
 import { GameOptionItem } from "../../components/GameOptions";
 import WorldsPage from "../../components/WorldsPage";
@@ -22,10 +22,6 @@ function seedParts(seed: string): { number: string; flags: string[] } {
 function summary(header: TerrariaWorldHeader | null, generated = true): string {
     if (!generated) return "Not generated yet";
     return header ? `${worldSizeLabel(header.width)} · ${gameModeLabel(header.gameMode)}` : "Can't be read";
-}
-
-function fileSize(bytes: number): string {
-    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 /** Terraria's worlds: each one .wld file in the server's worlds folder. */
@@ -107,7 +103,7 @@ export default function TerrariaWorlds() {
                                 >
                                     <tr>
                                         <th>File</th>
-                                        <td>{world().name}.wld · {fileSize(world().bytes)}</td>
+                                        <td>{world().name}.wld · {formatBytes(world().bytes)}</td>
                                     </tr>
                                     <tr>
                                         <th>Last saved</th>

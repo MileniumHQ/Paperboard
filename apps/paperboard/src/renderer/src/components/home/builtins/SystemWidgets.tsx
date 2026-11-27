@@ -1,9 +1,8 @@
-import { PaperButton, PaperChart, PaperWidget, PaperWidgetMessage, PaperWidgetStat, PaperWidgetStats } from "@mileniumhq/paperui";
+import { PaperButton, PaperChart, PaperWidget, PaperWidgetMessage, PaperWidgetStat, PaperWidgetStats, formatBytes } from "@mileniumhq/paperui";
 import { type JSX, type Component, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { type Figure, figureOf, formatRate, formatUptime, oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
-import { formatBytes } from "../../../lib/formatBytes";
 import { formatPercent } from "./usageSegments";
 import styles from "./Builtins.module.css";
 

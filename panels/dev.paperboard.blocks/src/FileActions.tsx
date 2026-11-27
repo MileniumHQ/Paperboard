@@ -1,30 +1,11 @@
 import { createSignal, For, Show } from "solid-js";
-import {
-    createAction,
-    createRead,
-    PaperButton,
-    PaperError,
-    PaperFlex,
-    PaperLoader,
-    PaperModal,
-    PaperSelector,
-    PaperSelectorItem,
-    PaperText,
-    showError,
-} from "@mileniumhq/paperui";
+import { PaperButton, PaperError, PaperFlex, PaperLoader, PaperModal, PaperSelector, PaperSelectorItem, PaperText, createAction, createRead, formatBytes, showError } from "@mileniumhq/paperui";
 import { backupApi, fileApi, errorMessage } from "@mileniumhq/paperapi";
 import { PANEL_ID, type SavedFlows } from "./panel";
 import type { Notice } from "./bridge";
 import { flowFileText, MAX_FLOW_FILE_BYTES, parseFlowFile } from "./lib/flowFile";
 
 const FLOW_FILE_FILTERS = [{ name: "Flow files", extensions: ["json"] }];
-
-function sizeText(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-    return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-}
 
 const counted = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 const addedText = (file: SavedFlows) => counted(file.workspace.blocks?.blocks.length ?? 0, "stack");
@@ -120,7 +101,7 @@ export function createFileActions(props: {
         const saved = await props.flush();
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the backup would miss them: ${saved.message}`);
         const record = await backupApi.create(PANEL_ID);
-        return `Backed up (${sizeText(record.size)}).`;
+        return `Backed up (${formatBytes(record.size)}).`;
     });
 
     // Load Backup: the list, the chosen one, and where they are kept. The
@@ -223,7 +204,7 @@ export function createFileActions(props: {
                             <PaperSelector name="blocks-backup" value={selected()} onValueChange={(value) => setChosen(String(value))}>
                                 <For each={list()}>
                                     {(record) => (
-                                        <PaperSelectorItem value={record.id} icon="history" description={sizeText(record.size)}>
+                                        <PaperSelectorItem value={record.id} icon="history" description={formatBytes(record.size)}>
                                             {record.label || dateText(record.createdAt)}
                                         </PaperSelectorItem>
                                     )}
