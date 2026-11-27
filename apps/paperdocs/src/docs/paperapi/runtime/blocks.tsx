@@ -13,6 +13,7 @@ export default function BlocksApiDoc() {
             <PaperText preset="header" as="h1">blocksApi</PaperText>
             <PaperText preset="body" as="p">
                 blocksApi registers what a panel offers the Blocks panel, and is how the Blocks panel lists, runs and reads it.
+                A panel can also register <PaperLink href="#templates">templates</PaperLink>: flows of its blocks that a new Blocks project starts with.
                 Agents use the same blocks as tools, and any other panel can run them.
                 A panel's own page uses it too, for the <PaperCode>internal</PaperCode> blocks that <PaperLink href="/docs/paperapi/service/">definePanelService</PaperLink> makes of its <PaperCode>calls</PaperCode>.
             </PaperText>
@@ -85,7 +86,7 @@ blocksApi.defineProject(project: BlockProjectDefinition, panelId?: string): Prom
 
 interface BlocksHandle {
     register(set: BlockSet): Promise<void>;
-    unregister(kind: "type" | "command" | "value" | "event", id: string): Promise<void>;
+    unregister(kind: "type" | "command" | "value" | "event" | "template", id: string): Promise<void>;
     fire(event: string, payload: Record<string, unknown>): Promise<void>;
     changed(value: string): Promise<void>;
 }
@@ -108,11 +109,13 @@ interface BlockSet {
     commands?: BlockCommandDefinition[];
     values?: BlockValueDefinition[];
     events?: BlockEventDefinition[];
+    templates?: BlockTemplateDefinition[];
 }`}
             </PaperCode>
             <PaperTextList>
                 <li><PaperCode>register</PaperCode> checks the whole set first, and a broken definition registers nothing. The error says what to fix: <PaperCode>Command "kick" text names {"{who}"}, which is not one of its inputs</PaperCode>.</li>
                 <li>Types belong to the panel, so only <PaperCode>blocksApi.panel()</PaperCode> registers them. Its projects use them.</li>
+                <li>Templates belong to the panel too, and only <PaperCode>blocksApi.panel()</PaperCode> registers them.</li>
                 <li>Categories belong to the panel too. A block names one in <PaperCode>category</PaperCode>, and the Library heads its section with the category's <PaperCode>icon</PaperCode>, a Material Symbols name. Register them before the blocks that name them. A category with no declaration gets a plain heading.</li>
                 <li>A project's blocks are its own, and its section in the Blocks toolbox shows them. <PaperCode>remove</PaperCode> takes them all away.</li>
                 <li>The Blocks project menu shows a project by <PaperCode>image</PaperCode> when it has one, else by <PaperCode>icon</PaperCode>, a Material Symbols name. Give it the picture your panel shows for the project, such as a server's icon.</li>
@@ -256,6 +259,60 @@ interface BlockContext {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="subheader" as="h2" id="templates">Templates</PaperText>
+            <PaperText preset="body" as="p">
+                A template is a flow that Blocks' <b>New project</b> offers, made of the panel's own blocks. It says what starts the flow, its steps, and what the steps' inputs start as. Blocks makes the project from the blocks the panel has registered at that moment.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`await blocksApi.panel().register({
+    types: [serverType],
+    commands: [restartServer],
+    templates: [
+        {
+            id: "nightly-restart",
+            name: "Restart a game server every night",
+            description: "Every day at 04:00, restarts the server you pick",
+            icon: "restart_alt",
+            // offered once a server exists; the Server input starts as the first one
+            needs: "server",
+            when: { everyDay: "04:00" },
+            steps: [{ command: "restart-server" }],
+        },
+        {
+            id: "backup-failed",
+            name: "Log when a backup fails",
+            description: "Says in the Console which game server's backup failed, and why",
+            icon: "error",
+            needs: "server",
+            // one flow per server, on that server's own event
+            eachProject: true,
+            when: { event: "backup-failed" },
+            steps: [{ log: "{project}'s backup failed: {error}" }],
+        },
+    ],
+});
+
+interface BlockTemplateDefinition {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    when: { event: string; inputs?: Record<string, string | number | boolean> } | { everyDay: string };
+    steps: ({ command: string; inputs?: Record<string, string | number | boolean> } | { log: string })[];
+    needs?: string;
+    eachProject?: boolean;
+}`}
+            </PaperCode>
+            <PaperTextList>
+                <li><PaperCode>when</PaperCode> is one of the panel's events, or <PaperCode>everyDay</PaperCode> with a time on a 24-hour clock, such as <PaperCode>04:00</PaperCode>.</li>
+                <li>A step is one of the panel's commands, or a <PaperCode>log</PaperCode> line for the project's Console. In a log, <PaperCode>{"{error}"}</PaperCode> is a value the event fires, and <PaperCode>{"{project}"}</PaperCode> is the project's name.</li>
+                <li><PaperCode>inputs</PaperCode> are what an event's or a command's inputs start as. An input left out starts as it does in the Library.</li>
+                <li><PaperCode>needs</PaperCode> names one of the panel's types that lists its values. Until it lists one, New project shows the template greyed out with <PaperCode>Make a server in Game Server first</PaperCode>. Each required input of the type that the template leaves out starts as the first value.</li>
+                <li><PaperCode>eachProject</PaperCode> makes one flow for each of the panel's projects, with each project's own event and commands.</li>
+                <li>A template that names a block the panel doesn't have registered says so in New project instead of being made: <PaperCode>{`Game Server has no command "restart-server"; update it`}</PaperCode>.</li>
+                <li>A template is checked when registered, like a block: <PaperCode>{`Template "nightly-restart" runs every day at "4am", which isn't a time of day as 04:00`}</PaperCode>. While the panel isn't running, its templates aren't offered.</li>
+            </PaperTextList>
+
             <PaperText preset="subheader" as="h2" id="using">Using blocks</PaperText>
             <PaperText preset="body" as="p">
                 This is how the Blocks panel works, and any panel can do the same.
@@ -263,6 +320,8 @@ interface BlockContext {
             <PaperCode block language="tsx">
 {`blocksApi.list(panelId?: string): Promise<BlockInfo[]>;
 blocksApi.projects(panelId?: string): Promise<BlockProjectInfo[]>;
+/** every panel's templates, as { panelId, template } */
+blocksApi.templates(panelId?: string): Promise<BlockTemplateInfo[]>;
 
 blocksApi.run<T>(panelId, command, inputs?, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
 blocksApi.read<T>(panelId, value, inputs?, options?: { project?: string; timeoutMs?: number | null }): Promise<T>;
@@ -286,7 +345,7 @@ interface BlockInfo {
 }`}
             </PaperCode>
             <PaperTextList>
-                <li>Internal blocks are left out of <PaperCode>list</PaperCode>. A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
+                <li>Internal blocks and templates are left out of <PaperCode>list</PaperCode>. A listed schema is the definition without its code, with every custom type named by its panel: <PaperCode>dev.paperboard.gameserver:player</PaperCode>. A field the panel looks up is marked <PaperCode>resolved: true</PaperCode>.</li>
                 <li>A call waits 30 seconds by default and 60 at most. <PaperCode>timeoutMs: null</PaperCode> waits it out.</li>
                 <li>A change says only that the value changed. Read it again for the new one.</li>
                 <li>An input whose choices are a function, and a type with choices, are listed with <PaperCode>dynamicChoices: true</PaperCode> and no choices.</li>
@@ -311,7 +370,8 @@ await server.register(serverBlocks);
 await blocks.run("kick-player", { player: "Steve" }, { project: "s1" });
 await blocks.read("player-count", {}, { project: "s1" });
 await blocks.property("player", "online", "Steve", { project: "s1" });
-await blocks.choices("s1/command.set-game-rule", "rule");`}
+await blocks.choices("s1/command.set-game-rule", "rule");
+blocks.templates(); // the templates registered, as blocksApi.templates() lists them`}
             </PaperCode>
         </PaperFlex>
     );
