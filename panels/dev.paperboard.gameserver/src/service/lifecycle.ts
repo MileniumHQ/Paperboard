@@ -277,10 +277,11 @@ export async function stopServerInstance(
                 content: ctx.game.stopEntry,
             }),
         });
-        try { await ctx.game.stop(); }
-        catch (err) { cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
-
+        // the force-kill is pending before the stop is sent: a server can quit before its
+        // stop is acknowledged, and its exit then has to find the force-kill to cancel it
         scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
+        try { await ctx.game.stop(); }
+        catch (err) { cancelStopForceKill(ctx); cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
     }
 }
 
@@ -304,10 +305,10 @@ export async function restartServerInstance(
             },
         ),
     });
-    try { await ctx.game.stop(); }
-    catch (err) { ctx.lifecycle.isRestarting = false; cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
-
+    // pending before the stop is sent, as in stopServerInstance
     scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
+    try { await ctx.game.stop(); }
+    catch (err) { cancelStopForceKill(ctx); ctx.lifecycle.isRestarting = false; cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
 }
 
 export async function sendServerCommand(

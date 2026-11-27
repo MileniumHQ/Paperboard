@@ -84,6 +84,22 @@ describe("start, stop and restart", () => {
         expect(await mc.server.process.exists("mc-server")).toBe(false);
     });
 
+    test("a server that quits before its stop is acknowledged leaves no force-kill behind for its next run", async () => {
+        const mc = minecraftServer();
+        // the stop is answered only once the process is gone, as a fast server's SIGINT can be
+        const stop = mc.server.game.stop.bind(mc.server.game);
+        mc.server.game.stop = async () => { const exit = mc.nextExit(); await stop(); await exit; };
+        for (const end of [stopServerInstance, restartServerInstance]) {
+            await startOnline(mc);
+            await end(mc.server);
+            expect(__lifecycleTest.isStopForceKillPending(mc.server)).toBe(false);
+        }
+        await mc.server.waitFor((s) => s.serverStatus === "online", "the restart to come online");
+        expect(mc.server.state.serverEntries.filter((e) => e.content.includes("Graceful stop timed out"))).toHaveLength(0);
+        mc.server.game.stop = stop;
+        await stopOffline(mc);
+    });
+
     test("a force-killed restart comes back and stays online, and a server still running after a force-kill is never called offline", async () => {
         const mc = minecraftServer({ files: { "fake-server.json": JSON.stringify({ ignoreStop: true }) } });
         await startOnline(mc);
