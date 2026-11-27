@@ -26,8 +26,9 @@ export default function BlocksDoc() {
             <PaperText preset="body" as="p">
                 Blocks opens on your projects. A project is one canvas of flows.
                 Select <b>New project</b> to start one, or select a project to open it.
-                New project asks what to start with: an empty project, or a template that is ready to run, such as <b>Restart a game server every night</b>, <b>Log when a backup fails</b> or <b>Count runs with Data</b>.
-                A template that needs another panel, such as Game Server, says so until that panel is installed and has a server.
+                New project asks what to start with: an empty project, or a template that is ready to run.
+                Blocks has <b>Count runs with Data</b>, and other panels add their own while they run, such as Game Server's <b>Restart a game server every night</b> and <b>Log when a backup fails</b>.
+                A template that can't be made yet is greyed out and says why, such as <b>Make a server in Game Server first</b>.
                 A project's <b>⋮</b> menu has <b>Open</b>, <b>Rename</b>, <b>Make a copy</b> and <b>Delete</b>.
             </PaperText>
             <PaperText preset="body" as="p">

@@ -36,7 +36,7 @@ The guides for building panels are at <https://paperboard.dev/docs/developers/>.
 - `src/lib/scheduler.ts` runs the schedule hats in the service and notes
   when each last ran in `schedules.json`; `src/lib/data.ts` keeps each
   project's Data in `data/<project>.json`.
-- `src/templates.ts` is what New project can start a project with.
+- `src/templates.ts` is what New project can start a project with: Blocks' own templates, and the builder that makes panels' registered templates (`blocksApi` `templates`) from their blocks.
 - `src/panel.ts` holds what the page and the service share.
 - `src/service.ts` is the background service, and `src/runtime.ts` what it
   does: it keeps the projects, listens for the events their flows start

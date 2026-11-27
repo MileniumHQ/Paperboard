@@ -1,11 +1,19 @@
-// The flows a new project can start with. Each is built from blocks that
-// exist now: Blocks' own, and the registry's as it answers when the project
-// is made, so a template that needs a panel says what it needs instead of
-// leaving blocks on the canvas that can't run.
-import { blockEntry, errorMessage, type BlockChoice, type BlockInfo, type BlockProjectInfo } from "@mileniumhq/paperapi";
+// The flows a new project can start with: Blocks' own, and the ones panels
+// register (blocksApi's templates). A panel's is built from the blocks the
+// registry has as the project is made, so a template that can't be made yet
+// says why instead of leaving blocks on the canvas that can't run.
+import {
+    blockEntry,
+    errorMessage,
+    type BlockChoice,
+    type BlockInfo,
+    type BlockProjectInfo,
+    type BlockTemplateInfo,
+    type BlockTemplateValue,
+} from "@mileniumhq/paperapi";
 import { choiceValue } from "./lib/choicesField";
-import { registryDefinitions, type Definitions } from "./lib/blockDefs";
-import { BUILTIN, parseEntry, registryBlockType } from "./lib/names";
+import { inText, registryDefinitions, type Definitions } from "./lib/blockDefs";
+import { BUILTIN, registryBlockType } from "./lib/names";
 import type { SavedBlock, SavedWorkspace } from "./lib/interpreter";
 import type { SavedFlows } from "./panel";
 
@@ -15,48 +23,36 @@ type Json = Record<string, unknown>;
 export interface TemplateRegistry {
     entries: BlockInfo[];
     projects: BlockProjectInfo[];
-    /** the values each type a template picks one of lists (CHOSEN_TYPES), or why they couldn't be listed */
+    templates: BlockTemplateInfo[];
+    /** each panel's name, by id */
+    panelNames: Record<string, string>;
+    /** what each type a template needs lists ("panel:type"), or why it couldn't be listed */
     choices: Record<string, BlockChoice[] | { failed: string }>;
 }
 
 export type Built = { flows: SavedFlows } | { unavailable: string };
 
+/** One template New project offers. */
 export interface Template {
-    id: string;
+    /** unique in the dialog: Blocks' own by id, a panel's as "panel/id" */
+    key: string;
     name: string;
     description: string;
     icon: string;
-    /** whether it is built from other panels' blocks, so it waits for the registry */
-    needsRegistry: boolean;
-    build(registry: TemplateRegistry): Built;
+    build(): Built;
 }
 
-const GAME_SERVER = "dev.paperboard.gameserver";
-const GAME_SERVER_NAME = "Game Server";
-const SERVER_TYPE = `${GAME_SERVER}:server`;
+const needed = (info: BlockTemplateInfo) => (info.template.needs ? `${info.panelId}:${info.template.needs}` : null);
 
-/** The types a template fills an input of with the first value they list, read with the registry. */
-export const CHOSEN_TYPES = [SERVER_TYPE];
-
-/** The first value a type lists, as a dropdown keeps it; or why there is none. */
-function firstChoice(registry: TemplateRegistry, typeRef: string, what: string): { value: string } | { unavailable: string } {
-    const listed = registry.choices[typeRef];
-    if (!listed) throw new Error(`${typeRef} wasn't listed with the registry`);
-    if ("failed" in listed) return { unavailable: `Couldn't list the ${what}: ${listed.failed}` };
-    if (!listed.length) return { unavailable: `Make a ${what.replace(/s$/, "")} in ${GAME_SERVER_NAME} first` };
-    return { value: choiceValue(listed[0]!.value) };
-}
-
-/** Reads what each of CHOSEN_TYPES lists; a type whose panel isn't here lists nothing. */
-export async function readChoices(entries: BlockInfo[], list: (typeRef: string) => Promise<BlockChoice[]>): Promise<TemplateRegistry["choices"]> {
-    const offered = CHOSEN_TYPES.filter((typeRef) => entries.some((e) => e.panelId === typeRef.slice(0, typeRef.indexOf(":"))));
-    const read = await Promise.all(offered.map(async (typeRef) => [typeRef, await list(typeRef).catch((err: unknown) => ({ failed: errorMessage(err) }))] as const));
-    return Object.fromEntries([...CHOSEN_TYPES.map((typeRef) => [typeRef, []] as const), ...read]);
+/** Lists what each type the templates need has now; one that fails says why in its templates. */
+export async function readChoices(templates: BlockTemplateInfo[], list: (typeRef: string) => Promise<BlockChoice[]>): Promise<TemplateRegistry["choices"]> {
+    const types = [...new Set(templates.map(needed).filter((t) => t !== null))];
+    return Object.fromEntries(await Promise.all(types.map(async (typeRef) => [typeRef, await list(typeRef).catch((err: unknown) => ({ failed: errorMessage(err) }))] as const)));
 }
 
 const text = (t: string): Json => ({ shadow: { type: "text", fields: { TEXT: t } } });
 const num = (n: number): Json => ({ shadow: { type: "math_number", fields: { NUM: n } } });
-const join = (...parts: Json[]): Json => ({ block: { type: "text_join", extraState: { itemCount: parts.length }, inputs: Object.fromEntries(parts.map((p, i) => [`ADD${i}`, p])) } });
+const join = (...parts: Json[]): Json => (parts.length === 1 ? parts[0]! : { block: { type: "text_join", extraState: { itemCount: parts.length }, inputs: Object.fromEntries(parts.map((p, i) => [`ADD${i}`, p])) } });
 const log = (value: Json): Json => ({ type: BUILTIN.log, inputs: { TEXT: value } });
 /** Steps one under another. */
 const steps = (...blocks: Json[]): Json => blocks.reduceRight<Json | undefined>((next, block) => ({ block: { ...block, ...(next ? { next } : {}) } }), undefined)!;
@@ -105,68 +101,97 @@ function libraryBlock(defs: Definitions, type: string): Json {
     throw new Error(`${type} isn't in the Library`);
 }
 
-/** Why a Game Server template can't be made yet, or null when it can. */
-function gameServerMissing(registry: TemplateRegistry): string | null {
-    if (!registry.entries.some((e) => e.panelId === GAME_SERVER)) return `Needs the ${GAME_SERVER_NAME} panel`;
-    if (!registry.projects.some((p) => p.panelId === GAME_SERVER)) return `Make a server in ${GAME_SERVER_NAME} first`;
-    return null;
+/** Why a panel's template can't be made now. */
+class Unavailable extends Error {}
+
+/** The input's editable block, set to start as the value. */
+function startAs(shadow: Json, value: BlockTemplateValue): void {
+    if (shadow.type === "text") shadow.fields = { TEXT: String(value) };
+    else if (shadow.type === "math_number") shadow.fields = { NUM: Number(value) };
+    else if (shadow.type === "logic_boolean") shadow.fields = { BOOL: value ? "TRUE" : "FALSE" };
+    // a dropdown: of the input's choices, or of the values its type lists
+    else shadow.fields = { VALUE: choiceValue(value) };
 }
 
-export const TEMPLATES: Template[] = [
-    {
-        id: "nightly-restart",
-        name: "Restart a game server every night",
-        description: "Every day at 04:00, restarts the server you pick",
-        icon: "restart_alt",
-        needsRegistry: true,
-        build: (registry) => {
-            const missing = gameServerMissing(registry);
-            if (missing) return { unavailable: missing };
-            const entry = blockEntry("command", "restart-server");
-            if (!registry.entries.some((e) => e.panelId === GAME_SERVER && e.entry === entry)) return { unavailable: `This ${GAME_SERVER_NAME} can't restart servers from Blocks; update it` };
-            const server = firstChoice(registry, SERVER_TYPE, "servers");
-            if ("unavailable" in server) return server;
-            const defs = registryDefinitions(registry.entries, registry.projects);
-            const restart = libraryBlock(defs, registryBlockType({ kind: "command", panelId: GAME_SERVER, entry }));
-            // the server it restarts starts as the first one, as the dropdown would; the service runs what is saved
-            const picked = (restart.inputs as Record<string, { shadow?: Json }> | undefined)?.server?.shadow;
-            if (!picked) throw new Error("Restart Server has no server to pick");
-            picked.fields = { VALUE: server.value };
-            return { flows: flowsOf([{ type: BUILTIN.everyDay, fields: { TIME: "04:00" }, inputs: { DO: steps(restart) } }], defs) };
-        },
-    },
-    {
-        id: "backup-failed",
-        name: "Log when a backup fails",
-        description: "Says in the Console which game server's backup failed, and why",
-        icon: "error",
-        needsRegistry: true,
-        build: (registry) => {
-            const missing = gameServerMissing(registry);
-            if (missing) return { unavailable: missing };
-            const failures = registry.entries.filter((e) => {
-                const at = parseEntry(e.entry);
-                const server = registry.projects.some((p) => p.panelId === GAME_SERVER && p.id === at.project);
-                return e.panelId === GAME_SERVER && server && at.kind === "event" && at.id === "backup-failed" && e.schema.kind === "event" && e.schema.values?.error;
+/** Makes a panel's template from the blocks the registry has now, or says why it can't. */
+export function buildTemplate({ panelId, template }: BlockTemplateInfo, registry: TemplateRegistry): Built {
+    const panel = registry.panelNames[panelId] ?? panelId;
+    const typeRef = needed({ panelId, template });
+    let first: BlockTemplateValue | undefined;
+    if (typeRef) {
+        const type = registry.entries.find((e) => e.panelId === panelId && e.entry === blockEntry("type", template.needs!));
+        const listed = registry.choices[typeRef];
+        if (!type || !listed) return { unavailable: `${panel} doesn't list its ${template.needs} values; update it` };
+        const what = inText(type.schema.name);
+        if ("failed" in listed) return { unavailable: `Couldn't list the ${what} values: ${listed.failed}` };
+        if (!listed.length) return { unavailable: `Make a ${what} in ${panel} first` };
+        first = listed[0]!.value;
+    }
+    const projects = template.eachProject ? registry.projects.filter((p) => p.panelId === panelId) : [undefined];
+    if (!projects.length) return { unavailable: `${panel} has nothing to make it for yet` };
+    const defs = registryDefinitions(registry.entries, registry.projects);
+
+    /** One of the panel's blocks, as the Library has it, its inputs started as the template says. */
+    const block = (kind: "command" | "event", id: string, given: Record<string, BlockTemplateValue> | undefined, project: BlockProjectInfo | undefined) => {
+        const entry = blockEntry(kind, id, project?.id);
+        const info = registry.entries.find((e) => e.panelId === panelId && e.entry === entry);
+        if (!info) throw new Unavailable(`${panel} has no ${kind} "${id}"${project ? ` in ${project.name}` : ""}; update it`);
+        const made = libraryBlock(defs, registryBlockType({ kind, panelId, entry }));
+        const inputs = ("inputs" in info.schema ? info.schema.inputs : undefined) ?? {};
+        for (const key of Object.keys(given ?? {})) if (!inputs[key]) throw new Unavailable(`${info.schema.name} has no input "${key}"`);
+        for (const [key, input] of Object.entries(inputs)) {
+            // a required input of the type it needs starts as the first; an optional one as the Library has it (none, or any)
+            const value = given?.[key] ?? (input.type === typeRef && !input.optional ? first : undefined);
+            if (value === undefined) continue;
+            const shadow = (made.inputs as Record<string, { shadow?: Json }> | undefined)?.[key]?.shadow;
+            if (!shadow) throw new Unavailable(`${info.schema.name}'s ${input.name} can't start as a value`);
+            startAs(shadow, value);
+        }
+        return { made, info };
+    };
+
+    try {
+        const stacks = projects.map((project) => {
+            const { when } = template;
+            const hat = "event" in when ? block("event", when.event, when.inputs, project) : null;
+            const fired = hat?.info.schema.kind === "event" ? (hat.info.schema.values ?? {}) : {};
+            const body = template.steps.map((step) => {
+                if ("command" in step) return block("command", step.command, step.inputs, project).made;
+                // "{key}" is a value the event fires; "{project}" the project's name. Neighbouring text reads as one
+                const parts: (string | Json)[] = [];
+                step.log.split(/\{([^}]*)\}/).forEach((part, i) => {
+                    const said = i % 2 === 0 ? part : part === "project" && project ? project.name : null;
+                    if (said === null) {
+                        if (!hat || !fired[part]) throw new Unavailable(`${template.name} logs {${part}}, which its event doesn't fire`);
+                        parts.push({ block: { type: registryBlockType({ kind: "event-value", panelId, entry: hat.info.entry, key: part }) } });
+                    } else if (typeof parts.at(-1) === "string") parts[parts.length - 1] += said;
+                    else if (said) parts.push(said);
+                });
+                return log(join(...parts.map((p) => (typeof p === "string" ? text(p) : p))));
             });
-            if (!failures.length) return { unavailable: `This ${GAME_SERVER_NAME} doesn't say when a backup fails; update it` };
-            const defs = registryDefinitions(registry.entries, registry.projects);
-            // one flow for each server, which names it
-            const stacks = failures.map((e) => {
-                const server = registry.projects.find((p) => p.panelId === GAME_SERVER && p.id === parseEntry(e.entry).project)!;
-                const hat = libraryBlock(defs, registryBlockType({ kind: "event", panelId: GAME_SERVER, entry: e.entry }));
-                const why = { block: { type: registryBlockType({ kind: "event-value", panelId: GAME_SERVER, entry: e.entry, key: "error" }) } };
-                return { ...hat, inputs: { ...(hat.inputs as Json | undefined), DO: steps(log(join(text(`${server.name}'s backup failed: `), why))) } };
-            });
-            return { flows: flowsOf(stacks, defs) };
-        },
-    },
+            if (!hat) return { type: BUILTIN.everyDay, fields: { TIME: (when as { everyDay: string }).everyDay }, inputs: { DO: steps(...body) } };
+            return { ...hat.made, inputs: { ...(hat.made.inputs as Json | undefined), DO: steps(...body) } };
+        });
+        return { flows: flowsOf(stacks, defs) };
+    } catch (err) {
+        if (err instanceof Unavailable) return { unavailable: err.message };
+        throw err;
+    }
+}
+
+/** A panel's template as New project offers it. */
+export function registeredTemplate(info: BlockTemplateInfo, registry: TemplateRegistry): Template {
+    const { id, name, description, icon } = info.template;
+    return { key: `${info.panelId}/${id}`, name, description, icon, build: () => buildTemplate(info, registry) };
+}
+
+/** Blocks' own, made of its own blocks. */
+export const OWN_TEMPLATES: Template[] = [
     {
-        id: "count-runs",
+        key: "count-runs",
         name: "Count runs with Data",
         description: "Each time you click Run, counts one more and logs the count, which a restart keeps",
         icon: "exposure_plus_1",
-        needsRegistry: false,
         build: () => ({
             flows: flowsOf([
                 {
