@@ -55,6 +55,22 @@ function escXml(s: string): string {
         .replace(/"/g, "&quot;");
 }
 
+const onWindows = process.platform === "win32";
+
+// the name a segment opens: Windows drops trailing dots and spaces and reads
+// "name:stream" as the file "name", so "local." and "secrets.json::$DATA"
+// open what they say they aren't
+const openedName = (seg: string) => (onWindows ? seg.split(":")[0]!.replace(/[. ]+$/, "") : seg);
+
+// a blocked top-level dir, or credential/local files and key material at ANY
+// depth, including dot-segment tricks after decodeURIComponent. Only "." and
+// ".." are navigation segments; a dotfile NAME is still a name and checked
+function isBlockedPath(relToRoot: string): boolean {
+    const segs = relToRoot.split(path.sep).filter((seg) => seg !== "." && seg !== "..").map(openedName);
+    // case-folded: macOS and Windows filesystems resolve /LOCAL/ to local/
+    return BLOCKED_TOP_LEVEL.has((segs[0] ?? "").toLowerCase()) || segs.some(isBlockedFileName);
+}
+
 /** Resolve a /dav-relative path inside root, null when blocked */
 export function resolveDavPath(root: string, rel: string): string | null {
     let decoded = rel;
@@ -66,18 +82,10 @@ export function resolveDavPath(root: string, rel: string): string | null {
     }
     const target = path.resolve(root, "." + (decoded.startsWith("/") ? decoded : "/" + decoded));
     const relToRoot = path.relative(root, target);
-    if (relToRoot.startsWith("..") || path.isAbsolute(relToRoot)) return null;
-    // case-folded: macOS and Windows filesystems resolve /LOCAL/ to local/
-    const top = relToRoot.split(path.sep)[0].toLowerCase();
-    if (BLOCKED_TOP_LEVEL.has(top)) return null;
-    // refuse credential/local files and key material at ANY depth,
-    // including dot-segment tricks after decodeURIComponent.
-    // polarity: only "." and ".." are navigation segments; a dotfile NAME
-    // is still a name and still gets checked
-    for (const seg of relToRoot.split(path.sep)) {
-        if (seg === "." || seg === "..") continue;
-        if (isBlockedFileName(seg)) return null;
-    }
+    if (relToRoot === ".." || relToRoot.startsWith(`..${path.sep}`) || path.isAbsolute(relToRoot)) return null;
+    if (isBlockedPath(relToRoot)) return null;
+    // Windows also opens a file by its short name (SECRET~1.JSO): what exists is checked by its real name too
+    if (onWindows && fs.existsSync(target) && isBlockedPath(path.relative(fs.realpathSync.native(root), fs.realpathSync.native(target)))) return null;
     // a linked folder above the target would lead outside the root; the
     // leaf itself is checked by each method (a link is never served)
     return target === root || hasOnlyRealEntriesBelow(root, path.dirname(target)) ? target : null;
