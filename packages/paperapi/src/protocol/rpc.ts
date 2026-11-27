@@ -7,8 +7,8 @@ import type { PortClaim, PortPolicy } from "../ports";
 import type { PanelProblem } from "../problemShape";
 import type { GpuInfo, UsageReport } from "../system";
 import type { InstalledPackageRecord, PendingPackageUpdate } from "../package";
-import type { BlockInfo, BlockProjectInfo } from "../blocks";
-import type { BlockSchema } from "../blocksSchema";
+import type { BlockInfo, BlockProjectInfo, BlockTemplateInfo } from "../blocks";
+import type { BlockSchema, BlockTemplateSchema } from "../blocksSchema";
 import type { InvalidPanel } from "../panels";
 import { anyText, configPath, envMap, flag, id, InvalidParamsError, list, numeric, object, opt, panelId, readValue, text, typed } from "./fields";
 
@@ -116,8 +116,8 @@ const appId = opt(text(128));
 const panelFilter = opt(text(128));
 
 // what a registry entry is named: a kind, a dot and the definition's id,
-// optionally inside a project ("server1/command.kick-player")
-const ENTRY_PATTERN = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/)?(type|command|value|event)\.[a-z0-9][a-z0-9-]{0,63}$/;
+// optionally inside a project ("server1/command.kick-player"); a template is the panel's, in no project
+const ENTRY_PATTERN = /^(?:(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/)?(?:type|command|value|event)|template)\.[a-z0-9][a-z0-9-]{0,63}$/;
 const entry = (): Shape<string> => {
     const bounded = text(256);
     return {
@@ -143,7 +143,7 @@ const callTimeout = (): Shape<number | null> => {
 };
 
 // a definition as the registry lists it; the Blocks panel reads it, the daemon only keeps it
-const blockSchema = (): Shape<BlockSchema> => ({
+const blockSchema = (): Shape<BlockSchema | BlockTemplateSchema> => ({
     check: (v, at) => (v && typeof v === "object" ? null : `a block needs a "${at}" object`),
 });
 
@@ -339,6 +339,7 @@ export const RPC = {
     "blocks:project-remove": { params: object({ panelId: panelId(), project: text(64) }) },
     "blocks:projects": { params: object({ panelId: panelFilter }) },
     "blocks:list": { params: object({ panelId: panelFilter }) },
+    "blocks:templates": { params: object({ panelId: panelFilter }) },
     "blocks:call": {
         params: object({ panelId: panelId(), entry: entry(), request: shape.optional(shape.json()), timeoutMs: shape.optional(callTimeout()) }),
     },
@@ -446,6 +447,7 @@ export interface RpcResults {
     "blocks:project-remove": Ack;
     "blocks:projects": { projects: BlockProjectInfo[] };
     "blocks:list": { entries: BlockInfo[] };
+    "blocks:templates": { templates: BlockTemplateInfo[] };
     "blocks:call": { result: unknown };
     "blocks:emit": Ack;
 }

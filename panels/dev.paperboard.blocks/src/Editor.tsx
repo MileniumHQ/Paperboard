@@ -36,11 +36,14 @@ import type { TrashState } from "./lib/trashZone";
 import { createCanvas, type Canvas } from "./lib/canvas";
 import "./lib/undrawnFields";
 import { parseEntry, parseRegistryBlockType } from "./lib/names";
+import { isScheduleHat } from "./lib/schedule";
+import { SCHEDULE_OFF, nextRunText, showNextRun } from "./lib/scheduleFields";
 import { Console } from "./Console";
 import { service, serviceState, type Notice } from "./bridge";
-import type { PanelState, ProjectSummary } from "./panel";
+import type { PanelState, ProjectSummary, SavedFlows } from "./panel";
 import { AUTO_START, switchFailed, type ProjectsState } from "./projects/state";
 import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
+import { NewProjectModal } from "./projects/NewProjectModal";
 import { createFileActions } from "./FileActions";
 import { BlocklyDialogs } from "./BlocklyDialogs";
 import { LibraryHeader, LibraryRail } from "./Library";
@@ -87,6 +90,10 @@ export default function Editor(props: {
         onNotice: notify,
         // the log lines from before the flows were shown are on the blocks they name
         onLoaded: () => showErrors(props.projects.state()),
+        needsPreview: () => {
+            const project = props.project();
+            return project.preview === null && project.editedAt === project.createdAt;
+        },
     });
     // Try again waits on the load it started; a load that fails says why over the canvas
     const [loadingAgain, setLoadingAgain] = createSignal(false);
@@ -94,6 +101,23 @@ export default function Editor(props: {
         setLoadingAgain(true);
         void flows.load().finally(() => setLoadingAgain(false));
     };
+
+    // each schedule hat says when it next runs, as the service worked it out, read again each half minute
+    const [clock, setClock] = createSignal(Date.now());
+    const ticking = setInterval(() => setClock(Date.now()), 30_000);
+    onCleanup(() => clearInterval(ticking));
+    function showNextRuns(): void {
+        if (!workspace || !flows.loaded()) return;
+        const enabled = props.project().enabled;
+        const next = props.projects.state().nextRuns[props.projectId] ?? {};
+        const now = clock();
+        for (const block of workspace.getTopBlocks(false)) {
+            if (!isScheduleHat(block.type)) continue;
+            const at = next[block.id];
+            showNextRun(block, !block.isEnabled() ? null : !enabled ? SCHEDULE_OFF : at === undefined ? null : nextRunText(at, now));
+        }
+    }
+    createEffect(on([() => props.projects.state().nextRuns[props.projectId], () => props.project().enabled, flows.loaded, clock], () => showNextRuns()));
 
     function showErrors(next: PanelState): void {
         if (!workspace) return;
@@ -163,6 +187,8 @@ export default function Editor(props: {
                         library.variablesChanged();
                     }
                     if (!event.isUiEvent) library.setFunctionsShape(JSON.stringify(Blockly.Procedures.allProcedures(workspace!)));
+                    // a schedule hat dropped on or switched off says so before the service answers
+                    if (!event.isUiEvent) untrack(showNextRuns);
                     if (!flows.loaded() || event.isUiEvent) return;
                     if (event.type === Blockly.Events.BLOCK_CREATE || event.type === Blockly.Events.BLOCK_DELETE) flows.markResults();
                     flows.edited();
@@ -265,13 +291,14 @@ export default function Editor(props: {
     const leaveDraft = async () => {
         if (props.project().draft) await props.projects.discardDraft(props.projectId);
     };
-    const newProject = () =>
-        change("Project not made", async () => {
-            await saveFirst();
-            const made = await props.projects.create();
-            await leaveDraft();
-            props.onOpen(made);
-        });
+    // New project asks what to start with; this one's edits are saved first, so a save that fails leaves nothing made
+    const [creating, setCreating] = createSignal(false);
+    const newProject = async (start: { name?: string; flows?: SavedFlows }) => {
+        await saveFirst();
+        const made = await props.projects.create(start.name, start.flows);
+        await leaveDraft();
+        props.onOpen(made);
+    };
     const copyProject = () =>
         change("Project not copied", async () => {
             await saveFirst(", so the copy would miss them");
@@ -339,7 +366,7 @@ export default function Editor(props: {
                         />
                         <PaperMenuBar aria-label={props.project().name}>
                             <PaperMenuBarMenu label="Project" size="tiny">
-                                <PaperContextMenuItem icon="add" disabled={working()} onClick={() => void newProject()}>
+                                <PaperContextMenuItem icon="add" disabled={working()} onClick={() => setCreating(true)}>
                                     New project
                                 </PaperContextMenuItem>
                                 <PaperContextMenuItem icon="file_copy" disabled={working() || !ready()} onClick={() => void copyProject()}>
@@ -423,6 +450,7 @@ export default function Editor(props: {
                     <PaperText preset="hint">Stay to keep them on the canvas, or leave without them.</PaperText>
                 </PaperFlex>
             </PaperModal>
+            <NewProjectModal open={creating()} onCreate={newProject} onClose={() => setCreating(false)} />
             <RenameProjectModal project={renaming() ? props.project() : null} onRename={props.projects.rename} onClose={() => setRenaming(false)} />
             <DeleteProjectModal
                 project={deleting() ? props.project() : null}

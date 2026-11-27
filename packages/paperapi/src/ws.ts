@@ -9,7 +9,7 @@ import { resolveCredentials, type CraneCredentials, type ResolvedCredentials } f
 import { webSocketImpl, type TransportSocket } from "./transport/socket";
 import { answerActionCall } from "./transport/actionCalls";
 import { errorMessage } from "./errors";
-import type { BlockSchema } from "./blocksSchema";
+import type { BlockSchema, BlockTemplateSchema } from "./blocksSchema";
 import { isRecord } from "./records";
 
 export { craneEndpoint, type CraneCredentials } from "./transport/credentials";
@@ -661,7 +661,7 @@ export class CraneTransport {
     }
 
     /** Registers a panel's Blocks entries ("kind.id" or "project/kind.id") and their handlers, in one call. */
-    public async registerBlocks(panelId: string, blocks: { entry: string; handler: ActionHandler; schema: BlockSchema }[]): Promise<void> {
+    public async registerBlocks(panelId: string, blocks: { entry: string; handler: ActionHandler; schema: BlockSchema | BlockTemplateSchema }[]): Promise<void> {
         await this.blocksRegistry.addActions(panelId, blocks, async () => {
             await this.ensureConnected();
             await registerSet((action, params) => this.call(action as RpcAction, params as never), panelId, blocks.map(({ entry, schema }) => ({ entry, schema })));

@@ -1,12 +1,13 @@
 // Game Server's own blocks for the Blocks panel: the ones
 // that run the panel itself, as its home screen does. Each server's own
 // blocks are its Blocks project (blocks.ts); these make, rename, remove,
-// start and stop servers by picking one.
+// start and stop servers by picking one. The templates are flows of them
+// that a new Blocks project can start with.
 //
 // What the blocks do is the service's: the same code the home screen and
 // each server's own blocks run. This file only says what they take and give.
 import type { Server } from "./server";
-import type { BlockChoice, BlockEventDefinition, BlockSet, BlockTypeDefinition } from "@mileniumhq/paperapi";
+import type { BlockChoice, BlockEventDefinition, BlockSet, BlockTemplateDefinition, BlockTypeDefinition } from "@mileniumhq/paperapi";
 import type { GameServerState } from "./types";
 import { TRIGGER_IDS } from "./contract";
 import { startServerInstance } from "./lifecycle";
@@ -58,7 +59,29 @@ export function serverType(host: ServersBlocksHost): BlockTypeDefinition<string>
 
 const server = { type: "server", name: "Server" } as const;
 
-/** The blocks that run the panel itself: making, removing, starting and stopping its servers. */
+const TEMPLATES: BlockTemplateDefinition[] = [
+    {
+        id: "nightly-restart",
+        name: "Restart a game server every night",
+        description: "Every day at 04:00, restarts the server you pick",
+        icon: "restart_alt",
+        needs: "server",
+        when: { everyDay: "04:00" },
+        steps: [{ command: "restart-server" }],
+    },
+    {
+        id: "backup-failed",
+        name: "Log when a backup fails",
+        description: "Says in the Console which game server's backup failed, and why",
+        icon: "error",
+        needs: "server",
+        eachProject: true,
+        when: { event: "backup-failed" },
+        steps: [{ log: "{project}'s backup failed: {error}" }],
+    },
+];
+
+/** The blocks that run the panel itself (making, removing, starting and stopping its servers), and the templates made of them. */
 export function serversBlocks(host: ServersBlocksHost): BlockSet {
     const idOf = (value: unknown) => (host.server(value), value as string);
     const event = (id: string, name: string, icon: string, verb: string, description: string): BlockEventDefinition => ({
@@ -167,5 +190,6 @@ export function serversBlocks(host: ServersBlocksHost): BlockSet {
             event(TRIGGER_IDS.serverStopped, "When a Server Stops", "stop", "stops", "Runs when a server's process ends, however it ended"),
             event(TRIGGER_IDS.serverCrashed, "When a Server Crashes", "error", "crashes", "Runs when a server stops without being asked to"),
         ],
+        templates: TEMPLATES,
     };
 }

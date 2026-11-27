@@ -1,6 +1,6 @@
 // The Blocks registry (PaperAPI's blocksApi): panels register types,
-// commands, values and events here, each one entry named "kind.id"
-// (or "project/kind.id"), and the Blocks panel lists and calls them.
+// commands, values, events and templates here, each one entry named
+// "kind.id" (or "project/kind.id"), and the Blocks panel lists and calls them.
 import { blocksRegistry } from "../server/actions";
 import { ErrorCode } from "../core/protocol";
 import type { RpcContext } from "./context";
@@ -28,6 +28,8 @@ export async function answeredAs<T>(call: () => Promise<T>): Promise<{ result: T
         throw new Refusal(errorMessage(err) || String(err), rpcErrorCode(err));
     }
 }
+
+const isTemplate = (entry: string) => entry.startsWith("template.");
 
 const conflict = (what: string, panelId: string) =>
     `Registry namespace is owned by another socket: ${what} for panel "${panelId}" conflicts`;
@@ -69,12 +71,19 @@ export const blocksRpc = rpcModule({
     },
     "blocks:projects": ({ panelId }) => ({ projects: blocksRegistry.listProjects(panelId) }),
     // an internal block is its panel's own, called by name: never listed,
-    // so no toolbox, flow or agent is offered it
+    // so no toolbox, flow or agent is offered it. A template is no block;
+    // blocks:templates lists those
     "blocks:list": ({ panelId }) => ({
         entries: blocksRegistry
             .list(panelId)
-            .filter((e) => e.schema?.internal !== true)
+            .filter((e) => e.schema?.internal !== true && !isTemplate(e.action))
             .map((e) => ({ panelId: e.panelId, entry: e.action, ...(e.project !== undefined ? { project: e.project } : {}), schema: e.schema })),
+    }),
+    "blocks:templates": ({ panelId }) => ({
+        templates: blocksRegistry
+            .list(panelId)
+            .filter((e) => isTemplate(e.action))
+            .map(({ panelId, schema: { kind: _kind, ...template } }) => ({ panelId, template })),
     }),
     "blocks:call": ({ panelId, entry, request, timeoutMs }, ctx) =>
         answeredAs(() => blocksRegistry.call(panelId, entry, [request ?? null], ctx.ws, timeoutMs === undefined ? 30_000 : timeoutMs, ctx.callerPanelId())),

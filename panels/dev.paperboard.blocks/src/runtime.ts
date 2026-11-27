@@ -1,13 +1,16 @@
 // What the Blocks service does, given the registry and the storage it does
-// it over: it keeps the projects and their flows, listens for the events the
-// switched-on projects start from, and runs them. service.ts hands it the
-// daemon's; the tests hand it a registry and storage in memory.
+// it over: it keeps the projects, their flows and their Data, listens for the
+// events the switched-on projects start from, keeps their schedules, and runs
+// them. service.ts hands it the daemon's; the tests hand it a registry,
+// storage in memory and a clock they turn.
 import { blockEntry, type BackupContents, type blocksApi, type BlocksHandle, type CallHandlers, type ServiceContext, errorMessage } from "@mileniumhq/paperapi";
 import { BlockError, hatInputs, isHat, runHat, type Host, type SavedBlock } from "./lib/interpreter";
 import { BUILTIN, parseEntry, parseRegistryBlockType, registryBlockType } from "./lib/names";
 import { BlocksAnnouncer, FLOW_FAILED_EVENT, blocksPanelBlocks } from "./blocks";
 import { RUN_STOPPED } from "./lib/failure";
 import { ProjectStore, readPreview, type ProjectStorage } from "./lib/projects";
+import { DataStore } from "./lib/data";
+import { Scheduler, systemClock, type Clock } from "./lib/scheduler";
 import { MAX_LOG, PANEL_ID, blocksContract, type LogEntry, type PanelState, type SavedFlows } from "./panel";
 
 /** The most runs one project has at once, so a flow that starts its own project can't run away. */
@@ -19,6 +22,8 @@ export interface RuntimeDeps {
     blocks: Pick<typeof blocksApi, "run" | "read" | "property" | "onEvent" | "onChange">;
     /** this panel's own handle, for its Projects blocks */
     handle: BlocksHandle;
+    /** the time the schedules keep; the computer's unless a test turns it */
+    clock?: Clock;
 }
 
 type SetState = ServiceContext<PanelState>["setState"];
@@ -28,8 +33,9 @@ const enabledStacks = (flows: SavedFlows) => (flows.workspace.blocks?.blocks ?? 
 // the hat of this panel's own "When a Flow Fails": a flow it starts that fails doesn't fire it again
 const FLOW_FAILED_HAT = registryBlockType({ kind: "event", panelId: PANEL_ID, entry: blockEntry("event", FLOW_FAILED_EVENT) });
 
-export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
+export function createRuntime({ storage, blocks, handle, clock = systemClock }: RuntimeDeps) {
     const store = new ProjectStore(storage);
+    const data = new DataStore(storage);
     const announcer = new BlocksAnnouncer(handle);
     let setState!: SetState;
     let nextLogId = 1;
@@ -105,8 +111,44 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
             },
             property: (typeRef, field, value, target) => untilStopped(signal, blocks.property(typeRef, field, value, at(target))),
             log: (text, blockId) => log(project, "info", text, blockId),
+            data: projectData(project),
         };
     }
+
+    /** A project's Data, as its flows use it; a project deleted while its flow ran has none. */
+    function projectData(project: string): Host["data"] {
+        const kept = <T>(use: () => Promise<T>): Promise<T> => {
+            if (!store.has(project)) return Promise.reject(new Error("This project was deleted, and its Data with it"));
+            return use();
+        };
+        return {
+            get: (key) => kept(() => data.get(project, key)),
+            set: (key, value) => kept(() => data.set(project, key, value)),
+            delete: (key) => kept(() => data.delete(project, key)),
+            has: (key) => kept(() => data.has(project, key)),
+            keys: () => kept(() => data.keys(project)),
+            change: (key, by) => kept(() => data.change(project, key, by)),
+        };
+    }
+
+    // what the windows were last told of the schedules, so a change that moves none says nothing
+    let announcedRuns = "{}";
+    const scheduler = new Scheduler({
+        storage,
+        clock,
+        start: async (project, hatId) => {
+            const flows = store.running().find((p) => p.id === project)?.flows;
+            const hat = flows && enabledStacks(flows).find((b) => b.id === hatId);
+            if (flows && hat) await start(project, flows, hat, null);
+        },
+        log,
+        announce: (nextRuns) => {
+            const text = JSON.stringify(nextRuns);
+            if (text === announcedRuns) return;
+            announcedRuns = text;
+            setState({ nextRuns });
+        },
+    });
 
     async function start(project: string, flows: SavedFlows, hat: SavedBlock, payload: Record<string, unknown> | null): Promise<void> {
         if (runningCount(project) >= MAX_RUNS_PER_PROJECT) {
@@ -158,8 +200,9 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         }
     }
 
-    /** Listens for exactly the events and changes the switched-on projects start from. */
+    /** Listens for exactly the events and changes the switched-on projects start from, and keeps their schedules. */
     function listen(): void {
+        scheduler.sync(store.running());
         const wanted = new Set(
             store.running().flatMap(({ flows }) =>
                 enabledStacks(flows)
@@ -236,16 +279,24 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         clearLog: call(({ project }) => {
             setState((prev) => ({ log: prev.log.filter((entry) => entry.project !== project) }));
         }),
-        createProject: call(({ name }) => changing(store.create(name))),
+        createProject: call(({ name, flows }) => changing(store.create(name, flows))),
         updateProject: call(({ project, name, enabled }) => changing(store.update(project, { name, enabled }))),
         duplicateProject: call(({ project }) => changing(store.duplicate(project))),
         deleteProject: call(async ({ project, onlyDraft }) => {
+            let deleted: boolean;
             try {
-                return { deleted: await changing(store.remove(project, onlyDraft === true)) };
+                deleted = await changing(store.remove(project, onlyDraft === true));
             } finally {
                 // a deleted project's flows stop with it, also when its file couldn't be emptied after
                 if (!store.has(project)) stop(project);
             }
+            // its Data goes with it; the project is deleted by now, so Data that stays says only that
+            if (deleted) {
+                await data.remove(project).catch((why: unknown) => {
+                    throw new Error(`The project was deleted, but its Data wasn't: ${errorMessage(why)}`);
+                });
+            }
+            return { deleted };
         }),
         readProjects: async () => {
             if ((await read) === null) return;
@@ -260,6 +311,7 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
     async function open(): Promise<string | null> {
         try {
             await store.open();
+            await scheduler.open();
         } catch (err) {
             // nothing runs and nothing is written while the projects can't be read
             setState({ projectsError: errorMessage(err), loaded: true });
@@ -308,8 +360,9 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         if ((await store.dropDrafts()) > 0) publishProjects();
     }
 
-    // Backups: everything Blocks keeps is in the panel's files (the project index and one file per
-    // canvas), so a backup is those files, copied while no change is being written.
+    // Backups: everything Blocks keeps is in the panel's files (the project index, one file per
+    // canvas, each project's Data and when the schedules last ran), so a backup is those files,
+    // copied while no change is being written.
     const noTarget = (target: string | null) => {
         if (target !== null) throw new Error(`Blocks backs up as a whole, so it has no "${target}" to back up`);
     };
@@ -318,28 +371,41 @@ export function createRuntime({ storage, blocks, handle }: RuntimeDeps) {
         beforeBackup: async (target: string | null): Promise<BackupContents> => {
             noTarget(target);
             if ((await read) !== null) throw new Error("The projects couldn't be read, so there is nothing to back up");
-            await store.pause();
+            await pauseWrites();
             return { paths: [""] };
         },
         beforeRestore: async (target: string | null): Promise<void> => {
             noTarget(target);
             if ((await read) !== null) throw new Error("The projects couldn't be read, so they can't be replaced by a backup");
-            await store.pause();
+            await pauseWrites();
         },
         paused: () => store.paused,
         /** the copy is made, or a restore did not happen: the held changes go on */
         resume: async (): Promise<void> => {
             if (store.paused) await store.resume(false);
+            if (data.paused) await data.resume(false);
+            if (scheduler.paused) await scheduler.resume(false);
         },
-        /** the files are the backup's: the projects are read again from them and the flows run from those */
+        /**
+         * The files are the backup's: the projects and their Data are read again from them and
+         * the flows run from those. The schedules keep when they last ran here, not in the backup,
+         * so a restore never runs them again
+         */
         restored: async (): Promise<void> => {
             // the read is done before any held change runs, so none meets the old projects over the new files
             await store.resume(true);
             for (const run of runs.keys()) run.abort();
+            await data.resume(true);
+            await scheduler.resume(true);
             setState({ projects: store.list(), projectsError: null, loaded: true });
             publishProjects();
         },
     };
+
+    /** Every write held at once, for a backup to copy or replace the files. */
+    async function pauseWrites(): Promise<void> {
+        await Promise.all([store.pause(), data.pause(), scheduler.pause()]);
+    }
 
     return { calls, init, pagesChanged, backup };
 }

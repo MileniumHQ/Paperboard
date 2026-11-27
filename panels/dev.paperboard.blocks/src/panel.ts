@@ -84,6 +84,8 @@ const panelState = shape.object({
     blocksError: shape.nullable(shape.text()),
     /** the projects have been read (or failed to be): until then the list is not the real one */
     loaded: shape.boolean(),
+    /** when each schedule of the switched-on projects next runs (epoch ms): by project, then by its hat block */
+    nextRuns: shape.record(shape.record(shape.number())),
 });
 export type PanelState = Infer<typeof panelState>;
 
@@ -92,7 +94,7 @@ const inProject = shape.object({ project: shape.text() });
 
 /** What the page and the service say to each other; only this panel's page may. */
 export const blocksContract = defineContract(PANEL_ID, {
-    state: { shape: panelState, initial: { log: [], running: {}, projects: [], projectsError: null, blocksError: null, loaded: false } },
+    state: { shape: panelState, initial: { log: [], running: {}, projects: [], projectsError: null, blocksError: null, loaded: false, nextRuns: {} } },
     calls: {
         loadFlows: { input: inProject, output: savedFlows },
         saveFlows: {
@@ -104,7 +106,8 @@ export const blocksContract = defineContract(PANEL_ID, {
         /** stops the project's runs; how many were stopped */
         stopFlows: { input: inProject, output: shape.number() },
         clearLog: { input: inProject, output: shape.nothing() },
-        createProject: { input: shape.object({ name: shape.optional(shape.text()) }), output: projectSummary },
+        /** `flows`: what it starts with, as a template gives it */
+        createProject: { input: shape.object({ name: shape.optional(shape.text()), flows: shape.optional(savedFlows) }), output: projectSummary },
         updateProject: {
             input: shape.object({ project: shape.text(), name: shape.optional(shape.text()), enabled: shape.optional(shape.boolean()) }),
             output: projectSummary,

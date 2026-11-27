@@ -78,6 +78,55 @@ describe("a panel's blocks reach the registry as data", () => {
     });
 });
 
+describe("templates are data a panel registers on its own handle", () => {
+    const template = { id: "restart", name: "Restart nightly", description: "Restarts the server at 04:00", icon: "restart_alt", when: { everyDay: "04:00" }, steps: [{ command: "restart" }] };
+    const refused = (templates: unknown[], types: string[] = []) => () =>
+        validateBlockDefinitions({ templates: templates as never, types: types.map((id) => ({ id, name: id, base: "text" as const })) }, "dev.test.templates");
+
+    test("the daemon lists a panel's templates as they were defined, and never as blocks", async () => {
+        expect(await blocksApi.templates(PANEL)).toEqual([
+            {
+                panelId: PANEL,
+                template: {
+                    id: "say-who-joined",
+                    name: "Say who joined",
+                    description: "Logs each player who joins a server",
+                    icon: "waving_hand",
+                    eachProject: true,
+                    when: { event: "joined" },
+                    steps: [{ log: "Someone joined {project}" }],
+                },
+            },
+        ]);
+        expect((await blocksApi.list(PANEL)).some((b) => b.entry.includes("template."))).toBe(false);
+    });
+
+    test("a template that can't be made is refused where it's defined, naming what is wrong", () => {
+        expect(refused([template, { ...template, needs: "server" }], ["server"])).toThrow('Template "restart" is defined twice');
+        expect(refused([{ ...template, when: {} }])).toThrow('Template "restart" needs when: { event } or { everyDay }');
+        expect(refused([{ ...template, when: { everyDay: "4am" } }])).toThrow("which isn't a time of day as 04:00");
+        expect(refused([{ ...template, when: { event: "joined", everyDay: "04:00" } }])).toThrow("needs when: { event } or { everyDay }");
+        expect(refused([{ ...template, steps: [] }])).toThrow("needs at least one step");
+        expect(refused([{ ...template, steps: [{ command: "restart", log: "both" }] }])).toThrow("step 1 must be { command } or { log }");
+        expect(refused([{ ...template, steps: [{ command: "restart", inputs: { server: {} } }] }])).toThrow('input "server" must start as text, a number or true/false');
+        expect(refused([{ ...template, steps: [{ log: "{project} restarted" }] }])).toThrow("logs {project}, but the template isn't made for each project");
+        expect(refused([{ ...template, needs: "server" }])).toThrow('needs "server", which is not a type this panel defines');
+        expect(refused([{ ...template, description: "" }])).toThrow('Template "restart" needs a description');
+        expect(refused([{ ...template, needs: "server" }], ["server"])).not.toThrow();
+    });
+
+    test("only the panel's own handle registers them; a project's is refused", async () => {
+        const memory = memoryBlocks("dev.test.templates");
+        const server = await memory.defineProject({ id: "s1", name: "Survival" });
+        await expect(server.register({ templates: [template] })).rejects.toThrow('Templates belong to the panel, not project "s1"');
+        await memory.panel.register({ commands: [{ id: "restart", name: "Restart", run: () => undefined }], templates: [template] });
+        expect(memory.templates()).toEqual([{ panelId: "dev.test.templates", template }]);
+        expect(memory.list().map((b) => b.entry)).toEqual(["command.restart"]);
+        await expect(memory.panel.unregister("template", "restart")).resolves.toBeUndefined();
+        expect(memory.templates()).toEqual([]);
+    });
+});
+
 describe("commands and values run in their panel, checked at its boundary", () => {
     test("a command runs with valid inputs and returns its typed result", async () => {
         const before = await read("kicks");
