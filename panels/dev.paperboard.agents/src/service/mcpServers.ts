@@ -230,7 +230,8 @@ export class McpServers {
                 if (e.gen === gen) this.settle(e, gen, "failed", why);
             }
         })().finally(() => {
-            if (e.gen === gen) e.starting = null;
+            // a stop meanwhile moved gen on and waits on this run; it's over either way
+            if (e.starting === run) e.starting = null;
         });
         e.starting = run;
         return run;
@@ -552,9 +553,11 @@ export class McpServers {
         } catch (e) {
             const why = errorMessage(e);
             console.error(`[agents] ${name}'s sign-in couldn't trade its code for tokens:`, why);
-            this.failSignIn(name, why, fromListener);
+            if (this.signIns.get(name) === p) this.failSignIn(name, why, fromListener);
             return why;
         }
+        // canceled or started again while the tokens were traded: the newer one stands
+        if (this.signIns.get(name) !== p) return "this sign-in was canceled or started again meanwhile";
         this.cancelSignIn(name, fromListener);
         // it starts again with the tokens, now rather than at the next turn
         const e = this.entries.get(name);

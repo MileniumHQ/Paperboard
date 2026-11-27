@@ -272,8 +272,8 @@ export class UserShells {
                 );
             }
         } catch (e) {
-            await this.drop(s);
-            return fault(`Couldn't open a shell: ${errorMessage(e)}`);
+            const left = await this.drop(s).then(() => "", (d) => ` (and it couldn't be closed: ${errorMessage(d)})`);
+            return fault(`Couldn't open a shell: ${errorMessage(e)}${left}`);
         }
         this.deps.changed();
         return { text: `Shell ${n} is open in ${folder}, for "${task}". Run commands in it with user_shell_run; close it with user_shell_close when the task is done.` };

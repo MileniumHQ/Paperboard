@@ -140,6 +140,32 @@ describe("tool-server config", () => {
         expect((await both.s.view()).configError).toBe('tools.json: "actions" isn\'t a setting');
     });
 
+    test("a server restarted while it's still starting starts again", async () => {
+        // the first initialize is held until the restart has begun
+        let initializes = 0;
+        let release!: () => void;
+        const held = new Promise<void>((ok) => (release = ok));
+        const base = await serve(async (req, res) => {
+            let body = "";
+            for await (const chunk of req) body += chunk;
+            const m = JSON.parse(body);
+            if (m.id === undefined) return void res.writeHead(202).end();
+            if (m.method === "initialize" && ++initializes === 1) await held;
+            const result = m.method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake" } } : { tools: [] };
+            res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: m.id, result }));
+        });
+        const { s } = servers();
+        await s.load();
+        await s.save({ name: "web", transport: "http", url: `${base}/mcp` });
+        void s.warm();
+        await poll(() => initializes === 1, "the first start to reach the server");
+        const restarted = s.restart("web");
+        release();
+        await restarted;
+        expect(initializes).toBe(2);
+        expect(s.status()[0]!.phase).toBe("running");
+    });
+
     test("over HTTP, a redirect is refused rather than followed with the headers", async () => {
         const reached: http.IncomingHttpHeaders[] = [];
         const elsewhere = await serve((req, res) => {

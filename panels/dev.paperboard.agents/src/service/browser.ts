@@ -181,7 +181,6 @@ export class BrowserComputer {
 
     /** The service is going away: stop the browser and observe it gone, quickly. */
     async shutdown(): Promise<void> {
-        this.releaseControl();
         this.abort?.abort();
         await this.kill();
         for (const off of this.offs.splice(0)) off();
@@ -376,10 +375,7 @@ export class BrowserComputer {
         this.running = false;
         const unexpected = !this.stopping && this.state.phase === "ready";
         this.teardown();
-        if (unexpected) {
-            this.releaseControl();
-            this.set({ phase: "failed", error: this.exitReason() });
-        }
+        if (unexpected) this.set({ phase: "failed", error: this.exitReason() });
     }
 
     private async onConnectionLost(cdp: Cdp, why: string) {
@@ -407,6 +403,8 @@ export class BrowserComputer {
         this.windows.clear();
         this.downloads.clear();
         this.signIn = null;
+        // the user's hold on a browser that's gone ends with it
+        this.releaseControl();
     }
 
     /** Stop the browser and observe its exit: SIGTERM, then SIGKILL past the grace. */
