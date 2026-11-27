@@ -16,7 +16,8 @@ import { archiveFor, entrypoint, installDirectories, releases, softwareName, ter
 import { ModStore, SAVE_DIR } from "./modStore";
 import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modscan";
 import { addonStageDir } from "../../core/addonUpload";
-import { install, recoverRelease } from "./install";
+import { install } from "./install";
+import { recoverRelease } from "../releaseSwap";
 import { consoleInput } from "./windows";
 import { XNA_4 } from "../windowsRuntime";
 import { provideWindowsRuntime } from "../windowsRuntimeInstall";

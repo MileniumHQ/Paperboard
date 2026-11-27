@@ -29,7 +29,7 @@ describe("the stored server list", () => {
             ["an unsupported version", { ...good, version: 3 }],
             ["a damaged servers directory", { ...good, serversDirectory: "../outside" }],
             ["a dangling legacy reference", { ...good, legacyServer: "s-cccccccccccc" }],
-            ["an unknown game", { ...good, servers: [{ ...second, game: "factorio" }] }],
+            ["an unknown game", { ...good, servers: [{ ...second, game: "not-a-game" }] }],
             ["an array", []],
         ];
         for (const [what, saved] of cases) {

@@ -173,11 +173,16 @@ export default function ServerOverview(props: {
 
                 {/* a taken port moved for this run alone: friends must join on the new one */}
                 <For each={portMoves()}>
-                    {(move) => (
-                        <PaperQuote variant="warning" icon="swap_horiz" title={`${move.primary ? "Port" : `${move.label} port`} ${move.from} was taken, so this run uses ${move.to}`}>
-                            {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${move.to} until the server stops.`} The next start asks for {move.from} again.
-                        </PaperQuote>
-                    )}
+                    {(move) => {
+                        // ports in a row move together: "Ports 2456–2457 were taken, so this run uses 2460–2461"
+                        const span = (from: number) => ((move.count ?? 1) > 1 ? `${from}–${from + move.count! - 1}` : String(from));
+                        const what = (move.count ?? 1) > 1 ? `${move.primary ? "Ports" : `${move.label} ports`} ${span(move.from)} were` : `${move.primary ? "Port" : `${move.label} port`} ${move.from} was`;
+                        return (
+                            <PaperQuote variant="warning" icon="swap_horiz" title={`${what} taken, so this run uses ${span(move.to)}`}>
+                                {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${span(move.to)} until the server stops.`} The next start asks for {span(move.from)} again.
+                            </PaperQuote>
+                        );
+                    }}
                 </For>
 
                 {props.children}

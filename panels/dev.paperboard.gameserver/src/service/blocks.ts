@@ -428,7 +428,8 @@ export async function runGameCall<K extends CallName>(ctx: Server, id: K, input:
 
 /** How a game kicks, bans and unbans a player by the name Blocks knows them by, and who it has banned. */
 export interface PlayerRoster {
-    kick(player: string): Promise<unknown>;
+    /** left out by a game whose server can't disconnect a player short of banning them (Valheim) */
+    kick?(player: string): Promise<unknown>;
     ban(player: string): Promise<unknown>;
     unban(player: string): Promise<unknown>;
     banned(): Promise<string[]>;
@@ -442,7 +443,7 @@ export function rosterBlocks(roster: PlayerRoster): BlockSet {
     });
     return {
         commands: [
-            command("kick-player", "Kick Player", "person_remove", "Disconnects a player from the server", "Kick {player}", roster.kick),
+            ...(roster.kick ? [command("kick-player", "Kick Player", "person_remove", "Disconnects a player from the server", "Kick {player}", roster.kick)] : []),
             command("ban-player", "Ban Player", "gavel", "Bans a player from the server, and disconnects them if they're on it", "Ban {player}", roster.ban),
             command("unban-player", "Unban Player", "undo", "Lets a banned player join again", "Unban {player}", roster.unban),
         ],

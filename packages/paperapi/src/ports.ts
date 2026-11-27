@@ -4,7 +4,9 @@
 // computer is using. When the number asked for is taken, the user's setting
 // decides: refuse with an error that says who has it, or give the next free
 // port. Write the number you get into your program's config; never assume
-// the one you asked for.
+// the one you asked for. A server that opens the ports after its own (a
+// game port and the query port after it) claims them together with `count`:
+// they are checked and moved as one, so they stay in a row.
 import { RPC_ROUTES } from "./ipc";
 import { requirePanelId } from "./panelIdentity";
 
@@ -20,6 +22,8 @@ export interface PortClaim {
     label: string;
     protocol: PortProtocol;
     port: number;
+    /** how many ports in a row the claim holds, from `port`; 1 unless the request asked for more */
+    count: number;
 }
 
 export interface PortRequest {
@@ -30,6 +34,8 @@ export interface PortRequest {
     protocol: PortProtocol;
     /** the number the panel would like; a held claim keeps it as it is */
     preferred: number;
+    /** ports in a row from the number, 1 to 16, all checked and moved together; 1 when left out */
+    count?: number;
 }
 
 export const portApi = {

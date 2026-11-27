@@ -127,6 +127,14 @@
                 "detail": "A Rust server lists itself in Rust's server browser and uploads its map for players to download"
             },
             {
+                "name": "Microsoft PlayFab",
+                "detail": "A Valheim server with crossplay registers with Valheim's relay, which gives it a join code and carries its players"
+            },
+            {
+                "name": "Factorio",
+                "detail": "Downloading its server from factorio.com. Each start gets a key from auth.factorio.com that checks players' accounts; a public server is listed there"
+            },
+            {
                 "name": "AlliedModders and Team Fortress Wiki",
                 "detail": "SourceMod and Metamod:Source for Team Fortress 2 servers, and pictures of Team Fortress 2's maps"
             },
@@ -158,7 +166,7 @@
             },
             {
                 "name": "SteamCMD",
-                "detail": "Installing and updating Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod and Rust servers"
+                "detail": "Installing and updating Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust and Valheim servers"
             },
             {
                 "name": "SourceMod and Metamod:Source",
@@ -184,7 +192,7 @@
         "requirements": [
             {
                 "name": "Computer",
-                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld, Team Fortress 2, Garry's Mod and Rust on Linux or Windows, x64. Counter-Strike 2 on Linux, x64"
+                "detail": "Minecraft on Linux, macOS or Windows. Terraria, Palworld, TF2, Garry's Mod and Rust on Linux or Windows, x64. CS2, Valheim and Factorio on Linux, x64"
             },
             {
                 "name": "Storage",

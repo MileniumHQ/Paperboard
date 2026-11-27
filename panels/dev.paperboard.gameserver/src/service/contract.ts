@@ -767,6 +767,62 @@ const rustCalls = {
     rustUnban: { input: steamId, output: done },
 } satisfies Record<string, CallDefinition>;
 
+const valheimPlayer = { name: shape.text(), id: shape.text() };
+const valheimCalls = {
+    /** the world it runs, and a running crossplay server's join code and public address once the relay registered it */
+    valheimSession: { output: shape.object({ world: text, crossplay: shape.boolean(), joinCode: shape.nullable(text), address: shape.nullable(text) }) },
+    valheimPlayers: {
+        output: shape.object({
+            seen: shape.list(shape.object({ ...valheimPlayer, lastSeen: shape.number() })),
+            online: shape.list(shape.object(valheimPlayer)),
+            admin: texts,
+            banned: texts,
+            permitted: texts,
+        }),
+    },
+    /** puts a player on one of the server's lists or takes them off, by platform id or, for a ban, by name */
+    valheimList: {
+        input: shape.object({ list: shape.oneOf("admin", "banned", "permitted"), id: shape.nullable(text), name: shape.nullable(text), on: shape.boolean() }),
+        output: done,
+    },
+} satisfies Record<string, CallDefinition>;
+
+const factorioName = shape.object({ name: shape.text() });
+const factorioCalls = {
+    /** the release installed and the newest Paperboard installs, and whether this computer runs it */
+    factorioRelease: {
+        output: shape.object({ host: hostSupport, installed: shape.nullable(text), latest: text, updateAvailable: shape.boolean(), size: shape.number() }),
+    },
+    // the download is about 60 MB, then unpacking: minutes on a slow line
+    factorioInstall: { output: done, timeoutMs: null },
+    /** the world a start plays, whether it is a Space Age one, and, while it runs, Nauvis's evolution */
+    factorioStatus: { output: shape.object({ world: shape.nullable(text), spaceAge: shape.boolean(), evolution: shape.nullable(shape.number()) }) },
+    factorioWorlds: {
+        output: shape.list(shape.object({ name: text, active: shape.boolean(), generated: shape.boolean(), modified: shape.number(), bytes: shape.number() })),
+    },
+    /** plays a world, or makes a new one now with the generation options given */
+    factorioWorld: { input: shape.object({ name: text, create: shape.boolean(), generation: shape.optional(options) }), output: done, timeoutMs: null },
+    factorioWorldDelete: { input: factorioName, output: done },
+    factorioWorldInspect: { input: shape.object({ file: text }), output: shape.object({ suggestedName: text }) },
+    factorioWorldImport: { input: shape.object({ file: text, name: text }), output: done },
+    factorioWorldDiscard: { input: shape.object({ file: text }), output: done },
+    factorioPlayers: {
+        output: shape.object({
+            seen: shape.list(shape.object({ name: text, lastSeen: shape.number() })),
+            online: texts,
+            admins: texts,
+            bans: shape.list(shape.object({ name: text, reason: text })),
+            whitelist: texts,
+            whitelistOn: shape.boolean(),
+        }),
+    },
+    factorioKick: { input: factorioName, output: done },
+    factorioBan: { input: factorioName, output: done },
+    factorioUnban: { input: factorioName, output: done },
+    /** puts a player on the admin list or the whitelist, or takes them off */
+    factorioList: { input: shape.object({ list: shape.oneOf("admins", "whitelist"), name: text, on: shape.boolean() }), output: done },
+} satisfies Record<string, CallDefinition>;
+
 // ─── The state the pages mirror ─────────────────────────────────────────────
 
 const serverStatus = shape.oneOf("offline", "starting", "online", "stopping", "restarting");
@@ -800,7 +856,7 @@ export const serverStateShape = shape.object({
     localIp: shape.text(),
     serverPort: shape.text(),
     /** ports that were taken, so the running server uses others until it stops; its settings keep the chosen ones */
-    portMoves: shape.list(shape.object({ label: shape.text(), from: shape.number(), to: shape.number(), primary: shape.boolean() })),
+    portMoves: shape.list(shape.object({ label: shape.text(), from: shape.number(), to: shape.number(), primary: shape.boolean(), count: shape.optional(shape.number()) })),
     serverMotd: shape.text(),
     serverSoftware: shape.text(),
     gameSettings: shape.record(shape.json()),
@@ -900,7 +956,7 @@ export type ServerSummary = Infer<typeof serverSummary>;
  */
 export const gameServerContract = defineContract(PANEL_ID, {
     scope: { server: shape.text() },
-    calls: { ...serversCalls, ...minecraftCalls, ...steamCalls, ...sourceCalls, ...terrariaCalls, ...palworldCalls, ...rustCalls },
+    calls: { ...serversCalls, ...minecraftCalls, ...steamCalls, ...sourceCalls, ...terrariaCalls, ...palworldCalls, ...rustCalls, ...valheimCalls, ...factorioCalls },
     state: {
         shape: shape.object({
             servers: shape.list(serverSummary),

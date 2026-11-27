@@ -2,10 +2,11 @@ import net from "node:net";
 import { SerialQueue } from "@mileniumhq/paperapi";
 
 // Valve's Source RCON protocol: little-endian packets of
-// [size][id][type][body\0][\0], over TCP on the server's game port. A
-// command's reply can span several packets, so each command is followed by
-// an empty response packet the server mirrors back once the reply is done.
-// Paperboard only ever connects on 127.0.0.1.
+// [size][id][type][body\0][\0], over TCP. A Source server's reply can span
+// several packets, so each command is followed by an empty response packet
+// the server mirrors back once the reply is done. Other games speak the same
+// protocol and answer each command with one packet, mirroring nothing
+// (Factorio). Paperboard only ever connects on 127.0.0.1.
 
 const AUTH = 3;
 const AUTH_RESPONSE = 2;
@@ -80,6 +81,14 @@ export class RconError extends Error {}
  */
 export class RconNoAnswer extends RconError {}
 
+/**
+ * How a server ends its replies. "mirrored": a Source server's reply can span
+ * packets and ends when the empty packet sent after the command comes back.
+ * "single": the server answers each command with one packet and mirrors
+ * nothing (Factorio 2.1.25).
+ */
+export type RconReplies = "mirrored" | "single";
+
 /** One authenticated connection, reopened on demand; commands run one at a time. */
 export class SourceRcon {
     private socket: net.Socket | null = null;
@@ -88,7 +97,13 @@ export class SourceRcon {
     private waiting: ((packet: RconPacket | Error) => void) | null = null;
     private readonly commands = new SerialQueue();
 
-    constructor(private readonly port: number, private readonly password: string, private readonly label = "The server", private readonly timeoutMs = TIMEOUT_MS) {
+    constructor(
+        private readonly port: number,
+        private readonly password: string,
+        private readonly label = "The server",
+        private readonly timeoutMs = TIMEOUT_MS,
+        private readonly replies: RconReplies = "mirrored",
+    ) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`RCON port is not a port: ${port}`);
         if (!password) throw new Error("RCON needs a password");
     }
@@ -110,8 +125,14 @@ export class SourceRcon {
     private async run(command: string): Promise<string> {
         if (!this.socket) await this.connect();
         const id = this.id();
-        const end = this.id();
         this.write(encodePacket(id, EXEC, sendableCommand(command)));
+        if (this.replies === "single") {
+            for (;;) {
+                const packet = await this.read();
+                if (packet.id === id && packet.type === RESPONSE) return packet.body;
+            }
+        }
+        const end = this.id();
         this.write(encodePacket(end, RESPONSE, ""));
         let reply = "";
         let begun = false;

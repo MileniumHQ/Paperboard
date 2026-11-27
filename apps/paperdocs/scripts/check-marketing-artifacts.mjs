@@ -24,8 +24,8 @@ function assertNotice(name, html, { owners, absent = [] }) {
     for (const owner of absent) assert.ok(!legal.includes(owner), `${name} names no ${owner} product, so it must not disclaim one`);
 }
 const NOTICES = {
-    landing: { owners: ["Mojang Studios, Microsoft, Re-Logic, Pocketpair, Valve, Facepunch Studios, or Discord Inc."], absent: ["Anthropic", "Rinth, Inc."] },
-    "game-server": { owners: ["Mojang Studios", "Re-Logic", "Pocketpair", "Valve", "Facepunch Studios", "Rinth, Inc."], absent: ["Discord Inc.", "Anthropic"] },
+    landing: { owners: ["Mojang Studios, Microsoft, Re-Logic, Pocketpair, Valve, Facepunch Studios, Iron Gate AB, Wube Software, or Discord Inc."], absent: ["Anthropic", "Rinth, Inc."] },
+    "game-server": { owners: ["Mojang Studios", "Re-Logic", "Pocketpair", "Valve", "Facepunch Studios", "Iron Gate AB", "Wube Software", "Rinth, Inc."], absent: ["Discord Inc.", "Anthropic"] },
     "bot-creator": { owners: ["Discord Inc."], absent: ["Mojang Studios", "Valve"] },
     agents: { owners: ["OpenAI", "Anthropic", "Anomaly"], absent: ["Valve", "Discord Inc."] },
     blocks: { owners: [] },
@@ -34,7 +34,7 @@ const NOTICES = {
 const landing = flatten(await read("index.html"));
 assertNotice("the landing page", landing, NOTICES.landing);
 assert.ok(
-    landing.includes("Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust, and Discord are trademarks of their respective owners."),
+    landing.includes("Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust, Valheim, Factorio, and Discord are trademarks of their respective owners."),
     "the landing page must name the trademarks it disclaims",
 );
 

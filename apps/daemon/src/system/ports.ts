@@ -3,6 +3,9 @@
 // one another claim holds, and never one another program on the computer
 // is using. When the port asked for is taken, the user's setting decides:
 // refuse with an error naming who has it, or move to the next free port.
+// A claim can hold several ports in a row (`count`) for a server that opens
+// the ones after its own, as Valheim opens its port and the next: they are
+// checked, refused and moved together, never one without the others.
 // Claims live in <data dir>/ports.json; a panel's claims are forgotten when
 // its data is deleted, so a reinstall that keeps data keeps its ports.
 import * as dgram from "dgram";
@@ -26,6 +29,8 @@ export interface PortClaim {
     label: string;
     protocol: PortProtocol;
     port: number;
+    /** how many ports in a row the claim holds, from `port`; 1 for most */
+    count: number;
 }
 
 interface PortsFile {
@@ -39,9 +44,21 @@ export const DEFAULT_PORT_POLICY: PortPolicy = "next-free";
 export const NEXT_FREE_SPAN = 100;
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const LABEL_MAX = 80;
+/** the most ports in a row one claim holds */
+export const MAX_PORT_COUNT = 16;
 
 export function isPortNumber(value: unknown): value is number {
     return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 65535;
+}
+
+/** a count that fits from `port` to 65535; claims saved before counts existed hold one */
+function isCount(value: unknown, port: number): value is number {
+    return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_PORT_COUNT && port + (value as number) - 1 <= 65535;
+}
+
+/** "port 2456", or "ports 2456 to 2457" for a claim of two */
+export function portsText(port: number, count: number): string {
+    return count === 1 ? `port ${port}` : `ports ${port} to ${port + count - 1}`;
 }
 
 function isProtocol(value: unknown): value is PortProtocol {
@@ -52,7 +69,9 @@ function parseClaim(raw: any): PortClaim | null {
     if (!raw || typeof raw !== "object") return null;
     if (!isPanelId(raw.panelId) || typeof raw.name !== "string" || !NAME_RE.test(raw.name)) return null;
     if (typeof raw.label !== "string" || raw.label.length > LABEL_MAX || !isProtocol(raw.protocol) || !isPortNumber(raw.port)) return null;
-    return { panelId: raw.panelId, name: raw.name, label: raw.label, protocol: raw.protocol, port: raw.port };
+    const count = raw.count ?? 1;
+    if (!isCount(count, raw.port)) return null;
+    return { panelId: raw.panelId, name: raw.name, label: raw.label, protocol: raw.protocol, port: raw.port, count };
 }
 
 export class PortTakenError extends RpcError {
@@ -153,25 +172,31 @@ export class PortRegistry {
         return this.state.claims.find((c) => c.panelId === panelId && c.name === name);
     }
 
-    /** why `port` cannot be given to (panelId, name), or null when it can */
-    private async problem(port: number, protocol: PortProtocol, panelId: string, name: string): Promise<string | null> {
-        const holder = this.state.claims.find((c) => c.port === port && !(c.panelId === panelId && c.name === name));
-        if (holder) return `${holder.label} has it`;
-        return this.probe(port, protocol);
+    /**
+     * Why the `count` ports from `port` cannot be given to (panelId, name),
+     * or null when they can. A claim of several names the port that is taken.
+     */
+    private async problem(port: number, count: number, protocol: PortProtocol, panelId: string, name: string): Promise<string | null> {
+        for (let at = port; at < port + count; at++) {
+            const holder = this.state.claims.find((c) => at >= c.port && at < c.port + c.count && !(c.panelId === panelId && c.name === name));
+            const problem = holder ? `${holder.label} has it` : await this.probe(at, protocol);
+            if (problem) return count === 1 ? problem : `${problem} (port ${at})`;
+        }
+        return null;
     }
 
-    /** the port asked for, or, when the policy allows, the next free one */
-    private async allocate(wanted: number, protocol: PortProtocol, panelId: string, name: string, label: string): Promise<number> {
-        const problem = await this.problem(wanted, protocol, panelId, name);
+    /** the ports asked for, or, when the policy allows, the next free run of as many */
+    private async allocate(wanted: number, count: number, protocol: PortProtocol, panelId: string, name: string, label: string): Promise<number> {
+        const problem = await this.problem(wanted, count, protocol, panelId, name);
         if (!problem) return wanted;
         if (this.state.policy === "refuse") {
-            throw new PortTakenError(`${label} can't use port ${wanted}: ${problem}.`);
+            throw new PortTakenError(`${label} can't use ${portsText(wanted, count)}: ${problem}.`);
         }
         const last = Math.min(65535, wanted + NEXT_FREE_SPAN);
-        for (let port = wanted + 1; port <= last; port++) {
-            if (!(await this.problem(port, protocol, panelId, name))) return port;
+        for (let port = wanted + 1; port + count - 1 <= last; port++) {
+            if (!(await this.problem(port, count, protocol, panelId, name))) return port;
         }
-        throw new PortTakenError(`${label} can't use port ${wanted} (${problem}), and ports ${wanted + 1} to ${last} are taken too.`);
+        throw new PortTakenError(`${label} can't use ${portsText(wanted, count)} (${problem}), and ports ${wanted + 1} to ${last} are taken too.`);
     }
 
     private async store(claim: PortClaim): Promise<PortClaim> {
@@ -188,20 +213,23 @@ export class PortRegistry {
      * it is, without checking the computer: its own program may be using
      * it. `preferred` asks for a number; a new claim or a different number
      * is checked against every other claim and against the computer.
+     * `count` claims that many ports in a row from the number, moved together.
      */
-    claim(panelId: string, params: { name: unknown; label: unknown; protocol: unknown; preferred: unknown }): Promise<PortClaim> {
+    claim(panelId: string, params: { name: unknown; label: unknown; protocol: unknown; preferred: unknown; count?: unknown }): Promise<PortClaim> {
         const { name, label, protocol, preferred } = params;
         if (typeof name !== "string" || !NAME_RE.test(name)) throw invalidParams(`Invalid port name: ${JSON.stringify(name)}`);
         if (typeof label !== "string" || !label.trim() || label.length > LABEL_MAX) throw invalidParams("A port needs a label of at most 80 characters");
         if (!isProtocol(protocol)) throw invalidParams(`Invalid protocol: ${JSON.stringify(protocol)}`);
         if (!isPortNumber(preferred)) throw invalidParams(`Invalid port: ${JSON.stringify(preferred)}`);
+        const count = params.count ?? 1;
+        if (!isCount(count, preferred)) throw invalidParams(`Invalid port count: ${JSON.stringify(params.count)}; 1 to ${MAX_PORT_COUNT} ports in a row, ending by 65535`);
         return this.queue.run(async () => {
             const held = this.find(panelId, name);
-            if (held && held.port === preferred && held.protocol === protocol) {
+            if (held && held.port === preferred && held.protocol === protocol && held.count === count) {
                 return held.label === label ? { ...held } : this.store({ ...held, label });
             }
-            const port = await this.allocate(preferred, protocol, panelId, name, label);
-            return this.store({ panelId, name, label, protocol, port });
+            const port = await this.allocate(preferred, count, protocol, panelId, name, label);
+            return this.store({ panelId, name, label, protocol, port, count });
         });
     }
 
@@ -215,7 +243,7 @@ export class PortRegistry {
         return this.queue.run(async () => {
             const held = this.find(panelId, name);
             if (!held) throw new RpcError(ErrorCode.NOT_FOUND, `No port named "${name}" is claimed; claim it first.`);
-            const port = await this.allocate(held.port, held.protocol, panelId, name, held.label);
+            const port = await this.allocate(held.port, held.count, held.protocol, panelId, name, held.label);
             return port === held.port ? { ...held } : this.store({ ...held, port });
         });
     }

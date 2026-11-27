@@ -7,6 +7,8 @@ const taglines: Readonly<Record<string, string>> = {
     "garrys-mod": "We give you the tools and leave you to play.",
     palworld: "Don't worry; there are no labor laws for Pals.",
     rust: "Do whatever it takes to last another night.",
+    valheim: "Battle, build, and conquer your way to a saga worthy of Odin's patronage!",
+    factorio: "Use your imagination to design your factory.",
 };
 /**
  * Where scripts/fetch-game-art.ts puts a game's art; the panel never fetches art at runtime.
