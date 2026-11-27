@@ -94,7 +94,7 @@ export const LEARN_PANELS: LearnPanel[] = [
         headline: "A server in minutes",
         headlineLines: ["A server", "in minutes"],
         description:
-            "Run servers for Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust and Valheim on your own computer. Pick a game, and Paperboard sets up the rest. No terminal needed.",
+            "Run servers for Minecraft, Terraria, Palworld, Team Fortress 2, Counter-Strike 2, Garry's Mod, Rust, Valheim and Factorio on your own computer. Pick a game, and Paperboard sets up the rest. No terminal needed.",
         image: "/screens/gameserver-hero.png",
         alt: "Servers for Minecraft, Terraria, Palworld, Garry's Mod, Rust, Team Fortress 2 and Counter-Strike 2",
         features: [
