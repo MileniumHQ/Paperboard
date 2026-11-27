@@ -41,13 +41,13 @@ async function follow(entry: BotEntry): Promise<void> {
 
 export async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
     if (entry.stored.enabled !== enabled) {
-        const before = entry.stored;
         entry.stored = { ...entry.stored, enabled };
         try {
             await saveBots();
         } catch (err) {
-            // the switch goes back to what is saved, and says why
-            entry.stored = before;
+            // the switch goes back to what is saved, and says why; only the
+            // switch, so a change made meanwhile (a command, a rename) stays
+            entry.stored = { ...entry.stored, enabled: !enabled };
             throw err;
         }
         publish();
