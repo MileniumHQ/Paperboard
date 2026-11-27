@@ -15,8 +15,10 @@ import { rust } from "./rust";
 import { rustUI } from "./rust/ui";
 import { valheim } from "./valheim";
 import { valheimUI } from "./valheim/ui";
+import { factorio } from "./factorio";
+import { factorioUI } from "./factorio/ui";
 import type { GameUI } from "./uiTypes";
-const interfaces: Readonly<Record<string, GameUI>> = { [minecraft.id]: minecraftUI, [terraria.id]: terrariaUI, [palworld.id]: palworldUI, [tf2.id]: tf2UI, [gmod.id]: gmodUI, [rust.id]: rustUI, [cs2.id]: cs2UI, [valheim.id]: valheimUI };
+const interfaces: Readonly<Record<string, GameUI>> = { [minecraft.id]: minecraftUI, [terraria.id]: terrariaUI, [palworld.id]: palworldUI, [tf2.id]: tf2UI, [gmod.id]: gmodUI, [rust.id]: rustUI, [cs2.id]: cs2UI, [valheim.id]: valheimUI, [factorio.id]: factorioUI };
 export function gameUIFor(id: string): GameUI {
     const game = gameFor(id);
     const ui = interfaces[game.id];

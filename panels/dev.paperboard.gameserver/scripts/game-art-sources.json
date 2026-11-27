@@ -46,5 +46,11 @@
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/892970/library_600x900_2x.jpg",
         "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/892970/library_hero.jpg",
         "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/892970/e63a5c06f103cef62c44a492c48af7d0118c9421.ico"
+    },
+    "factorio": {
+        "taglineSource": "https://store.steampowered.com/app/427520/",
+        "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/427520/library_600x900_2x.jpg",
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/427520/library_hero.jpg",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/427520/bcbf4ca8e6be3f0222e257396c8ba7dbc6caca29.ico"
     }
 }

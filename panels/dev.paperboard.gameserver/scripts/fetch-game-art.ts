@@ -33,6 +33,7 @@ const GAMES: Readonly<Record<string, Source>> = {
     palworld: { kind: "steam", app: 1623730, clienticon: "22a20bdaa6d782f60caa45eb7b02fc2411dcd988" },
     rust: { kind: "steam", app: 252490, clienticon: "acf87ad23570b3c81f8c9cfc19544a07edd8b632" },
     valheim: { kind: "steam", app: 892970, clienticon: "e63a5c06f103cef62c44a492c48af7d0118c9421" },
+    factorio: { kind: "steam", app: 427520, clienticon: "bcbf4ca8e6be3f0222e257396c8ba7dbc6caca29" },
 };
 
 /** Posters are shown a few hundred px tall at most, banners across a card. */

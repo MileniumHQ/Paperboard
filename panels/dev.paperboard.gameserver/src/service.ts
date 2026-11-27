@@ -547,6 +547,10 @@ const serverCalls: Omit<Handlers, ServersCallName> = {
     rustPlayers: game("rustPlayers"), rustKick: game("rustKick"), rustBan: game("rustBan"), rustUnban: game("rustUnban"),
     // Valheim's
     valheimSession: game("valheimSession"), valheimPlayers: game("valheimPlayers"), valheimList: game("valheimList"),
+    factorioRelease: game("factorioRelease"), factorioInstall: game("factorioInstall"), factorioStatus: game("factorioStatus"),
+    factorioWorlds: game("factorioWorlds"), factorioWorld: game("factorioWorld"), factorioWorldDelete: game("factorioWorldDelete"),
+    factorioWorldInspect: game("factorioWorldInspect"), factorioWorldImport: game("factorioWorldImport"), factorioWorldDiscard: game("factorioWorldDiscard"),
+    factorioPlayers: game("factorioPlayers"), factorioKick: game("factorioKick"), factorioBan: game("factorioBan"), factorioUnban: game("factorioUnban"), factorioList: game("factorioList"),
 };
 export const gameServerService = definePanelService({
     contract: gameServerContract,
