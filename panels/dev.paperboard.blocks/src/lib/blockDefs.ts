@@ -8,6 +8,7 @@ import { panelStyle, type BlockStyleName } from "./blockStyles";
 import { TEXT_BLOCK } from "./textField";
 import { RESULT_SOURCE, RESULTS_GEAR } from "./results";
 import { BUILTIN, choiceBlockType, parseEntry, propertyBlockType, registryBlockType } from "./names";
+import { NEXT_RUN_FIELD, NEXT_RUN_ROW, SCHEDULE_EXTENSION } from "./scheduleFields";
 
 type Json = Record<string, unknown>;
 type Schema<K extends BlockSchema["kind"]> = Extract<BlockSchema, { kind: K }>;
@@ -423,12 +424,54 @@ const reporter = (type: string, message0: string, args0: Json[], output: string 
 });
 const socket = (name: string, check?: string): Json => ({ type: "input_value", name, ...(check ? { check } : {}) });
 const dropdown = (name: string, options: [string, string][]): Json => ({ type: "field_dropdown", name, options });
+const timeField: Json = { type: "field_input", name: "TIME", text: "00:00", spellcheck: false };
+
+/** A hat that starts on a schedule: its time, a row that says when it next runs, and its steps. */
+const scheduleHat = (type: string, message0: string, args0: Json[], tooltip: string): Json => ({
+    type,
+    message0,
+    args0,
+    message1: "%1 %2",
+    args1: [{ type: "field_label", name: NEXT_RUN_FIELD, text: "" }, { type: "input_dummy", name: NEXT_RUN_ROW }],
+    message2: "%1",
+    args2: [{ type: "input_statement", name: "DO" }],
+    style: "event_blocks",
+    tooltip,
+    extensions: [SCHEDULE_EXTENSION],
+});
 
 
 /** This panel's own blocks, beside Blockly's. */
 export const BUILTIN_BLOCKS: Json[] = [
     TEXT_BLOCK,
     hat(BUILTIN.onRun, { message0: "When Run is clicked", args0: [] }, "Runs when you click Run", "event_blocks"),
+    scheduleHat(
+        BUILTIN.every,
+        "Every %1 %2",
+        [{ type: "field_number", name: "EVERY", value: 5, min: 1, precision: 1 }, dropdown("UNIT", [["minutes", "MINUTES"], ["hours", "HOURS"], ["seconds", "SECONDS"]])],
+        "Runs again and again, this long apart, while the project's Auto-start is on. A run still going when the next is due skips that one",
+    ),
+    scheduleHat(BUILTIN.everyDay, "Every day at %1", [timeField], "Runs each day at this time on this computer's clock (24-hour, as 04:00), while the project's Auto-start is on"),
+    scheduleHat(
+        BUILTIN.onDays,
+        "On %1 at %2",
+        [
+            dropdown("DAYS", [["weekdays", "WEEKDAYS"], ["weekends", "WEEKENDS"], ["Mondays", "MON"], ["Tuesdays", "TUE"], ["Wednesdays", "WED"], ["Thursdays", "THU"], ["Fridays", "FRI"], ["Saturdays", "SAT"], ["Sundays", "SUN"]]),
+            timeField,
+        ],
+        "Runs on those days at this time on this computer's clock (24-hour, as 04:00), while the project's Auto-start is on",
+    ),
+    {
+        type: BUILTIN.forEachAt,
+        message0: "For each %1 at %2 in list %3",
+        args0: [{ type: "field_variable", name: "ITEM", variable: "item" }, { type: "field_variable", name: "AT", variable: "position" }, socket("LIST", "Array")],
+        message1: "%1",
+        args1: [{ type: "input_statement", name: "DO" }],
+        previousStatement: null,
+        nextStatement: null,
+        style: "loop_blocks",
+        tooltip: "Runs the steps once for each item in the list, with the item and its position (the first is 1)",
+    },
     statement(BUILTIN.wait, "Wait %1 seconds", [socket("SECONDS", "Number")], "Waits before the next step"),
     statement(BUILTIN.waitUntil, "Wait until %1", [socket("BOOL", "Boolean")], "Waits until the condition is true, checking twice a second"),
     statement(BUILTIN.log, "Log %1", [socket("TEXT")], "Writes to the run log"),
@@ -466,6 +509,21 @@ export const BUILTIN_BLOCKS: Json[] = [
     reporter(BUILTIN.timeAdd, "%1 %2 after %3", [socket("AMOUNT", "Number"), dropdown("UNIT", [["seconds", "SECONDS"], ["minutes", "MINUTES"], ["hours", "HOURS"], ["days", "DAYS"]]), socket("TIME", "Number")], "Number", "A later timestamp; a negative amount goes back", "time_blocks"),
     reporter(BUILTIN.webGet, "get %1 as %2", [socket("URL", "String"), dropdown("AS", [["text", "TEXT"], ["JSON", "JSON"]])], null, "Fetches a web address (https, or http on this computer)", "web_blocks"),
     reporter(BUILTIN.webPost, "post %1 to %2 and read %3", [socket("BODY"), socket("URL", "String"), dropdown("AS", [["JSON", "JSON"], ["text", "TEXT"]])], null, "Sends a value as JSON to a web address (https, or http on this computer)", "web_blocks"),
+    reporter(BUILTIN.textPad, "pad %1 to %2 characters at the %3 with %4", [socket("TEXT", "String"), socket("LENGTH", "Number"), dropdown("SIDE", [["start", "START"], ["end", "END"]]), socket("WITH", "String")], "String", "Adds characters to one end until the text is that long, as 7 to 007; with nothing, it adds spaces", "text_blocks"),
+    reporter(
+        BUILTIN.numberFormat,
+        "%1 with %2 decimals %3",
+        [socket("NUMBER", "Number"), socket("DECIMALS", "Number"), dropdown("GROUPING", [["and separators", "GROUPED"], ["and no separators", "PLAIN"]])],
+        "String",
+        "A number as text, rounded to that many decimals, with or without thousands separators, as this computer writes numbers",
+        "text_blocks",
+    ),
+    statement(BUILTIN.dataSet, "Save data %1 as %2", [socket("KEY", "String"), socket("VALUE")], "Keeps a value under a key in this project. It stays through restarts and backups, until it's deleted", "data_blocks"),
+    reporter(BUILTIN.dataGet, "data %1 or %2", [socket("KEY", "String"), socket("DEFAULT")], null, "The value saved under a key, or the second one when nothing is", "data_blocks"),
+    statement(BUILTIN.dataChange, "Change data %1 by %2", [socket("KEY", "String"), socket("BY", "Number")], "Adds to the number saved under a key, which starts at 0. Flows counting at the same time never lose a count", "data_blocks"),
+    reporter(BUILTIN.dataHas, "data %1 exists", [socket("KEY", "String")], "Boolean", "True when a value is saved under the key", "data_blocks"),
+    statement(BUILTIN.dataDelete, "Delete data %1", [socket("KEY", "String")], "Forgets the value saved under a key, if there is one", "data_blocks"),
+    reporter(BUILTIN.dataKeys, "data keys", [], "Array", "Every key this project has saved data under, in order", "data_blocks"),
 ];
 
 /** What an empty text socket of a built-in block says goes in it: its type. */
@@ -493,6 +551,7 @@ export const BUILTIN_SECTIONS: { name: string; icon: string; contents: Json[]; c
             b("controls_repeat_ext", { TIMES: num(10) }),
             b("controls_whileUntil"),
             b("controls_forEach"),
+            b(BUILTIN.forEachAt),
             b("controls_flow_statements"),
             b(BUILTIN.attempt),
             b(BUILTIN.errorMessage),
@@ -540,6 +599,8 @@ export const BUILTIN_SECTIONS: { name: string; icon: string; contents: Json[]; c
             b("text_count", { SUB: txt(""), TEXT: txt("") }),
             b("text_reverse", { TEXT: txt("") }),
             b(BUILTIN.toNumber, { TEXT: txt("") }),
+            b(BUILTIN.textPad, { TEXT: txt(""), LENGTH: num(3), WITH: txt("0") }),
+            b(BUILTIN.numberFormat, { NUMBER: num(1234.5), DECIMALS: num(2) }),
             b(BUILTIN.regexTest, { TEXT: txt(""), PATTERN: txt("") }),
             b(BUILTIN.regexFind, { PATTERN: txt(""), TEXT: txt("") }),
             b(BUILTIN.base64, { TEXT: txt("") }),
@@ -564,9 +625,24 @@ export const BUILTIN_SECTIONS: { name: string; icon: string; contents: Json[]; c
         ],
     },
     {
+        name: "Data",
+        icon: "database",
+        contents: [
+            b(BUILTIN.dataSet, { KEY: txt(""), VALUE: txt("") }),
+            b(BUILTIN.dataGet, { KEY: txt(""), DEFAULT: num(0) }),
+            b(BUILTIN.dataChange, { KEY: txt(""), BY: num(1) }),
+            b(BUILTIN.dataHas, { KEY: txt("") }),
+            b(BUILTIN.dataDelete, { KEY: txt("") }),
+            b(BUILTIN.dataKeys),
+        ],
+    },
+    {
         name: "Time",
         icon: "schedule",
         contents: [
+            b(BUILTIN.every),
+            b(BUILTIN.everyDay),
+            b(BUILTIN.onDays),
             b(BUILTIN.now),
             b(BUILTIN.timeFormat, { TIME: { block: { type: BUILTIN.now } } }),
             b(BUILTIN.timePart, { TIME: { block: { type: BUILTIN.now } } }),
