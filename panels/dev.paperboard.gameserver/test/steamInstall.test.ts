@@ -10,7 +10,8 @@ import { installApp, installedBuild, latestBuild, parseAppSize, parseLatestBuild
 import { steamUpdateStatus } from "../src/games/steam/installAction";
 import { palworldService } from "../src/games/palworld/service";
 import { PALWORLD_APP_ID } from "../src/games/palworld";
-import { activateRelease, recoverRelease, unpackArchive, unpackTmodloader } from "../src/games/terraria/install";
+import { unpackArchive, unpackTmodloader } from "../src/games/terraria/install";
+import { activateRelease, recoverRelease } from "../src/games/releaseSwap";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -141,13 +142,13 @@ describe("Steam and Terraria installs", () => {
 
         // the new release arrived but the old was not yet removed
         writeTree(root, { "install/1458.previous/Linux/TerrariaServer.bin.x86_64": "older release" });
-        await expect(activateRelease(path.join(root, "staging"), target)).rejects.toThrow("A Terraria release swap needs recovery");
+        await expect(activateRelease(path.join(root, "staging"), target, "Terraria")).rejects.toThrow("A Terraria release swap needs recovery");
         await recoverRelease(target);
         expect(fs.existsSync(`${target}.previous`)).toBe(false);
         expect(fs.readFileSync(path.join(target, "Linux", "TerrariaServer.bin.x86_64"), "utf8")).toBe("old release");
 
         writeTree(root, { "staging/Linux/TerrariaServer.bin.x86_64": "new release" });
-        await activateRelease(path.join(root, "staging"), target);
+        await activateRelease(path.join(root, "staging"), target, "Terraria");
         expect(readTree(root)).toEqual({ "install/": "", "install/1458/": "", "install/1458/Linux/": "", "install/1458/Linux/TerrariaServer.bin.x86_64": "new release", "worlds/": "", "worlds/World.wld": "world" });
     });
 });
