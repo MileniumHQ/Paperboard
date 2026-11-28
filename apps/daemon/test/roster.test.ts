@@ -91,16 +91,16 @@ describe("the roster", () => {
 		await roster.update(id, { name: "Far, renamed" });
 		expect(await roster.pair({ cert: far.cert, token: "pc_two", dial: { host: "10.0.0.4", port: 45464 }, facts: { os: "linux" } })).toBe(id);
 		expect(roster.member(id)!.name).toBe("Far, renamed");
-		// a name a person typed while pairing it again is a rename, never dropped
+		// Inventory: Data loss — an app whose list is out of date sends the hostname when it pairs a computer again: the rename made elsewhere stays.
 		expect(await roster.pair({ cert: far.cert, token: "pc_two", name: "Far", dial: { host: "10.0.0.4", port: 45464 }, facts: { os: "linux" } })).toBe(id);
-		expect(roster.member(id)!.name).toBe("Far");
+		expect(roster.member(id)!.name).toBe("Far, renamed");
 		await roster.close();
 
 		const reopened = await open(dir, self);
 		expect(reopened.self).toBe(memberIdOf(self.cert));
 		expect(reopened.list().map((m) => [m.id, m.name, m.dial])).toEqual([
 			[reopened.self, undefined, undefined],
-			[id, "Far", { host: "10.0.0.4", port: 45464 }],
+			[id, "Far, renamed", { host: "10.0.0.4", port: 45464 }],
 		]);
 		expect(reopened.token(id)).toBe("pc_two");
 		await expect(reopened.pair({ cert: self.cert, token: "pc_me", dial: { host: "127.0.0.1", port: 45464 }, facts: {} })).rejects.toThrow("this computer's own Paperboard server");
@@ -232,10 +232,10 @@ describe("the roster", () => {
 		expect(desk.roster.view().members.find((m) => m.id === rackId)!.dial).toEqual({ host: "rack.local", address: "10.0.0.9", port: 45464 });
 		await rack.records.pull(deskId, desk.records);
 		expect(rack.roster.member(rackId)!.dial).toEqual({ host: "rack.local", port: 45464 });
-		// and the rack's own address is a name and a port, never an IP one computer saw
-		// and the rack's own address is its server's to say at every start: set here, the next start would overwrite it
+		// the rack's own address and OS are its server's to say at every start: set here, the next start would overwrite them
 		await expect(rack.roster.update(rackId, { dial: { host: "rack.local", address: "10.0.0.9", port: 45464 } })).rejects.toThrow("where its Paperboard server listens");
 		await expect(rack.roster.update(rackId, { dial: { host: "rack.local", port: 45465 } })).rejects.toThrow("where its Paperboard server listens");
+		await expect(rack.roster.update(rackId, { facts: { os: "windows" } })).rejects.toThrow("what its Paperboard server reads at every start");
 		// a rack that stops listening says so, and the desk dials it where it reached it alone
 		await rack.roster.listensAt(null);
 		await desk.records.pull(rackId, rack.records);
@@ -298,7 +298,7 @@ describe("the roster", () => {
 		const self = createTlsIdentity();
 		const { roster, records } = await openWithRecords(dir, self);
 		for (let port = 1; port <= 10; port++) {
-			await Promise.all([roster.listensAt({ host: "desk.local", port }), roster.refreshSelfFacts(), roster.update(roster.self, { facts: { os: "linux", osVersion: `${port}` } })]);
+			await Promise.all([roster.listensAt({ host: "desk.local", port }), roster.refreshSelfFacts()]);
 			const said = records.get(SELF_SPACE, roster.self);
 			expect(said?.state === "value" && said.value).toMatchObject({ dial: { host: "desk.local", port }, facts: { os: expect.any(String) } });
 		}

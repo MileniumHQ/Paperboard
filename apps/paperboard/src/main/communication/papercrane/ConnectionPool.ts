@@ -8,7 +8,6 @@ import { logger } from "daemon/core/logger";
 import { certFingerprint, pinnedRequest } from "daemon/security/pinnedTls";
 import { readTlsCert } from "daemon/security/tlsIdentity";
 import { checkComputerName, dialHosts, LOCAL_COMPUTER_ID } from "daemon/network/roster";
-import { memberIdOf } from "daemon/network/memberId";
 import { bareHost, bracketHost, checkProbeTarget, isLoopback } from "./probeTarget";
 import { PaperCraneClient } from "./PaperCraneClient";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -507,8 +506,10 @@ export class ConnectionPool extends EventEmitter {
     }
 
     // the address and port are checked as probe checks them before anything
-    // is dialed. No name is given: a new computer is named by its hostname,
-    // and one paired again keeps the name it has (renameComputer renames)
+    // is dialed. No name is typed: the computer's hostname goes with it, which
+    // the roster gives only a computer it doesn't list yet; one paired again
+    // keeps the name it has, whatever this app's list says (renameComputer
+    // renames)
     public async pairComputer(
         host: string,
         port: number | string = DEFAULT_PORT,
@@ -534,7 +535,7 @@ export class ConnectionPool extends EventEmitter {
             // an ssh tunnel and this computer's own daemon share 127.0.0.1
             const own = readTlsCert(getLocalDir());
             if (own && certFingerprint(own) === certFingerprint(cert)) throw new Error(OWN_DAEMON);
-            // send our hostname, never the server name; customName stays local-only
+            // the other computer names the token it gives after this one's hostname
             const pairRes = await tempClient.pair(code, os.hostname().replace(/\.local$/i, "") || "Paperboard App");
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
@@ -545,9 +546,8 @@ export class ConnectionPool extends EventEmitter {
             tempClient.disconnect();
 
             // a computer paired here before is paired again, not added twice:
-            // the roster keeps it under its key, with its name and place
-            const before = this.byMember.get(memberIdOf(cert));
-            // its .local name, when that name leads to this same certificate
+            // the roster keeps it under its key, with its name and place.
+            // Its .local name, when that name leads to this same certificate
             // from here; else the address it was paired at
             const named = pairRes.mdnsName && pairRes.mdnsName !== host && (await this.healthAt(pairRes.mdnsName, checked.port, cert)) === null;
             let paired: RpcResult<"computers:pair">;
@@ -555,7 +555,8 @@ export class ConnectionPool extends EventEmitter {
                 paired = await this.ask("computers:pair", {
                     cert,
                     pairToken: pairRes.token,
-                    name: before ? undefined : pairRes.hostname || host,
+                    // a default the roster uses only for a computer it doesn't list yet
+                    name: pairRes.hostname || host,
                     dial: named ? { host: pairRes.mdnsName!, address: host, port: checked.port } : { host, port: checked.port },
                     facts: definedOnly({ ...osFactsOf(pairRes), arch: pairRes.arch }),
                 });

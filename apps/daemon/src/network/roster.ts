@@ -70,7 +70,7 @@ function observing(observed: Record<string, Observed>, id: string, seen: Partial
 export interface PairedMember {
     cert: string;
     token: string;
-    /** the name the person typed; a computer paired again keeps its own without one */
+    /** the name a computer not listed yet is given (the app sends its hostname); one listed keeps the name it has */
     name?: string;
     dial: RosterDial;
     facts: RosterFacts;
@@ -269,10 +269,12 @@ export class Roster {
     }
 
     /**
-     * A computer was paired: it is added at the end, under the name typed,
-     * or, listed before (the same key), given the new token and address and
-     * kept where it is, and renamed when a name was typed (a name a person
-     * typed is a rename, as update() makes). Resolves with its member id.
+     * A computer was paired: it is added at the end, named `name`, or,
+     * listed before (the same key), given the new token and address and kept
+     * where it is, under the name it has. Pairing never renames: a name
+     * given for a computer already listed is dropped, so an app whose list
+     * is out of date can't undo a rename made elsewhere (update() renames).
+     * Resolves with its member id.
      */
     async pair(paired: PairedMember): Promise<string> {
         const id = memberIdOf(paired.cert);
@@ -289,9 +291,7 @@ export class Roster {
             // where it was paired and what it said then are this computer's to keep: it may not speak for itself
             observed: observing(state.observed, id, { dial, facts }),
         }));
-        const member = this.members.get(id);
-        if (!member) await this.store.write({ id, ...(name ? { name } : {}), cert: paired.cert });
-        else if (name !== undefined) await this.store.write({ ...member, name });
+        if (!this.members.get(id)) await this.store.write({ id, ...(name ? { name } : {}), cert: paired.cert });
         // a record that didn't change still lists the new address
         this.changed();
         return id;
@@ -300,20 +300,19 @@ export class Roster {
     /**
      * A new name, address or OS details for a member; a change that changes
      * nothing saves nothing. A name is the network's. This computer's own
-     * address and OS are what it says of itself; another's are where this
-     * computer reached it and what it was told, never written for the rest.
+     * address and OS are its daemon's to say at every start, never set here;
+     * another's are where this computer reached it and what it was told,
+     * never written for the rest.
      */
     async update(id: string, change: MemberChange): Promise<void> {
         const member = this.requireMember(id);
         const dial = change.dial === undefined ? undefined : checkDial(change.dial);
         const facts = change.facts === undefined ? undefined : checkFacts(change.facts);
-        // where this computer listens is its daemon's to say, at every start (listensAt): a value set here would be overwritten by the next
+        // where this computer listens and what it runs are its daemon's to say, at every start (listensAt, refreshSelfFacts): a value set here would be overwritten by the next
         if (id === this.self && dial) throw new Error("This computer's address is where its Paperboard server listens. Start the server on another address to change it.");
+        if (id === this.self && facts) throw new Error("This computer's OS details are what its Paperboard server reads at every start; they can't be set.");
         if (change.name !== undefined) await this.store.write({ ...member, name: checkComputerName(change.name) });
-        if (id === this.self) {
-            if (facts) await this.store.updateSelf((current) => ({ ...current, facts }));
-            return;
-        }
+        if (id === this.self) return;
         if (!dial && !facts) return;
         const seen = this.secrets.get().observed[id] ?? {};
         const same = (dial === undefined || JSON.stringify(seen.dial) === JSON.stringify(dial)) && (facts === undefined || (seen.facts !== undefined && sameFacts(seen.facts, facts)));
