@@ -5,10 +5,19 @@
 // daemon's own; "local" is how the app and panels name it.
 //
 // What every computer may know of a member is kept in a RosterStore
-// (rosterStore.ts: records in the network's record store). The pairing token
-// this computer holds for a member, the ids an older Paperboard gave members
-// and the order this computer lists them in are this computer's alone
-// (rosterPrivate.ts).
+// (rosterStore.ts: records in the network's record store): its name, which
+// any member may write, and where it listens and what it runs, which only
+// the member itself writes. The pairing token this computer holds for a
+// member, the ids an older Paperboard gave members, the order
+// this computer lists them in, and where it reached each one are this
+// computer's alone (rosterPrivate.ts).
+//
+// A member as listed here: its name from the roster; its address as this
+// computer reached it, else where it says it listens; its OS as it says,
+// else as this computer was told. So a computer paired by an older
+// Paperboard, which has never said anything of itself, is still reached and
+// shown as it was paired, and once it speaks for itself nobody else can
+// change where it listens or what it runs.
 import * as os from "os";
 import * as path from "path";
 import { getDetailedOsInfo } from "../system/osInfo";
@@ -53,19 +62,9 @@ function checkFacts(value: unknown): RosterFacts {
 
 const sameFacts = (a: RosterFacts, b: RosterFacts) => JSON.stringify(checkFacts(a)) === JSON.stringify(checkFacts(b));
 
-/** A dial split into what is true from everywhere (the name it answers to, its port) and the IP it answered at from here. */
-function splitDial(dial: RosterDial): { shared: SharedDial; address: string | undefined } {
-    return { shared: { host: dial.host, port: dial.port }, address: dial.address };
-}
-
-/** this computer's observed address beside what the record holds; one change to a member's observations */
-function withAddress(observed: Record<string, Observed>, id: string, address: string | undefined): Record<string, Observed> {
-    const { address: _old, ...rest } = observed[id] ?? {};
-    const next = address === undefined ? rest : { ...rest, address };
-    const out = { ...observed };
-    if (Object.keys(next).length) out[id] = next;
-    else delete out[id];
-    return out;
+/** one member's observations changed: what is given replaces what was */
+function observing(observed: Record<string, Observed>, id: string, seen: Partial<Observed>): Record<string, Observed> {
+    return { ...observed, [id]: { ...observed[id], ...seen } };
 }
 
 export interface PairedMember {
@@ -109,41 +108,54 @@ export class Roster {
      * daemon's is the record store in local/network/.
      */
     static async open(dir: string, identity: TlsIdentity, store?: RosterStore): Promise<Roster> {
-        const secrets = new RosterPrivate(path.join(dir, ROSTER_PRIVATE_FILE));
+        let secrets: RosterPrivate;
+        try {
+            secrets = new RosterPrivate(path.join(dir, ROSTER_PRIVATE_FILE));
+        } catch (err) {
+            // a store handed in is this roster's to close, opened or not
+            await store?.close();
+            throw err;
+        }
         const members = store ?? (await RosterRecords.open(path.join(dir, NETWORK_DIR), identity));
         const roster = new Roster(memberIdOf(identity.cert), members, secrets);
         try {
-            await roster.adoptSelf(identity.cert);
+            await roster.adoptSelf();
         } catch (err) {
-            roster.close();
+            await roster.close();
             throw err;
         }
         return roster;
     }
 
     /**
-     * This computer is listed, first in a new list, under the certificate
-     * its daemon serves now. A token or place kept for a computer that isn't
-     * listed (a pairing a crash cut short, a record this computer can't read
-     * yet) is left as it is: it is never handed out, and it counts again if
-     * the computer comes back.
+     * This computer is listed (by its own key), first in a new list, and
+     * says what it runs. A token or place kept
+     * for a computer that isn't listed (a pairing a crash cut short, a
+     * record this computer can't read yet) is left as it is: it is never
+     * handed out, and it counts again if the computer comes back.
      */
-    private async adoptSelf(cert: string): Promise<void> {
+    private async adoptSelf(): Promise<void> {
         if (!this.secrets.get().order.includes(this.self)) {
             await this.secrets.update((state) => ({ ...state, order: [this.self, ...state.order] }));
         }
-        const mine = this.members.get(this.self);
-        if (!mine || mine.cert !== cert) {
-            await this.store.write({ ...mine, id: this.self, cert, facts: mine?.facts ?? { arch: os.arch() } });
-        }
+        await this.store.updateSelf((current) => current ?? { facts: { arch: os.arch() } });
     }
 
     /** records what this computer is now: an OS upgrade shows without anyone asking */
     async refreshSelfFacts(): Promise<void> {
-        const facts: RosterFacts = { ...(await getDetailedOsInfo()), arch: os.arch() };
-        const mine = this.members.get(this.self)!;
-        if (sameFacts(mine.facts, facts)) return;
-        await this.store.write({ ...mine, facts: checkFacts(facts) });
+        const facts = checkFacts({ ...(await getDetailedOsInfo()), arch: os.arch() });
+        await this.store.updateSelf((current) => ({ ...current, facts }));
+    }
+
+    /**
+     * Where this computer listens, for every member to dial: the name it
+     * answers to and its port; null while nobody can dial it (loopback only).
+     */
+    async listensAt(dial: SharedDial | null): Promise<void> {
+        await this.store.updateSelf((current) => {
+            const { dial: _old, ...rest } = current ?? { facts: { arch: os.arch() } };
+            return dial ? { ...rest, dial: { host: dial.host, port: dial.port } } : rest;
+        });
     }
 
     /** the members in this computer's order; one it has no place for yet comes after, by id */
@@ -163,11 +175,50 @@ export class Roster {
         return this.members.has(id) && this.store.isMember(id);
     }
 
-    /** the member with the address this computer last reached it at beside the name it answers to */
+    /** the member as this computer lists it (the top of this file) */
     private asSeenHere(member: SharedMember): RosterMember {
-        const address = this.secrets.get().observed[member.id]?.address;
-        if (!member.dial || !address || address === member.dial.host) return member;
-        return { ...member, dial: { host: member.dial.host, address, port: member.dial.port } };
+        const seen = this.secrets.get().observed[member.id] ?? {};
+        const dial = seen.dial ?? member.about?.dial;
+        return {
+            id: member.id,
+            ...(member.name !== undefined ? { name: member.name } : {}),
+            ...(dial ? { dial } : {}),
+            cert: member.cert,
+            facts: member.about?.facts ?? seen.facts ?? {},
+        };
+    }
+
+    /**
+     * Every address a member is dialed at, in turn: where this computer
+     * reached it, then where it says it listens. None for this computer.
+     */
+    dialsOf(id: string): { host: string; port: number }[] {
+        const member = this.members.get(id);
+        if (!member || id === this.self) return [];
+        const seen = this.secrets.get().observed[id]?.dial;
+        const out: { host: string; port: number }[] = seen ? dialHosts(seen).map((host) => ({ host, port: seen.port })) : [];
+        const said = member.about?.dial;
+        if (said && !out.some((d) => d.host === said.host && d.port === said.port)) out.push({ host: said.host, port: said.port });
+        return out;
+    }
+
+    /**
+     * A link to a member opened at `dial`. When that is where it says it
+     * listens, and not where this computer reached it before (which didn't
+     * answer first: dialsOf tries that first), the old address is let go,
+     * and the member is listed, and dialed first, where it answered.
+     */
+    async reachedAt(id: string, dial: { host: string; port: number }): Promise<void> {
+        const member = this.members.get(id);
+        const seen = this.secrets.get().observed[id]?.dial;
+        const said = member?.about?.dial;
+        if (!member || !seen || !said || said.host !== dial.host || said.port !== dial.port) return;
+        if (dialHosts(seen).includes(dial.host) && seen.port === dial.port) return;
+        await this.secrets.update((state) => {
+            const { dial: _moved, ...rest } = state.observed[id] ?? {};
+            return { ...state, observed: { ...state.observed, [id]: rest } };
+        });
+        this.changed();
     }
 
     /** what this computer observed of a member: its address from here, when it was last linked and synced */
@@ -218,48 +269,57 @@ export class Roster {
     }
 
     /**
-     * A computer was paired: it is added at the end, or, paired before (the
-     * same key), given the new token and address and kept where it was,
-     * under its own name unless a new one was typed. Resolves with its
-     * member id.
+     * A computer was paired: it is added at the end, under the name typed,
+     * or, listed before (the same key), given the new token and address and
+     * kept where it is, and renamed when a name was typed (a name a person
+     * typed is a rename, as update() makes). Resolves with its member id.
      */
     async pair(paired: PairedMember): Promise<string> {
         const id = memberIdOf(paired.cert);
         if (id === this.self) throw new Error("That's this computer's own Paperboard server, not another computer");
         const name = paired.name === undefined ? undefined : checkComputerName(paired.name);
-        const { shared, address } = splitDial(checkDial(paired.dial));
+        const dial = checkDial(paired.dial);
         const facts = checkFacts(paired.facts);
         if (typeof paired.token !== "string" || !paired.token) throw new Error("A pairing needs the token the computer gave.");
-        const before = this.members.get(id);
-        const kept = name ?? before?.name;
         // the token first: a computer listed is never one this computer can't sign in to
         await this.secrets.update((state) => ({
             ...state,
             tokens: { ...state.tokens, [id]: paired.token },
             order: state.order.includes(id) ? state.order : [...state.order, id],
-            observed: withAddress(state.observed, id, address),
+            // where it was paired and what it said then are this computer's to keep: it may not speak for itself
+            observed: observing(state.observed, id, { dial, facts }),
         }));
-        await this.store.write({ id, ...(kept ? { name: kept } : {}), dial: shared, cert: paired.cert, facts });
+        const member = this.members.get(id);
+        if (!member) await this.store.write({ id, ...(name ? { name } : {}), cert: paired.cert });
+        else if (name !== undefined) await this.store.write({ ...member, name });
         // a record that didn't change still lists the new address
         this.changed();
         return id;
     }
 
-    /** a new name, address or OS details for a member; a change that changes nothing saves nothing */
+    /**
+     * A new name, address or OS details for a member; a change that changes
+     * nothing saves nothing. A name is the network's. This computer's own
+     * address and OS are what it says of itself; another's are where this
+     * computer reached it and what it was told, never written for the rest.
+     */
     async update(id: string, change: MemberChange): Promise<void> {
         const member = this.requireMember(id);
-        const dial = change.dial === undefined ? undefined : splitDial(checkDial(change.dial));
-        const next: SharedMember = {
-            ...member,
-            ...(change.name !== undefined ? { name: checkComputerName(change.name) } : {}),
-            ...(dial ? { dial: dial.shared } : {}),
-            ...(change.facts !== undefined ? { facts: checkFacts(change.facts) } : {}),
-        };
-        await this.store.write(next);
-        if (dial && dial.address !== this.secrets.get().observed[id]?.address) {
-            await this.secrets.update((state) => ({ ...state, observed: withAddress(state.observed, id, dial.address) }));
-            this.changed();
+        const dial = change.dial === undefined ? undefined : checkDial(change.dial);
+        const facts = change.facts === undefined ? undefined : checkFacts(change.facts);
+        // where this computer listens is its daemon's to say, at every start (listensAt): a value set here would be overwritten by the next
+        if (id === this.self && dial) throw new Error("This computer's address is where its Paperboard server listens. Start the server on another address to change it.");
+        if (change.name !== undefined) await this.store.write({ ...member, name: checkComputerName(change.name) });
+        if (id === this.self) {
+            if (facts) await this.store.updateSelf((current) => ({ ...current, facts }));
+            return;
         }
+        if (!dial && !facts) return;
+        const seen = this.secrets.get().observed[id] ?? {};
+        const same = (dial === undefined || JSON.stringify(seen.dial) === JSON.stringify(dial)) && (facts === undefined || (seen.facts !== undefined && sameFacts(seen.facts, facts)));
+        if (same) return;
+        await this.secrets.update((state) => ({ ...state, observed: observing(state.observed, id, { ...(dial ? { dial } : {}), ...(facts ? { facts } : {}) }) }));
+        this.changed();
     }
 
     /**
@@ -302,7 +362,10 @@ export class Roster {
     async adoptImported(members: RosterMember[], order: string[], tokens: Record<string, string>, aliases: Record<string, string>): Promise<void> {
         await this.secrets.update((state) => {
             let observed = state.observed;
-            for (const member of members) if (member.dial?.address) observed = withAddress(observed, member.id, member.dial.address);
+            // where it was paired, and what it said then: this computer's, until the computer says so itself
+            for (const member of members) {
+                if (member.id !== this.self) observed = observing(observed, member.id, { ...(member.dial ? { dial: member.dial } : {}), facts: member.facts });
+            }
             return {
                 ...state,
                 tokens: { ...state.tokens, ...tokens },
@@ -312,7 +375,9 @@ export class Roster {
             };
         });
         this.changed();
-        for (const member of members) await this.store.write({ ...member, ...(member.dial ? { dial: splitDial(member.dial).shared } : {}) });
+        for (const member of members) {
+            await this.store.write({ id: member.id, cert: member.cert, ...(member.name !== undefined ? { name: member.name } : {}) });
+        }
     }
 
     private requireMember(id: string): SharedMember {
@@ -321,9 +386,10 @@ export class Roster {
         return member;
     }
 
-    close(): void {
+    /** Stops; resolves once the computer list's last writes are saved, the shared records and this computer's own file alike. */
+    async close(): Promise<void> {
         this.unwatch();
-        this.store.close();
         this.listeners.clear();
+        await Promise.all([this.store.close(), this.secrets.close()]);
     }
 }

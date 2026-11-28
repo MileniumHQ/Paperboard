@@ -50,8 +50,8 @@
 //
 // ─── Who dials ───────────────────────────────────────────────────────────────
 //
-// A member is dialed at the name it answers to and the address this computer
-// last reached it at (the roster). Of two members that can both be dialed,
+// A member is dialed where this computer last reached it, then where it says
+// it listens (Roster.dialsOf). Of two members that can both be dialed,
 // the one with the smaller id dials; the other waits, and dials too once it
 // has gone takeoverMs (30 s) without a link. A computer that can't be dialed
 // (no TLS listener, like the desktop app's own daemon on 127.0.0.1, or no
@@ -95,7 +95,7 @@ import { errorMessage } from "@mileniumhq/paperapi/errors";
 import { logger } from "../core/logger";
 import { TLS_SERVER_NAME, type TlsIdentity } from "../security/tlsIdentity";
 import { memberIdOf } from "./memberId";
-import { dialHosts, type Roster } from "./roster";
+import type { Roster } from "./roster";
 import type { ApplyResult, ChangeBatch, ChangeCursor, RecordStore } from "./store";
 
 export const LINK_PATH = "/network";
@@ -247,6 +247,15 @@ export interface NetworkStatus {
     /** sockets on /network whose dialer hasn't proven itself yet */
     unproven: number;
     peers: PeerStatus[];
+}
+
+const ANOTHER_COMPUTER = "another computer answered there";
+
+/** Why a dial linked at none of a member's addresses: every address and what it did, and what that says most of. */
+interface DialFailure {
+    why: string;
+    /** "refused": the computer said no (it doesn't count this one as a member); "other-computer": something else answered; "no-answer": nothing that could link did */
+    kind: "refused" | "other-computer" | "no-answer";
 }
 
 /** The peer answered, and said no: it doesn't count this computer as a member. */
@@ -783,7 +792,8 @@ export class NetworkLinks {
     private consider(peer: Peer): void {
         if (this.stopped || peer.link || peer.dialing) return;
         const member = this.options.roster.member(peer.id);
-        if (!member?.dial) return;
+        const dials = this.options.roster.dialsOf(peer.id);
+        if (!member || !dials.length) return;
         if (peer.timer) clearTimeout(peer.timer);
         peer.timer = null;
         const now = this.now();
@@ -797,25 +807,24 @@ export class NetworkLinks {
             peer.timer.unref?.();
             return;
         }
-        const { cert, dial } = member;
-        void this.dial(peer, dialHosts(dial), dial.port, cert).then((linked) => {
+        void this.dial(peer, dials, member.cert).then((linked) => {
             if (linked || this.stopped || !this.peers.has(peer.id)) return;
             this.consider(peer);
         });
     }
 
-    /** the dial the rule at the top of this file makes: each host in turn, a backoff when none links; true once a link is up */
-    private async dial(peer: Peer, hosts: string[], port: number, cert: string): Promise<boolean> {
+    /** the dial the rule at the top of this file makes: each address in turn, a backoff when none links; true once a link is up */
+    private async dial(peer: Peer, dials: { host: string; port: number }[], cert: string): Promise<boolean> {
         if (peer.dialing) return false;
         peer.dialing = true;
-        let failed: { why: string; refused: boolean } | null;
+        let failed: DialFailure | null;
         try {
-            failed = await this.reach(peer, hosts, port, cert);
+            failed = await this.reach(peer, dials, cert);
         } finally {
             peer.dialing = false;
         }
         if (failed === null) return true;
-        this.backOff(peer, failed.why, failed.refused);
+        this.backOff(peer, failed.why, failed.kind === "refused");
         this.changed();
         return false;
     }
@@ -833,25 +842,38 @@ export class NetworkLinks {
         peer.retryAt = this.now() + Math.round(backoff * (1 + this.random() / 2));
     }
 
-    /** each host in turn until one links: null then, else why the last one didn't, and whether the peer itself said no */
-    private async reach(peer: Peer, hosts: string[], port: number, cert: string): Promise<{ why: string; refused: boolean } | null> {
-        let last = { why: "it has no address", refused: false };
-        for (const host of hosts) {
+    /** each address in turn until one links: null then, else why the last one didn't, and whether the peer itself said no */
+    private async reach(peer: Peer, dials: { host: string; port: number }[], cert: string): Promise<DialFailure | null> {
+        const failures: { at: string; error: string; kind: DialFailure["kind"] }[] = [];
+        const stoppedHere: DialFailure = { why: "this computer stopped linking to it", kind: "no-answer" };
+        for (const { host, port } of dials) {
             if (peer.link) return null;
-            if (this.stopped || !this.peers.has(peer.id)) return { why: "this computer stopped linking to it", refused: false };
+            if (this.stopped || !this.peers.has(peer.id)) return stoppedHere;
+            const at = `${bracket(host)}:${port}`;
             try {
                 const { ws, take } = await this.connect(peer, host, port, cert);
                 if (this.stopped || !this.peers.has(peer.id)) {
                     ws.terminate();
-                    return { why: "this computer stopped linking to it", refused: false };
+                    return stoppedHere;
                 }
-                if (this.adopt(ws, peer.id, this.self, take)) return null;
-                last = { why: `${bracket(host)}:${port}: the link closed as it opened`, refused: false };
+                if (this.adopt(ws, peer.id, this.self, take)) {
+                    // where this computer reached it before didn't answer, and where it says it listens did: it is reached there from now on
+                    this.options.roster.reachedAt(peer.id, { host, port }).catch((err) => {
+                        logger.error(`[network] where ${peer.id} answered couldn't be saved (it is dialed there first again next time):`, err); // quiet: the dial order only; the next link tries again
+                    });
+                    return null;
+                }
+                failures.push({ at, error: "the link closed as it opened", kind: "no-answer" });
             } catch (err) {
-                last = { why: `${bracket(host)}:${port}: ${errorMessage(err)}`, refused: err instanceof RefusedError };
+                const error = errorMessage(err);
+                const kind = err instanceof RefusedError ? "refused" : error.includes(ANOTHER_COMPUTER) ? "other-computer" : "no-answer";
+                failures.push({ at, error, kind });
             }
         }
-        return last;
+        if (!failures.length) return { why: "it has no address", kind: "no-answer" };
+        // the one that says most about why: it said no, then something else answered, then nothing did
+        const kind = failures.some((f) => f.kind === "refused") ? "refused" : failures.some((f) => f.kind === "other-computer") ? "other-computer" : "no-answer";
+        return { why: failures.map((f) => `${f.at}: ${f.error}`).join("; "), kind };
     }
 
     /**
@@ -868,7 +890,7 @@ export class NetworkLinks {
                 ca: [cert],
                 servername: TLS_SERVER_NAME,
                 checkServerIdentity: (_host: string, presented: { raw?: Buffer }) =>
-                    memberIdOfRaw(presented.raw) === peer.id ? undefined : new Error("another computer answered there"),
+                    memberIdOfRaw(presented.raw) === peer.id ? undefined : new Error(ANOTHER_COMPUTER),
                 handshakeTimeout: this.timing.connectTimeoutMs,
                 maxPayload: MAX_FRAME,
                 perMessageDeflate: false,
@@ -1088,7 +1110,7 @@ export class NetworkLinks {
                 id: member.id,
                 online: !!peer?.link,
                 lastSeen: peer?.link ? this.now() : (peer?.lastSeenAt ?? seen.lastSeen ?? null),
-                reach: this.reachOf(member.id, peer, !!member.dial),
+                reach: this.reachOf(member.id, peer, this.options.roster.dialsOf(member.id).length > 0),
                 sync: {
                     state: lastSuccessAt !== null || seen.lastSync !== undefined ? "synced" : "never",
                     lastSuccessAt: lastSuccessAt ?? seen.lastSync ?? null,

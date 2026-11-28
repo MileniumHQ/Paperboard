@@ -98,6 +98,7 @@ import type { TlsIdentity } from "../security/tlsIdentity";
 import {
     KEYS_SPACE,
     ROSTER_SPACE,
+    SELF_SPACE,
     type NetworkKey,
     type RecordHeader,
     type WireRecord,
@@ -217,7 +218,7 @@ export interface RecordMeta {
 }
 
 export type StoredRecord = RecordMeta &
-    ({ state: "value"; value: unknown } | { state: "deleted" } | { state: "unreadable"; error: string });
+    ({ state: "value"; value: unknown } | { state: "deleted" } | { state: "unreadable"; error: string; /** true while this computer doesn't hold its key yet (it reads once the key comes); false for damage */ awaitingKey: boolean });
 
 /** The store in this folder belongs to another key: its keys can't be opened and its records weren't signed here. */
 export class RecordStoreOwnerError extends Error {
@@ -262,6 +263,8 @@ export class RecordStore {
     private readonly membership: Membership;
     private readonly now: () => number;
     private readonly queue = new SerialQueue();
+    private closed = false;
+    private closing: Promise<void> | null = null;
     private readonly peerLines = new KeyedQueue();
     private readonly watchers = new Map<string, Set<(ids: string[]) => void>>();
     private readonly acceptedListeners = new Set<() => void>();
@@ -305,6 +308,19 @@ export class RecordStore {
         const store = new RecordStore(options);
         store.load();
         return store;
+    }
+
+    /**
+     * Takes no change from here on; resolves once the changes already
+     * queued are saved: a daemon stops only once it has.
+     */
+    close(): Promise<void> {
+        if (!this.closed) {
+            this.closed = true;
+            // queued after every change already in line: it settles once they are saved
+            this.closing = this.queue.run(async () => undefined);
+        }
+        return this.closing!;
     }
 
     // ─── Reading ─────────────────────────────────────────────────────────────
@@ -629,6 +645,7 @@ export class RecordStore {
      */
     private change<T>(mutate: () => T, prepare?: () => void): Promise<T> {
         return this.queue.run(async () => {
+            if (this.closed) throw new Error(`The record store in ${this.dir} is closed`);
             prepare?.();
             const keysBefore = new Set(this.keyring.keys());
             const seqBefore = this.nextSeq;
@@ -794,11 +811,11 @@ export class RecordStore {
         const meta: RecordMeta = { space: r.space, id: r.id, version: v.digest, wall: r.wall, counter: r.counter, author: r.author, epoch: r.epoch };
         if (r.deleted) return { ...meta, state: "deleted" };
         const key = this.keyring.get(r.key);
-        if (!key) return { ...meta, state: "unreadable", error: `This computer doesn't hold network key ${r.key} (epoch ${r.epoch}) yet` };
+        if (!key) return { ...meta, state: "unreadable", error: `This computer doesn't hold network key ${r.key} (epoch ${r.epoch}) yet`, awaitingKey: true };
         try {
             return { ...meta, state: "value", value: openBody(r, key) };
         } catch (err) {
-            return { ...meta, state: "unreadable", error: `${r.space}/${r.id} can't be decrypted: ${errorMessage(err)}` };
+            return { ...meta, state: "unreadable", error: `${r.space}/${r.id} can't be decrypted: ${errorMessage(err)}`, awaitingKey: false };
         }
     }
 
@@ -999,11 +1016,11 @@ function isCursor(c: unknown): c is ChangeCursor {
     return typeof log === "string" && log.length > 0 && Number.isSafeInteger(after) && (after as number) >= 0;
 }
 
-// "@keys" is the store's own (createEpoch, shareKeys); "@roster" is read and
-// written here like any space, by the roster alone (record.ts)
+// "@keys" is the store's own (createEpoch, shareKeys); "@roster" and "@self"
+// are read and written here like any space, by the roster alone (record.ts)
 function checkOwnSpace(space: string): void {
     checkSpace(space);
-    if (space.startsWith("@") && space !== ROSTER_SPACE) throw new Error(`${space} belongs to the record store itself`);
+    if (space.startsWith("@") && space !== ROSTER_SPACE && space !== SELF_SPACE) throw new Error(`${space} belongs to the record store itself`);
 }
 
 function count(result: ApplyResult, verdict: Verdict): void {

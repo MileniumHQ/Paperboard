@@ -105,8 +105,8 @@ describe("links between running daemons", () => {
 		]);
 		await rack.records.put("notes", "from-rack", "written before either started");
 		const rackId = memberIdOf(rack.identity.cert);
-		desk.roster.close();
-		rack.roster.close();
+		await desk.roster.close();
+		await rack.roster.close();
 
 		const crane = await startCrane({ dataDir: rackDir, host: "0.0.0.0" });
 		cranes.push(crane);
@@ -114,7 +114,7 @@ describe("links between running daemons", () => {
 		// where the rack is dialed, as pairing will have said; it is a computer of its own, so it learns it from the desk
 		const deskAgain = await openStopped(deskDir);
 		await deskAgain.roster.update(rackId, { dial: { host: "127.0.0.1", port: crane.port } });
-		deskAgain.roster.close();
+		await deskAgain.roster.close();
 
 		const daemon = await startDaemon({ dataDir: deskDir });
 		const network = daemon.instance.network;
@@ -140,7 +140,7 @@ describe("links between running daemons", () => {
 		await daemon.stop();
 		const rackAfter = await openStopped(rackDir);
 		const fromDesk = rackAfter.records.get("notes", "from-desk");
-		rackAfter.roster.close();
+		await rackAfter.roster.close();
 		expect(fromDesk?.state === "value" && fromDesk.value).toBe("written in the app");
 	});
 
@@ -154,10 +154,11 @@ describe("links between running daemons", () => {
 		const stranger = await openStopped(strangerDir);
 		const rackCert = loadOrCreateTlsIdentity(path.join(rackDir, "local")).cert;
 		const rackId = memberIdOf(rackCert);
-		await stranger.records.put("@roster", rackId, { cert: rackCert, dial: { host: "127.0.0.1", port: crane.port }, facts: {} });
+		await stranger.records.put("@roster", rackId, { cert: rackCert });
+		await stranger.roster.update(rackId, { dial: { host: "127.0.0.1", port: crane.port } });
 		// on its own side it has let the rack in; the rack has never heard of it
 		await stranger.records.shareKeys([rackCert]);
-		stranger.roster.close();
+		await stranger.roster.close();
 		const daemon = await startDaemon({ dataDir: strangerDir });
 		const status = () => daemon.instance.network.status().peers.find((p) => p.id === rackId)!;
 		await waitFor("the rack to refuse the stranger", () => status().reach.state === "dialing" && /refused the link \(4003\)/.test((status().reach as { lastError?: string }).lastError ?? ""));

@@ -120,7 +120,7 @@ async function node(name: string, options: { listening?: boolean; timing?: Parti
 			if (stopped) return;
 			stopped = true;
 			await n.links.stop();
-			n.roster.close();
+			await n.roster.close();
 			if (listener) {
 				const closed = new Promise<void>((resolve) => listener!.once("close", () => resolve()));
 				close(listener);
@@ -140,9 +140,10 @@ async function node(name: string, options: { listening?: boolean; timing?: Parti
 
 const dialOf = (n: Node) => (n.port === null ? undefined : { host: "127.0.0.1", port: n.port });
 
-/** members of each other (see standInForJoining), each dialed where it listens unless `addresses` is false */
+/** members of each other (see standInForJoining); each that listens says where first, unless `addresses` is false */
 async function members(list: Node[], addresses = true): Promise<void> {
-	await standInForJoining(list.map((n) => ({ records: n.records, cert: n.identity.cert, dial: addresses ? dialOf(n) : undefined })));
+	if (addresses) for (const n of list) if (n.port !== null) await n.roster.listensAt(dialOf(n)!);
+	await standInForJoining(list.map((n) => ({ records: n.records, cert: n.identity.cert })));
 }
 
 const peer = (from: Node, to: Node): PeerStatus => {
@@ -215,7 +216,8 @@ describe("links", () => {
 		await members([a, b]);
 		// the stranger has let a into its network on its own side; a has never heard of it
 		const stranger = await node("stranger", { listening: false });
-		await stranger.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await stranger.records.put("@roster", a.id, { cert: a.identity.cert });
+		await stranger.roster.update(a.id, { dial: dialOf(a)! });
 		await stranger.records.shareKeys([a.identity.cert]);
 		a.start();
 		stranger.start();
@@ -226,7 +228,7 @@ describe("links", () => {
 		// b is told a's address, but another computer listens there
 		await a.stop();
 		const impostor = await node("impostor");
-		await b.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(impostor), facts: {} });
+		await b.roster.update(a.id, { dial: dialOf(impostor)! });
 		impostor.start();
 		b.start();
 		await waitFor("b to refuse what answered at a's address", () => /another computer answered there|certificate/i.test(String((peer(b, a).reach as { lastError?: string }).lastError ?? "")));
@@ -238,8 +240,10 @@ describe("links", () => {
 	test("a computer that is only listed is neither dialed nor let in", async () => {
 		const [a, b] = [await node("a"), await node("b")];
 		// each lists the other, as two 0.4 pairings would; neither shared its keys
-		await a.records.put("@roster", b.id, { cert: b.identity.cert, dial: dialOf(b), facts: {} });
-		await b.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await a.records.put("@roster", b.id, { cert: b.identity.cert });
+		await a.roster.update(b.id, { dial: dialOf(b)! });
+		await b.records.put("@roster", a.id, { cert: a.identity.cert });
+		await b.roster.update(a.id, { dial: dialOf(a)! });
 		await a.records.put("notes", "on-a", "stays on a");
 		a.start();
 		b.start();
@@ -247,7 +251,8 @@ describe("links", () => {
 		expect(b.links.status().peers).toEqual([]);
 		// a member of neither that dials anyway is refused like any stranger
 		const dialer = await node("dialer", { listening: false });
-		await dialer.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await dialer.records.put("@roster", a.id, { cert: a.identity.cert });
+		await dialer.roster.update(a.id, { dial: dialOf(a)! });
 		await dialer.records.shareKeys([a.identity.cert]);
 		dialer.start();
 		await waitFor("a to refuse it", () => /refused the link \(4003\)/.test(String((peer(dialer, a).reach as { lastError?: string }).lastError ?? "")));
@@ -381,7 +386,8 @@ describe("links", () => {
 			const port = await listen(broken);
 			const id = memberIdOf(identity.cert);
 			await members([a, b]);
-			await a.records.put("@roster", id, { cert: identity.cert, dial: { host: "127.0.0.1", port }, facts: {} });
+			await a.records.put("@roster", id, { cert: identity.cert });
+			await a.roster.update(id, { dial: { host: "127.0.0.1", port } });
 			await a.records.shareKeys([identity.cert]);
 			a.start();
 			b.start();

@@ -35,10 +35,18 @@ import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFil
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { Roster } from "../network/roster";
 import { NETWORK_DIR, RosterRecords } from "../network/rosterStore";
+import { mdnsHostName } from "./hostname";
 import { LINK_PATH, NetworkLinks } from "../network/links";
 import { SharedDocuments } from "../network/shared";
 import type { RecordStore } from "../network/store";
 import { importPairedComputers } from "../network/importPairedComputers";
+
+/** where the other computers dial a daemon listening on `host`: its mDNS name when it listens everywhere, else that address; null when it has no name to give */
+function ownDial(host: string, port: number): { host: string; port: number } | null {
+    const everywhere = host === "0.0.0.0" || host === "::" || host === "";
+    const name = everywhere ? mdnsHostName() : host;
+    return name ? { host: name, port } : null;
+}
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
@@ -166,7 +174,7 @@ export async function startPaperCraneServer(
         // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
         await importPairedComputers(localDir, roster);
     } catch (err) {
-        roster.close();
+        await roster.close();
         throw new Error(`The paired computers couldn't be moved into the computer list (local/paired_computers.json is kept as it was, and the next start tries again): ${errorMessage(err)}`, { cause: err });
     }
     // what this computer is now, saved before anyone asks for the list
@@ -196,7 +204,7 @@ export async function startPaperCraneServer(
             if (inUse && (await killStalePaperCrane(port))) continue;
             // this start is over: nothing reads the roster for it
             config.shared.close();
-            roster.close();
+            await roster.close();
             if (!inUse) throw err;
             // Port is held by a foreign, non-PaperCrane application.
             // The caller prints it (main.ts fatalCliError) or shows it
@@ -366,9 +374,10 @@ function daemonLifecycle(parts: DaemonParts) {
         // started right after) waits for it, so two never write one store.
         ended = config.network.stop()
             .catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err))
-            .then(() => {
+            .then(async () => {
                 step("closing the shared documents", () => config.shared.close());
-                step("closing the computer list", () => config.roster.close());
+                // resolves once the computer list's last writes are saved
+                await config.roster.close().catch((err) => logger.error("[Paperboard Server] while stopping, closing the computer list failed:", err));
             });
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
@@ -558,9 +567,19 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 }).start();
             }
 
-            // links are taken and dialed once this daemon is the one listening
-            config.network.start();
-            resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: lifecycle.stop });
+            // where the other computers dial this one, said by this one alone (nothing while only it can
+            // reach itself), before the start is done: no write outlives a stop that follows
+            const listensAt = tlsIdentity ? ownDial(host, actualPort) : null;
+            void config.roster
+                .listensAt(listensAt)
+                .catch((err) => {
+                    logger.error("[Paperboard Server] where this computer listens couldn't be saved for the other computers; they dial it where they last reached it:", err); // quiet: the next start says it again
+                })
+                .then(() => {
+                    // links are taken and dialed once this daemon is the one listening
+                    config.network.start();
+                    resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: lifecycle.stop });
+                });
         };
 
         const onListening = () => {

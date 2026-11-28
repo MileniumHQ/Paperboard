@@ -3,13 +3,17 @@
 // to each other with their own keys), the ids an older Paperboard on this
 // computer gave its members, the order its rail lists them in (each computer
 // puts itself first, so the order is a view, not shared truth), and what it
-// observed of each member from here: the address it last answered at, when
-// it was last linked, when this computer last synced with it. Another
-// computer on another network sees other addresses and other times.
+// observed of each member from here: where it reached it (the address it was
+// paired at, an IP it last answered at), what it was told of the member's OS
+// before the member said so itself, when it was last linked, and when this
+// computer last synced with it. Another computer on another network sees
+// other addresses and other times.
 import { readStateFileSync, writeJsonAtomic } from "../core/storage";
 import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import { isSafeId } from "@mileniumhq/paperapi/protocol";
+import type { RosterDial, RosterFacts } from "@mileniumhq/paperapi/protocol";
 import { isMemberId } from "./memberId";
+import { readDial, readFacts } from "./rosterStore";
 
 export const ROSTER_PRIVATE_FILE = "network_roster_private.json";
 
@@ -26,15 +30,16 @@ export interface RosterPrivateState {
 
 /** What this computer saw of a member from where it is. */
 export interface Observed {
-    /** the IP it last answered at from here, beside the name it answers to (the roster record's dial) */
-    address?: string;
+    /** where this computer reached it: what it was paired at, then where its certificate last answered from here */
+    dial?: RosterDial;
+    /** its OS as this computer was told it (pairing, the app), for a member that hasn't said so itself */
+    facts?: RosterFacts;
     /** ms since the epoch: the last time a link to it was up */
     lastSeen?: number;
     /** ms since the epoch: the last time this computer pulled everything it had */
     lastSync?: number;
 }
 
-const ADDRESS_MAX = 255;
 const isTime = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
 function readObserved(value: unknown, file: string): Record<string, Observed> {
@@ -46,9 +51,15 @@ function readObserved(value: unknown, file: string): Record<string, Observed> {
         const damaged = () => new Error(`${file} has a damaged "observed" entry: ${JSON.stringify(id)}`);
         if (!isMemberId(id) || typeof entry !== "object" || Array.isArray(entry)) throw damaged();
         const seen: Observed = {};
-        if (given.address !== undefined) {
-            if (typeof given.address !== "string" || !given.address || given.address.length > ADDRESS_MAX) throw damaged();
-            seen.address = given.address;
+        if (given.dial !== undefined) {
+            const dial = readDial(given.dial);
+            if (!dial) throw damaged();
+            seen.dial = dial;
+        }
+        if (given.facts !== undefined) {
+            const facts = readFacts(given.facts);
+            if (!facts) throw damaged();
+            seen.facts = facts;
         }
         for (const key of ["lastSeen", "lastSync"] as const) {
             if (given[key] === undefined) continue;
@@ -80,6 +91,7 @@ function textRecord(value: unknown, keyOk: (key: string) => boolean, file: strin
 export class RosterPrivate {
     private state: RosterPrivateState;
     private readonly writes = new SerialQueue();
+    private closed = false;
 
     constructor(private readonly file: string) {
         const raw = readStateFileSync<Record<string, unknown>>(file, {}, ROSTER_PRIVATE_FILE);
@@ -100,6 +112,7 @@ export class RosterPrivate {
 
     /** saves what `change` makes of the state; memory follows only once the file does */
     update(change: (state: RosterPrivateState) => RosterPrivateState): Promise<void> {
+        if (this.closed) return Promise.reject(new Error(`${ROSTER_PRIVATE_FILE} is closed: this computer's list stopped`));
         return this.writes.run(async () => {
             const next = change({
                 tokens: { ...this.state.tokens },
@@ -110,5 +123,11 @@ export class RosterPrivate {
             await writeJsonAtomic(this.file, next, { mode: 0o600 });
             this.state = next;
         });
+    }
+
+    /** Takes no write from here on; resolves once the writes already queued are saved (a failed one was the caller's to hear). */
+    close(): Promise<void> {
+        this.closed = true;
+        return this.writes.settled();
     }
 }

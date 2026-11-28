@@ -65,6 +65,10 @@
 //   "@roster"  one record per computer of the network: its id is that
 //              computer's member id. Otherwise like any space (encrypted,
 //              deletable); the body's value is the roster's (rosterStore.ts).
+//   "@self"    what a computer says of itself (where it is dialed, its OS):
+//              its id is the member id of its author, and no other: no
+//              computer can write one about another. Otherwise like
+//              "@roster"; the value is the roster's (rosterStore.ts).
 //   Any other space starting with "@" is refused.
 //
 // ─── Body ────────────────────────────────────────────────────────────────────
@@ -86,6 +90,7 @@ import { isMemberId } from "./memberId";
 
 export const KEYS_SPACE = "@keys";
 export const ROSTER_SPACE = "@roster";
+export const SELF_SPACE = "@self";
 export const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_ID_BYTES = 512;
 const MAX_COUNTER = 0xffff_ffff;
@@ -183,10 +188,11 @@ export function parseWireRecord(value: unknown): WireRecord {
         }
         if (r.deleted || r.key !== "") fail(`A ${KEYS_SPACE} record can't be deleted and names no key`);
         if (body.length < SPKI_BYTES + NONCE_BYTES + TAG_BYTES) fail(`A ${KEYS_SPACE} record's body is too short`);
-    } else if ((r.space as string).startsWith("@") && r.space !== ROSTER_SPACE) {
+    } else if ((r.space as string).startsWith("@") && r.space !== ROSTER_SPACE && r.space !== SELF_SPACE) {
         fail(`Unknown reserved space ${JSON.stringify(r.space)}`);
     } else {
         if (r.space === ROSTER_SPACE && !isMemberId(r.id)) fail(`A ${ROSTER_SPACE} record's id must be a member id`);
+        if (r.space === SELF_SPACE && r.id !== r.author) fail(`A ${SELF_SPACE} record is written only by the computer it is about`);
         if (!KEY_ID_RE.test(r.key)) fail(`Invalid record key id ${JSON.stringify(r.key)}`);
         if (r.deleted ? body.length !== 0 : body.length < NONCE_BYTES + TAG_BYTES) {
             fail(r.deleted ? "A delete has an empty body" : "A record's body is too short");

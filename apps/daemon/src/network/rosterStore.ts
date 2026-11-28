@@ -1,26 +1,38 @@
-// Where the roster's members are kept: in the record store (store.ts), one
-// "@roster" record per member, so they can travel to every computer of the
-// network like any other record. The roster (roster.ts) reads and writes
-// them only through RosterStore. What one computer keeps for itself (its
-// order, its pairing tokens) is in rosterPrivate.ts and never in a record.
+// Where the roster's members are kept: in the record store (store.ts), so
+// they travel to every computer of the network like any other record. The
+// roster (roster.ts) reads and writes them only through RosterStore. What
+// one computer keeps for itself (its order, its pairing tokens, where it
+// reached each member) is in rosterPrivate.ts and never in a record.
 //
-// ─── A roster record ─────────────────────────────────────────────────────────
+// ─── A roster record: a computer's certificate, and what people call it ──────
 //
 //   space  "@roster" (record.ts: the network's own spaces, which nothing a
 //          panel or the app writes can reach)
 //   id     the member id of the computer it is about
-//   value  {"cert": PEM, "name"?: text, "dial"?: {"host", "port"},
-//           "facts": {...}}: what is true of it from every computer. The
-//          cert's key must hash to the id; a record that breaks that, or any
-//          field of it, is left out of the roster and kept in the store as
-//          it is. "host" is the name it answers to (its .local name, or what
-//          it was paired at); the IP it last answered at is what one
-//          computer observed from where it is, so it is kept in that
-//          computer's own file (rosterPrivate.ts), never here.
+//   value  {"cert": PEM, "name"?: text}. The cert's key must be P-256 and
+//          hash to the id; a record that breaks that, or whose name is
+//          damaged, is left out of the roster and kept in the store as it
+//          is. Any member writes it: a person renames a computer from any
+//          computer.
 //
-// One record per member, so computers that change different members never
-// conflict; two that change one member apart keep both versions, the later
-// one winning (store.ts).
+// ─── A self record: what a computer says of itself ───────────────────────────
+//
+//   space  "@self"; its id is the member id of its author (record.ts refuses
+//          any other), so no computer can say where another is or what it
+//          runs
+//   value  {"dial"?: {"host", "port"}, "facts": {...}}: where it listens
+//          (the name it answers to and its port; no dial while nobody can
+//          dial it) and its OS. A damaged one is left out like a roster
+//          record.
+//
+// Where a member is reached from here (an IP it answered at, the address it
+// was paired at) and what this computer was told of a member that hasn't
+// written its own self record (a computer paired by an older Paperboard)
+// are this computer's observations (rosterPrivate.ts).
+//
+// One record per member in each space, so computers that change different
+// members never conflict; two that rename one member apart keep both
+// versions, the later one winning (store.ts).
 //
 // ─── Listed, and a member ────────────────────────────────────────────────────
 //
@@ -30,11 +42,12 @@
 // made with, only once a member has shared the network's keys with it: there
 // is an accepted "@keys" record addressed to it, written by this computer or
 // by another member (store.ts keyShares). Sharing keys is the act of letting
-// a computer in, which only joining does; a pairing an older Paperboard made,
-// or one typed in today, lists a computer and shares nothing, so the two
-// neither link nor take each other's records.
+// a computer in, which only joining does, and nothing joins yet; a pairing an
+// older Paperboard made, or one typed in today, lists a computer and shares
+// nothing, so the two neither link nor take each other's records.
 //
-// This computer is a member by its own key, without any record. A record
+// This computer is listed, and a member, by its own key, without any record
+// (a roster record about it only names it). A record
 // whose author isn't a member is held by the store, and every change to who
 // is one asks the store to readmit() what it holds, so a member and the
 // records that need it arrive in any order.
@@ -53,31 +66,53 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import { logger } from "../core/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-import type { RosterDial, RosterFacts, RosterMember } from "@mileniumhq/paperapi/protocol";
+import type { RosterDial, RosterFacts } from "@mileniumhq/paperapi/protocol";
 import type { IdentityPart } from "@mileniumhq/paperapi";
 import type { TlsIdentity } from "../security/tlsIdentity";
-import { KEYS_SPACE, ROSTER_SPACE } from "./record";
+import { KEYS_SPACE, ROSTER_SPACE, SELF_SPACE } from "./record";
 import { RecordStore, RecordStoreOwnerError } from "./store";
 import { memberIdOf } from "./memberId";
 
 /** the record store's folder in local/ */
 export const NETWORK_DIR = "network";
 
-/** A member as every computer may know it: its dial holds the name it answers to and its port, nothing observed from one place. */
-export type SharedMember = Omit<RosterMember, "dial"> & { dial?: SharedDial };
+/** Where a computer says it listens: the name it answers to and its port, nothing observed from one place. */
 export type SharedDial = Omit<RosterDial, "address">;
 
+/** What a computer says of itself (its "@self" record). */
+export interface SelfAbout {
+    dial?: SharedDial;
+    facts: RosterFacts;
+}
+
+/** A member as every computer may know it: its roster record, and what it said of itself once it has. */
+export interface SharedMember {
+    id: string;
+    cert: string;
+    name?: string;
+    about?: SelfAbout;
+}
+
 export interface RosterStore {
-    /** every member it holds now */
+    /** every computer a roster record lists */
     members(): SharedMember[];
-    /** adds the member, or replaces the one with its id; the same member again saves nothing */
+    /** adds the member, or replaces the one with its id; the same member again saves nothing. `about` is never written: only updateSelf() writes this computer's */
     write(member: SharedMember): Promise<void>;
+    /**
+     * Changes what this computer says of itself, for every member to read:
+     * `change` is given what it says now (null before it has said anything)
+     * and answers the whole of it, decided in the record store's line, so
+     * two changes at once never drop each other's fields. The same again
+     * saves nothing.
+     */
+    updateSelf(change: (current: SelfAbout | null) => SelfAbout): Promise<void>;
     remove(id: string): Promise<void>;
-    /** hears every member written or removed, by anyone, and every listed computer that became or stopped being a member; returns the unsubscribe */
+    /** hears every computer whose listing, what it says of itself, or whose being a member changed; returns the unsubscribe */
     watch(listener: (id: string, member: SharedMember | null) => void): () => void;
     /** whether the computer is a member: listed, and let in by a member (the top of rosterStore.ts); this computer always is */
     isMember(id: string): boolean;
-    close(): void;
+    /** resolves once what was written before it is saved */
+    close(): Promise<void>;
 }
 
 const TEXT_MAX = 255;
@@ -131,37 +166,38 @@ function holdsKeyOf(id: string, cert: string): boolean {
     }
 }
 
-/** A roster record's value as the member it describes, or why it isn't one. */
-function readMember(id: string, value: unknown): SharedMember | string {
+type RosterValue = { cert: string; name?: string };
+
+/** A roster record's value, or why it isn't one. */
+function readMember(id: string, value: unknown): RosterValue | string {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "it isn't an object";
     const given = value as Record<string, unknown>;
     if (!isText(given.cert, CERT_MAX) || !holdsKeyOf(id, given.cert)) return "its certificate isn't the P-256 key its id names";
     if (given.name !== undefined && !isText(given.name)) return "its name is damaged";
+    return { cert: given.cert, ...(given.name !== undefined ? { name: given.name as string } : {}) };
+}
+
+/** A self record's value, or why it isn't one. */
+function readAbout(value: unknown): SelfAbout | string {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "it isn't an object";
+    const given = value as Record<string, unknown>;
     const facts = readFacts(given.facts);
     if (!facts) return "its OS details are damaged";
     const dial = given.dial === undefined ? undefined : readDial(given.dial);
     if (dial === null) return "its address is damaged";
-    if (dial?.address !== undefined) return "its address holds an IP one computer observed, which is that computer's own";
-    return {
-        id,
-        ...(given.name !== undefined ? { name: given.name as string } : {}),
-        ...(dial ? { dial } : {}),
-        cert: given.cert,
-        facts,
-    };
+    if (dial?.address !== undefined) return "its address holds an IP, which is where another computer reached it";
+    return { ...(dial ? { dial } : {}), facts };
 }
 
-/** What a member's record holds: the member without its id, which is the record's. */
-function valueOf(member: SharedMember): Omit<SharedMember, "id"> {
-    const { id: _id, ...value } = member;
-    return value;
-}
-
-
-/** The roster's members as "@roster" records in this computer's record store (local/network/). */
+/** The roster's members as "@roster" and "@self" records in this computer's record store (local/network/). */
 export class RosterRecords implements RosterStore {
-    private readonly byId = new Map<string, SharedMember>();
+    /** member id → its roster record, as read */
+    private readonly byId = new Map<string, RosterValue>();
+    /** member id → its self record, as read; kept for a computer not (or not yet) listed, unused until it is */
+    private readonly abouts = new Map<string, SelfAbout>();
     private readonly listeners = new Set<(id: string, member: SharedMember | null) => void>();
+    /** id → each computer listed, as its listeners last heard it */
+    private told = new Map<string, string>();
     private readonly self: string;
     /** the listed computers that are members, this one among them; null until worked out, and after anything it depends on changes */
     private memberIds: Set<string> | null = null;
@@ -211,9 +247,13 @@ export class RosterRecords implements RosterStore {
             if (keys.problems.length) throw new Error(`This computer's network keys can't be opened: ${keys.problems.join("; ")}`);
             await this.records.createEpoch([this.identity.cert]);
         }
-        for (const record of this.records.list(ROSTER_SPACE)) this.take(record.id);
-        this.unwatch.push(this.records.watch(ROSTER_SPACE, (ids) => this.changed(ids)));
-        this.unwatch.push(this.records.watch(KEYS_SPACE, () => this.changed([])));
+        for (const record of this.records.list(ROSTER_SPACE)) this.take(ROSTER_SPACE, record.id);
+        for (const record of this.records.list(SELF_SPACE)) this.take(SELF_SPACE, record.id);
+        this.told = this.listing();
+        this.unwatch.push(this.records.watch(ROSTER_SPACE, (ids) => this.changed(ROSTER_SPACE, ids)));
+        this.unwatch.push(this.records.watch(SELF_SPACE, (ids) => this.changed(SELF_SPACE, ids)));
+        // a key shared with anyone: who is a member may have changed
+        this.unwatch.push(this.records.watch(KEYS_SPACE, () => this.changed(KEYS_SPACE, [])));
         // a change to who is a member that a crash cut off before its readmit
         await this.records.readmit();
     }
@@ -243,46 +283,63 @@ export class RosterRecords implements RosterStore {
         return members;
     }
 
-    /**
-     * Reads the newest version of a computer's record that reads into the
-     * list. A winner that doesn't read is said loudly and removes no one;
-     * a deleted winner, or no record, takes the computer off the list.
-     */
-    private take(id: string): SharedMember | null {
-        const [winner, ...earlier] = this.records.versions(ROSTER_SPACE, id);
-        if (!winner || winner.state === "deleted") {
-            this.byId.delete(id);
-            return null;
-        }
-        for (const version of [winner, ...earlier]) {
-            const member = version.state === "value" ? readMember(id, version.value) : version.state === "unreadable" ? version.error : "it is deleted";
-            if (typeof member !== "string") {
-                this.byId.set(id, member);
-                return member;
-            }
-            if (version === winner) {
-                logger.error(`[roster] the computer record ${ROSTER_SPACE}/${id} (version ${winner.version}, written by ${winner.author}) can't be listed: ${member}. The newest version that reads is listed instead.`);
-            }
-        }
-        // none of its versions reads: what was listed before, if anything, stays
-        return this.byId.get(id) ?? null;
+    private shared(id: string): SharedMember | null {
+        // this computer is listed by its own key; a record about it only names it
+        const member = this.byId.get(id) ?? (id === this.self ? { cert: this.identity.cert } : null);
+        if (!member) return null;
+        const about = this.abouts.get(id);
+        return { id, ...member, ...(about ? { about } : {}) };
     }
 
-    /** records of "@roster" (their ids) or of "@keys" changed: the list is read again, and who is a member worked out again */
-    private changed(ids: string[]): void {
-        const wasMember = this.memberIds ?? this.workOutMembers();
-        const listedBefore = new Map(this.byId);
-        for (const id of ids) this.take(id);
-        this.memberIds = null;
-        // told of: every computer whose listing changed, and every one that became or stopped being a member
-        const tell = new Set(ids.filter((id) => listedBefore.has(id) || this.byId.has(id)));
-        let membership = false;
-        for (const id of new Set([...listedBefore.keys(), ...this.byId.keys()])) {
-            if (wasMember.has(id) === this.isMember(id) && listedBefore.get(id)?.cert === this.byId.get(id)?.cert) continue;
-            membership = true;
-            tell.add(id);
+    /** every computer listed now, as its listeners hear it, with whether it is a member: links follow that */
+    private listing(): Map<string, string> {
+        const out = new Map<string, string>();
+        for (const id of this.ids()) out.set(id, JSON.stringify([this.shared(id), this.isMember(id)]));
+        return out;
+    }
+
+    /**
+     * Reads the newest version of a computer's roster or self record that
+     * reads. A winner that doesn't read is said loudly (unless only its key
+     * hasn't come yet: it reads when it does) and takes nothing away; a
+     * deleted winner, or no record, does.
+     */
+    private take(space: typeof ROSTER_SPACE | typeof SELF_SPACE, id: string): void {
+        const into: Map<string, unknown> = space === ROSTER_SPACE ? this.byId : this.abouts;
+        const read = (value: unknown): unknown => (space === ROSTER_SPACE ? readMember(id, value) : readAbout(value));
+        const [winner, ...earlier] = this.records.versions(space, id);
+        if (!winner || winner.state === "deleted") {
+            into.delete(id);
+            return;
         }
-        for (const id of tell) for (const listener of this.listeners) listener(id, this.byId.get(id) ?? null);
+        for (const version of [winner, ...earlier]) {
+            const value = version.state === "value" ? read(version.value) : version.state === "unreadable" ? version.error : "it is deleted";
+            if (typeof value !== "string") {
+                into.set(id, value);
+                return;
+            }
+            const waiting = version.state === "unreadable" && version.awaitingKey;
+            if (version === winner && !waiting) {
+                logger.error(`[roster] the computer record ${space}/${id} (version ${winner.version}, written by ${winner.author}) can't be read: ${value}. The newest version that reads is used instead.`);
+            }
+        }
+        // none of its versions reads: what was read before, if anything, stays
+    }
+
+    /** records of a space changed (their ids, for "@roster" and "@self"): every computer whose listing or membership changed is told */
+    private changed(space: string, ids: string[]): void {
+        if (space === ROSTER_SPACE || space === SELF_SPACE) for (const id of ids) this.take(space, id);
+        const wasMember = this.memberIds ?? this.workOutMembers();
+        this.memberIds = null;
+        const before = this.told;
+        this.told = this.listing();
+        let membership = false;
+        for (const id of new Set([...before.keys(), ...this.told.keys()])) {
+            if (wasMember.has(id) !== this.isMember(id)) membership = true;
+            if (before.get(id) === this.told.get(id)) continue;
+            const member = this.shared(id);
+            for (const listener of this.listeners) listener(id, member);
+        }
         // records waiting on a member that just came, and records of one that just went
         if (membership) {
             this.records.readmit().catch((err) => {
@@ -291,16 +348,33 @@ export class RosterRecords implements RosterStore {
         }
     }
 
+    /** this computer, then every computer a roster record lists */
+    private ids(): string[] {
+        return [this.self, ...[...this.byId.keys()].filter((id) => id !== this.self)];
+    }
+
     members(): SharedMember[] {
-        return [...this.byId.values()];
+        return this.ids().map((id) => this.shared(id)!);
     }
 
     async write(member: SharedMember): Promise<void> {
         // written as it is read back, so what one computer writes every other lists
-        const next = readMember(member.id, valueOf(member));
+        const value: RosterValue = { cert: member.cert, ...(member.name !== undefined ? { name: member.name } : {}) };
+        const next = readMember(member.id, value);
         if (typeof next === "string") throw new Error(`The computer ${member.id} can't be saved: ${next}`);
         if (JSON.stringify(this.byId.get(member.id)) === JSON.stringify(next)) return;
-        await this.records.put(ROSTER_SPACE, member.id, valueOf(next));
+        await this.records.put(ROSTER_SPACE, member.id, next);
+    }
+
+    async updateSelf(change: (current: SelfAbout | null) => SelfAbout): Promise<void> {
+        await this.records.write(SELF_SPACE, this.self, (winner) => {
+            const read = winner?.state === "value" ? readAbout(winner.value) : null;
+            // what doesn't read (damaged, or deleted) is said again whole
+            const current = typeof read === "string" ? null : read;
+            const next = readAbout(change(current));
+            if (typeof next === "string") throw new Error(`What this computer says of itself can't be saved: ${next}`);
+            return JSON.stringify(current) === JSON.stringify(next) ? null : { value: next };
+        });
     }
 
     async remove(id: string): Promise<void> {
@@ -313,8 +387,10 @@ export class RosterRecords implements RosterStore {
         return () => this.listeners.delete(listener);
     }
 
-    close(): void {
+    /** Stops listing; the store saves what was queued (RecordStore.close). */
+    close(): Promise<void> {
         for (const unwatch of this.unwatch.splice(0)) unwatch();
         this.listeners.clear();
+        return this.records.close();
     }
 }

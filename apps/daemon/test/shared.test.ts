@@ -12,7 +12,7 @@ import {
 } from "@mileniumhq/paperapi/sharedShape";
 import { getPaperboardDir } from "../src/core/paths";
 import { memberIdOf } from "../src/network/memberId";
-import { KEYS_SPACE, ROSTER_SPACE, signRecord } from "../src/network/record";
+import { KEYS_SPACE, ROSTER_SPACE, SELF_SPACE, signRecord } from "../src/network/record";
 import { panelSpace, SHELL_SPACE } from "../src/network/shared";
 import { RecordStore } from "../src/network/store";
 import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
@@ -109,6 +109,7 @@ describe("a panel's shared documents are its own", () => {
 			{ panelId: ALPHA, id: "../settings" },
 			{ panelId: ROSTER_SPACE, id: "settings" },
 			{ panelId: KEYS_SPACE, id: "settings" },
+			{ panelId: SELF_SPACE, id: "settings" },
 			{ panelId: "shell", id: "settings" },
 		]) {
 			const refused = await alpha.fail("shared:set", { ...params, value: 1 });
@@ -126,7 +127,7 @@ describe("a panel's shared documents are its own", () => {
 
 		// nothing was written anywhere but the three spaces
 		const spaces = new Set((await daemon.instance.records.changes(null, 10_000)).records.map((r) => r.space));
-		expect([...spaces].sort()).toEqual([KEYS_SPACE, ROSTER_SPACE, SHELL_SPACE, panelSpace(ALPHA), panelSpace(BETA)].sort());
+		expect([...spaces].sort()).toEqual([KEYS_SPACE, SELF_SPACE, SHELL_SPACE, panelSpace(ALPHA), panelSpace(BETA)].sort());
 		expect(daemon.instance.records.list(ROSTER_SPACE).map((r) => r.version)).toEqual(rosterBefore);
 		expect(panelSpace("shell")).not.toBe(SHELL_SPACE);
 	});
