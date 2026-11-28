@@ -295,7 +295,8 @@ export class PaperCraneConnection extends EventEmitter {
 
     private async startEmbeddedDaemon(): Promise<WebSocket> {
         try {
-            this.embeddedServer?.stop();
+            // the one before has closed its record store before this one opens it
+            await this.embeddedServer?.stop();
             this.embeddedServer = null;
             const freshToken = "pc_" + crypto.randomBytes(24).toString("hex");
             this.embeddedServer = await startPaperCraneServer({
@@ -309,7 +310,8 @@ export class PaperCraneConnection extends EventEmitter {
             this.token = freshToken;
             return await verifiedLocalSocket({ port: this.port, token: freshToken });
         } catch (err) {
-            this.embeddedServer?.stop();
+            // its record store is closed before the next start opens it: that start awaits this one's stop
+            await this.embeddedServer?.stop();
             this.embeddedServer = null;
             throw new Error(`Paperboard Server couldn't start on this computer: ${errorMessage(err)}`, { cause: err });
         }

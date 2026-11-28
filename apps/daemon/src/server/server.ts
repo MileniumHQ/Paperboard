@@ -76,7 +76,12 @@ export interface ServerInstance {
     // panel services). Equals port when the daemon is loopback-only.
     localPort: number;
     host: string;
-    stop: () => void;
+    /**
+     * Stops the daemon. Everything but the record store ends at once; the
+     * promise resolves once the store is closed too, which whoever starts a
+     * daemon on the same data folder next waits for.
+     */
+    stop: () => Promise<void>;
 }
 
 // what every listen attempt of one start shares
@@ -329,11 +334,14 @@ function daemonLifecycle(parts: DaemonParts) {
             advertisement?.stop();
         } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop:", err); }
         await panelServices.stopAllServices();
+        // a pull mid-write finishes it before the process goes
+        await config.network.stop().catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err));
         removePidFile();
         process.exit(0);
     };
-    const stop = () => {
-        if (stopped) return;
+    let ended: Promise<void> = Promise.resolve();
+    const stop = (): Promise<void> => {
+        if (stopped) return ended;
         stopped = true;
         let handshakeFailure: unknown;
         try { removeHandshake(); }
@@ -351,12 +359,17 @@ function daemonLifecycle(parts: DaemonParts) {
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
-        // the links' last-seen times are saved as they close
-        step("ending the links to the other computers", () => {
-            config.network.stop().catch((err) => logger.error("[Paperboard Server] while stopping, saving when the other computers were last seen failed:", err));
-        });
-        step("closing the shared documents", () => config.shared.close());
-        step("closing the computer list", () => config.roster.close());
+        // The links end at once; a pull that is mid-write finishes its write
+        // and their last-seen times are saved, and only then are the shared
+        // documents and the computer list closed. The promise resolves after
+        // that: whoever opens this data folder again (an embedded daemon
+        // started right after) waits for it, so two never write one store.
+        ended = config.network.stop()
+            .catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err))
+            .then(() => {
+                step("closing the shared documents", () => config.shared.close());
+                step("closing the computer list", () => config.roster.close());
+            });
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
             advertisement = null;
@@ -375,6 +388,7 @@ function daemonLifecycle(parts: DaemonParts) {
             });
         });
         if (handshakeFailure) throw handshakeFailure;
+        return ended;
     };
 
     return {

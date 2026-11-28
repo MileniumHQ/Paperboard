@@ -64,8 +64,9 @@ export async function startDaemon(options: ServerOptions & { dataDir?: string } 
 		stop: async () => {
 			if (current !== daemon) return;
 			const closed = new Promise<void>((resolve) => instance.server.once("close", () => resolve()));
-			instance.stop();
+			const storeClosed = instance.stop();
 			await within("the in-process daemon to close", closed, 15_000);
+			await within("the in-process daemon's record store to close", storeClosed, 15_000);
 			current = null;
 			restoreEnv("PAPERBOARD_DIR", previous);
 		},
