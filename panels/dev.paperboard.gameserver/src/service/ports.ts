@@ -23,7 +23,7 @@ export interface RunPorts { ports: ReadonlyMap<string, number>; moves: PortMove[
 export async function claimPort(request: PortRequest, starting: boolean, deps: PortDeps): Promise<number> {
     const claimed = await deps.ports.claim(request);
     const count = request.count ?? 1;
-    // TODO(remove after v0.5): a daemon from before ports in a row holds one, and the server would open the next unchecked
+    // TODO(remove after v0.6): a daemon from before ports in a row holds one, and the server would open the next unchecked
     if ((claimed.count ?? 1) !== count) throw new Error(`${request.label} needs ${count} ports in a row, which the Paperboard on this computer can't hold; update it`);
     return starting ? (await deps.ports.prepare(request.name)).port : claimed.port;
 }
