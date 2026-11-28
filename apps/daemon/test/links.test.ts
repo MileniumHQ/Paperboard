@@ -409,9 +409,12 @@ describe("links", () => {
 		expect(after.lastSeen).toBe(a.roster.observed(b.id).lastSeen!);
 		expect(after.lastSeen).toBeGreaterThanOrEqual(seen.lastSeen! - 1);
 		expect(after.sync).toMatchObject({ state: "synced", lastSuccessAt: a.roster.observed(b.id).lastSync });
-		// none of it is in a record
-		for (const name of fs.readdirSync(path.join(a.dir, NETWORK_DIR, "spaces"))) {
-			expect(fs.readFileSync(path.join(a.dir, NETWORK_DIR, "spaces", name), "utf8")).not.toContain("lastSeen");
+		// none of it is in a record: not in what the roster reads back, nor in any file of the store
+		expect(JSON.stringify(a.roster.member(b.id))).not.toMatch(/lastSeen|lastSync|observed/);
+		const spaces = path.join(a.dir, NETWORK_DIR, "spaces");
+		for (const name of fs.readdirSync(spaces, { recursive: true, encoding: "utf8" })) {
+			const file = path.join(spaces, name);
+			if (fs.statSync(file).isFile()) expect(fs.readFileSync(file, "utf8")).not.toContain("lastSeen");
 		}
 	});
 });
