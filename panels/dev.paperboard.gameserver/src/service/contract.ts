@@ -769,8 +769,7 @@ const rustCalls = {
 
 const valheimPlayer = { name: shape.text(), id: shape.text() };
 const valheimCalls = {
-    /** the world it runs, and a running crossplay server's join code and public address once the relay registered it */
-    // what the running server was started with, and the relay's join code once it has one; null while it isn't online
+    /** what the running server was started with, and the relay's join code and public address once it has them; null while it isn't online */
     valheimSession: { output: shape.nullable(shape.object({ world: text, listed: shape.boolean(), crossplay: shape.boolean(), joinCode: shape.nullable(text), address: shape.nullable(text) })) },
     valheimPlayers: {
         output: shape.object({
