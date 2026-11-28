@@ -407,4 +407,22 @@ describe("Rust", () => {
         expect(server.server.state.chatMessages.map((m) => m.text)).toEqual(["Ann joined the game", "Ann joined the game"]);
         players.stop();
     });
+
+    test("a start that a stop overtook arms nothing: the next run's start asks at once, and its baseline holds", async () => {
+        const server = gameServer("rust", { state: { serverStatus: "starting" } });
+        const answers: ((players: { steamId: string; name: string }[]) => void)[] = [];
+        const players = playerPoller(server.server, { game: "Rust", id: (p: { steamId: string; name: string }) => p.steamId, list: () => new Promise<{ steamId: string; name: string }[]>((resolve) => answers.push(resolve)), remember: async () => {} });
+        // the readiness probe awaits the server's answer; the stop lands meanwhile, then the probe starts the poller
+        server.server.setState({ serverStatus: "offline" });
+        players.start();
+        expect(answers).toHaveLength(0);
+        // Paperboard finds the next run already going: who is on then was there already
+        server.server.setState({ serverStatus: "online" });
+        players.start(true);
+        expect(answers).toHaveLength(1);
+        answers[0]!([{ steamId: BANNED, name: "Ann" }]);
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Ann"), "the first answer");
+        expect(server.server.state.chatMessages).toEqual([]);
+        players.stop();
+    });
 });

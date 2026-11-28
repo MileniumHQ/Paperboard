@@ -147,9 +147,13 @@ export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
         /** who answered online last */
         online: (): readonly P[] => state.online,
         poll,
-        /** `baseline`: the first answer is who was already there (a reattach), not who joined */
+        /**
+         * `baseline`: the first answer is who was already there (a reattach), not who joined.
+         * A start's readiness probe calls it after an await, so a stop may have landed first:
+         * a server that is not starting or online gets no timer.
+         */
         start(baseline = false) {
-            if (state.timer) return;
+            if (state.timer || (ctx.state.serverStatus !== "starting" && ctx.state.serverStatus !== "online")) return;
             state.baseline = baseline;
             state.timer = setInterval(() => { if (!state.asking) void poll(); }, PLAYER_POLL_MS);
             void poll();
