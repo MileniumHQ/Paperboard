@@ -77,8 +77,9 @@ export function writeFileAtomicSync(
 export function writeJsonAtomic(
     filePath: string,
     value: unknown,
+    options?: { mode?: number },
 ): Promise<void> {
-    return writeFileAtomic(filePath, JSON.stringify(value, null, 2));
+    return writeFileAtomic(filePath, JSON.stringify(value, null, 2), options);
 }
 
 // Reads a daemon-owned state document. Missing = `empty`. Unparseable
