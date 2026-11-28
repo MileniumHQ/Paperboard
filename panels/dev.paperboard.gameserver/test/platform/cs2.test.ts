@@ -8,6 +8,7 @@ import { cs2Call as call, cs2Server } from "../helpers/cs2";
 import { waitForFile } from "../helpers/installedPanel";
 import { PANEL_ID } from "../../src/servers";
 import { sendServerCommand, sendChatMessage, startServerInstance, stopServerInstance } from "../../src/service/lifecycle";
+import { backupHooks } from "../../src/service/backups";
 import { gameFor } from "../../src/games";
 import { SOURCE_CALLS } from "../../src/games/source";
 
@@ -34,6 +35,34 @@ const said = (server: GameServer, text: string, what: string) => server.server.w
 
 // Counter-Strike 2 running, against a stand-in that prints what the real server was measured to (build 26598758).
 describe("Counter-Strike 2", () => {
+    test.skipIf(!support.supported)("a restore over a running server says why it stops after the output the game printed before it", async () => {
+        const server = await cs2Server();
+        const hooks = backupHooks({
+            server: () => server.server,
+            servers: () => [server.server],
+            panelFolders: () => [],
+            saveSchedule: () => Promise.reject(new Error("no schedules here")),
+            replaceSettings: async (s, settings) => void (await s.updateSettings(() => settings)),
+            reload: (s) => s.game.initialize(false),
+        });
+        await startServerInstance(server.server);
+        await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to say its map is running");
+        // a line of the game's still held in the console's batch
+        server.server.console.push("Saved 412 entities", false);
+        await hooks.beforeRestore(server.server.id);
+        const lines = consoleOf(server);
+        const stopping = lines.lastIndexOf("[Server] Stopping to restore a backup...");
+        expect(stopping).toBeGreaterThan(0);
+        const saved = lines.lastIndexOf("Saved 412 entities");
+        expect(saved).toBeGreaterThanOrEqual(0);
+        expect(saved).toBeLessThan(stopping);
+        expect(lines.indexOf("[Server] Process stopped.", stopping)).toBeGreaterThan(stopping);
+        await hooks.afterRestore({ target: server.server.id, backup: { format: 2, id: "b", panelId: PANEL_ID, target: server.server.id, createdAt: new Date().toISOString(), size: 0, sha256: "", panelVersion: null, label: null, paths: [], exclude: [] }, ok: false, error: "the swap failed" });
+        await server.server.waitFor((s) => s.serverStatus === "online", "Counter-Strike 2 to start again after the restore that failed");
+        await stopServerInstance(server.server);
+        await server.server.waitFor((s) => s.serverStatus === "offline", "Counter-Strike 2 to stop");
+    });
+
     test.skipIf(!support.supported)("the server is driven through its console: passwords stay out of sight, a banned player is put out as they join, chat, kicks and map changes are read back, and time on survives a failed save", async () => {
         const server = await cs2Server();
         await call(server, "writeGameOptions", { patch: { password: "join-Secret-1", token: "token-Secret-1", gamemode: "casual", bot_quota: 2 } });
