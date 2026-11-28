@@ -78,7 +78,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
                 <li>Select <b>Add Computer</b>.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">
-                The computer appears in the rail under its own computer name, and Paperboard opens it.
+                The computer appears in the rail under its own computer name, and Paperboard opens it. A computer paired before keeps the name it has; to change it, see <PaperLink href="#change-a-name">Change a computer&apos;s name</PaperLink>.
                 Install panels on it from its <b>Panel Library</b>. See <PaperLink href="/docs/paperboard/panels/">Install and manage panels</PaperLink>.
             </PaperText>
 
@@ -126,6 +126,12 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             </PaperTextList>
             <PaperText preset="body" as="p">
                 A paired computer's details are read again each time Paperboard connects to it. Run <PaperCode>papercrane identify</PaperCode> on a computer to see what it reports.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="change-a-name">Change a computer&apos;s name</PaperText>
+            <PaperText preset="body" as="p">
+                Right-click the computer in the rail and choose <b>Change Name</b>, or select <b>Change Name</b> on its Computer Info page. Type the new name in <b>Name</b> and select <b>Save</b>.
+                The name is Paperboard&apos;s label for the computer: it doesn&apos;t rename the machine itself, and pairing the computer again keeps it.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="forget-a-computer">Forget a computer</PaperText>
