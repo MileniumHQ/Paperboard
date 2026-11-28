@@ -1,10 +1,10 @@
 import type { Server } from "../../service/server";
-import { exists } from "../../service/failures";
 import { PANEL_ID } from "../../service/contract";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { loadZip } from "../../core/lazy";
+import { activateRelease } from "../releaseSwap";
 
 import { archiveFor, entrypoint, releaseFor, tmodloaderReleaseFor, TMODLOADER_ENTRYPOINT, type TerrariaSoftware } from "./catalog";
 
@@ -52,22 +52,6 @@ export async function unpackTmodloader(archive: Uint8Array, target: string, vers
     }
     if (!(await fs.stat(path.join(target, TMODLOADER_ENTRYPOINT))).isFile()) throw new Error("tModLoader archive has no tModLoader.dll");
 }
-/** Both names contain only managed release files, never worlds or settings. */
-export async function recoverRelease(target: string): Promise<void> {
-    const previous = `${target}.previous`;
-    if (!(await exists(previous))) return;
-    if (await exists(target)) await fs.rm(previous, { recursive: true });
-    else await fs.rename(previous, target);
-}
-export async function activateRelease(staging: string, target: string): Promise<void> {
-    const previous = `${target}.previous`;
-    if (await exists(previous)) throw new Error("A Terraria release swap needs recovery; restart the panel service before installing");
-    const replacing = await exists(target);
-    if (replacing) await fs.rename(target, previous);
-    try { await fs.rename(staging, target); }
-    catch (err) { if (replacing) await fs.rename(previous, target); throw err; }
-    if (replacing) await fs.rm(previous, { recursive: true });
-}
 export async function install(ctx: Server, software: TerrariaSoftware, version: string): Promise<void> {
     const release = archiveFor(software, version);
     const root = await ctx.root();
@@ -85,7 +69,7 @@ export async function install(ctx: Server, software: TerrariaSoftware, version: 
         else await unpackArchive(bytes, staging, version, process.platform);
         await fs.writeFile(path.join(staging, "manifest.json"), JSON.stringify({ software, version, source: release.url, sha256: release.sha256, os: process.platform, arch: process.arch }));
         await fs.mkdir(path.dirname(target), { recursive: true });
-        await activateRelease(staging, target);
+        await activateRelease(staging, target, "Terraria");
         ctx.setState({ installProgress: { stage: "completed", percent: 100 } });
     } catch (err) {
         ctx.setState({ installProgress: { stage: "error", percent: 0 } });

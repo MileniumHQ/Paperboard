@@ -123,7 +123,7 @@ export default function TerrariaWorlds() {
                 download: (world) => files.exportFile(`worlds/${world.name}.wld`, PANEL_ID, { suggestedName: `${world.name}.wld`, filters: WLD_FILTERS }),
                 switchTo: (world) => calls.terrariaWorld({ name: world.name, create: false }),
                 remove: (world) => calls.terrariaWorldDelete({ name: world.name }),
-                deleteNote: (world) => `This moves "${world.name}" and its backup to the server folder's trash, with everything built in it.`,
+                deleteNote: (world) => `This moves "${world.name}" and its backup to the server folder's trash, with everything built in it.${world.active ? " This is the active world. The server will generate a fresh one on the next start." : ""}`,
                 takenNames: (worlds) => worlds.map((w) => w.name),
                 namePattern: NAME_PATTERN,
                 nameHint: "Letters, numbers, spaces, _ and - only.",

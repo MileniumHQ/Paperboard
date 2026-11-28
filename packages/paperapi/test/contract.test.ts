@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { blocksApi } from "../src/blocks";
-import { serviceClient, type ServiceClient } from "../src/contract";
+import { defineContract, serviceClient, type ServiceClient } from "../src/contract";
+import { shape } from "../src/shape";
 import { closeTransport, getTransport } from "../src/ipc";
 import { STATE_EVENT } from "../src/serviceCalls";
 import { hydratePanelBridges } from "../src/panelHydration";
@@ -72,6 +73,13 @@ describe("a panel's contract", () => {
     test("the page waits for a call as long as its contract says", async () => {
         await expect(service.calls.held()).rejects.toThrow("timed out");
         await service.calls.release();
+    });
+
+    test("a contract can't make the page wait longer than the daemon lets a call wait", () => {
+        const waiting = (timeoutMs: number | null) => () => defineContract("dev.paperboard.waits", { calls: { slow: { output: shape.text(), timeoutMs } } });
+        expect(waiting(300_000)).toThrow('The call "slow" of dev.paperboard.waits waits 300000 ms, over the 60000 ms a call can wait; use null for work that runs longer');
+        expect(waiting(60_000)).not.toThrow();
+        expect(waiting(null)).not.toThrow();
     });
 
     test("a name the contract doesn't have is a type error, and nothing to call", () => {

@@ -28,7 +28,7 @@ const LOCATION_ID_RE = /^d-[0-9a-f]{12}$/;
 // streams with its own cap instead of living twice in one JSON frame
 const FILE_WRITE_MAX = 16 * 1024 * 1024;
 // a call to a registry entry waits at most this long; null waits it out
-const CALL_TIMEOUT_MAX_MS = 60_000;
+export const CALL_TIMEOUT_MAX_MS = 60_000;
 // per-socket broadcast interest is bounded
 const MAX_EVENT_SUBS = 512;
 
@@ -308,7 +308,7 @@ export const RPC = {
 
     // ports
     "ports:claim": {
-        params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>() }),
+        params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>(), count: shape.optional(typed<unknown>()) }),
     },
     "ports:prepare": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },
     "ports:release": { params: object({ panelId: panelId(), name: shape.optional(typed<unknown>()) }) },

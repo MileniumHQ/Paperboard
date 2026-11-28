@@ -128,6 +128,7 @@ export function sourceService(spec: SourceGameSpec, definition: GameDefinition):
                     if (!(err instanceof RconError && /closed the RCON connection/.test(err.message))) throw err;
                 }
             },
+            flushConsole: () => game.console.flush(ctx),
             commandLine(command) {
                 if (/[\r\n\0]/.test(command)) throw new Error("A command must be a single line");
                 if (/^\s*(rcon_password|quit|exit)\b/i.test(command)) throw new Error("Paperboard manages the RCON password; use Options for it and Stop to quit");

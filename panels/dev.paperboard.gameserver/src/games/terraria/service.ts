@@ -16,7 +16,8 @@ import { archiveFor, entrypoint, installDirectories, releases, softwareName, ter
 import { ModStore, SAVE_DIR } from "./modStore";
 import { searchWorkshop, workshopItems, type ModscanSort } from "../steam/modscan";
 import { addonStageDir } from "../../core/addonUpload";
-import { install, recoverRelease } from "./install";
+import { install } from "./install";
+import { recoverRelease } from "../releaseSwap";
 import { consoleInput } from "./windows";
 import { XNA_4 } from "../windowsRuntime";
 import { provideWindowsRuntime } from "../windowsRuntimeInstall";
@@ -348,6 +349,7 @@ export function terrariaService(ctx: Server): GameService {
             await generate("").catch(err => report(ctx, "Could not take the join password out of serverconfig.txt", err));
             await ctx.process.write(PROC, "exit\n");
         },
+        flushConsole: () => local.console.flush(ctx),
         commandLine(command) { const line = singleLine(command, "Command").trim(); if (/^(password|exit-nosave)\b/i.test(line)) throw new Error("Use Options for the password and Stop for a saved shutdown"); return `${line}\n`; },
         sendChat: (message) => ctx.process.write(PROC, `say ${singleLine(message, "Message")}\n`),
         observePartialLine(line) {

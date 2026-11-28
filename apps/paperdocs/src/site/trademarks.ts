@@ -18,6 +18,8 @@ export const TRADEMARKS: Trademark[] = [
     { name: "Counter-Strike 2", match: /\bCounter-Strike 2\b|\bCS2\b/, owners: ["Valve"] },
     { name: "Garry's Mod", match: /\bGarry's Mod\b/, owners: ["Facepunch Studios"] },
     { name: "Rust", match: /\bRust\b/, owners: ["Facepunch Studios"] },
+    { name: "Valheim", match: /\bValheim\b/, owners: ["Iron Gate AB"] },
+    { name: "Factorio", match: /\bFactorio\b/, owners: ["Wube Software"] },
     { name: "Discord", match: /\bDiscord\b/, owners: ["Discord Inc."] },
     { name: "Scratch", match: /\bScratch\b/, owners: ["MIT"] },
     { name: "Modrinth", match: /\bModrinth\b/, owners: ["Rinth, Inc."] },

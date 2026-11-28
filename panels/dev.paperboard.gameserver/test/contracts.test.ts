@@ -81,7 +81,7 @@ describe("call and game contracts", () => {
 
         // the same check, as the service makes it
         expect(() => assertGameCall(gameFor("minecraft"), { software: "forge", version: "1.20.1", settings: {} }, "prepareCrossplay")).toThrow("does not support");
-        await expect(panelCalls().addServer({ name: "Factory", game: "factorio" })).rejects.toThrow("Unsupported game: factorio");
+        await expect(panelCalls().addServer({ name: "Nowhere", game: "not-a-game" })).rejects.toThrow("Unsupported game: not-a-game");
         await expect(panelCalls().addServer({ name: "Proto", game: "__proto__" })).rejects.toThrow("Unsupported game: __proto__");
         expect(gameServerService.getState().servers.map((s: { id: string }) => s.id)).toEqual(["s-vanilla", "s-old", "s-paper"]);
     });

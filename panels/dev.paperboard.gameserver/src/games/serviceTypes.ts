@@ -19,6 +19,11 @@ export interface PortSpec {
     protocol: "tcp" | "udp" | "tcp+udp";
     preferred: number | null;
     /**
+     * Ports in a row the server opens from this one, such as Valheim's port
+     * and the next; they are claimed, checked and moved together. 1 when unset.
+     */
+    count?: number;
+    /**
      * Set when the game reads this port only from a file the user keeps, so
      * it can't move for one run: a taken one refuses the start, and this says
      * what to do instead.
@@ -70,6 +75,8 @@ export interface GameService {
     stop(): Promise<void>;
     /** Checks a console command and gives what is sent: the stdin write, or for "rcon" the line itself. */
     commandLine(command: string): string;
+    /** Publishes the console lines the game holds back (ConsoleBuffer); the exit calls it before it says anything. */
+    flushConsole?(): void;
     /** Runs a console command when the game's control is "rcon", as commandLine gave it. */
     sendCommand?(command: string): Promise<void>;
     sendChat?(message: string): Promise<void>;

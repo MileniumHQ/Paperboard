@@ -8,6 +8,7 @@ import { describeValue } from "./blocksSchema";
 import { STATE_EVENT, STATE_KEY_VALUE, callBlockId, eventBlockId } from "./serviceCalls";
 import { errorMessage } from "./errors";
 import { createPanelBridge } from "./bridge";
+import { CALL_TIMEOUT_MAX_MS } from "./protocol/rpc";
 import { shape, type Fields, type Infer, type ObjectOf, type ObjectShape, type Shape } from "./shape";
 
 // ─── Contracts ──────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ export interface CallDefinition {
     /** an object of fields, left out for a call that takes nothing */
     input?: ObjectShape<any>;
     output: Shape<any>;
-    /** milliseconds the page waits for the answer; defaults to 30_000, null waits it out */
+    /** milliseconds the page waits for the answer, at most 60_000; defaults to 30_000, null waits it out */
     timeoutMs?: number | null;
     /**
      * A call the contract's scope is not about (making a new server, when
@@ -114,6 +115,10 @@ export function defineContract<const D extends ContractDefinition>(panelId: stri
     const scoped = Object.keys(scope).length > 0;
     for (const [name, def] of Object.entries(calls)) {
         if (def.unscoped && !scoped) throw new Error(`The call "${name}" of ${panelId} is unscoped, but its contract has no scope`);
+        // the daemon refuses a longer wait on every call, so the contract can't declare one
+        if (typeof def.timeoutMs === "number" && def.timeoutMs > CALL_TIMEOUT_MAX_MS) {
+            throw new Error(`The call "${name}" of ${panelId} waits ${def.timeoutMs} ms, over the ${CALL_TIMEOUT_MAX_MS} ms a call can wait; use null for work that runs longer`);
+        }
         for (const key of Object.keys(def.input?.fields ?? {})) {
             if (!def.unscoped && Object.hasOwn(scope, key)) throw new Error(`The call "${name}" of ${panelId} names "${key}", which its scope already gives`);
         }

@@ -8,6 +8,7 @@ import { loadServerOptions } from "./options";
 import { oomKillCount } from "./memory";
 import { TRIGGER_IDS } from "./contract";
 import { report } from "../games/serviceKit";
+import { portMoveText } from "../core/portNames";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
 export function cancelReadiness(ctx: Server): void {
@@ -219,7 +220,7 @@ async function launchServer(ctx: Server, carry: GameServerState["serverEntries"]
                 },
                 ...moves.map((move) => ({
                     type: "warn" as const,
-                    content: `[Server] Port ${move.from} was taken, so this run of ${move.label} uses ${move.to}.`,
+                    content: `[Server] ${portMoveText(move, true)}.`,
                 })),
             ].slice(-MAX_BUFFERED_ENTRIES),
         });
@@ -277,10 +278,11 @@ export async function stopServerInstance(
                 content: ctx.game.stopEntry,
             }),
         });
-        try { await ctx.game.stop(); }
-        catch (err) { cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
-
+        // the force-kill is pending before the stop is sent: a server can quit before its
+        // stop is acknowledged, and its exit then has to find the force-kill to cancel it
         scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
+        try { await ctx.game.stop(); }
+        catch (err) { cancelStopForceKill(ctx); cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
     }
 }
 
@@ -304,10 +306,10 @@ export async function restartServerInstance(
             },
         ),
     });
-    try { await ctx.game.stop(); }
-    catch (err) { ctx.lifecycle.isRestarting = false; cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
-
+    // pending before the stop is sent, as in stopServerInstance
     scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
+    try { await ctx.game.stop(); }
+    catch (err) { cancelStopForceKill(ctx); ctx.lifecycle.isRestarting = false; cancelStopRequest(ctx); ctx.setState({ serverStatus: "online" }); throw err; }
 }
 
 export async function sendServerCommand(
@@ -381,6 +383,8 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
         ctx.lifecycle.lineBuffer = "";
     }
+    // the run's last lines go above what its exit says, and the next start's line
+    ctx.game.flushConsole?.();
     // the run's moves end with it as it goes offline; the game is told them
     const moves = ctx.state.portMoves;
 

@@ -60,7 +60,8 @@ const ComputerPorts: Component<{ computerId: string; shown: boolean }> = (props)
                                     <For each={list()}>
                                         {(claim) => (
                                             <PaperSettingItem title={claim.label} description={PROTOCOL_NAMES[claim.protocol]}>
-                                                <PaperText preset="label">{claim.port}</PaperText>
+                                                {/* a claim of ports in a row, such as a game port and its query port, shows them all */}
+                                                <PaperText preset="label">{claim.count > 1 ? `${claim.port}–${claim.port + claim.count - 1}` : claim.port}</PaperText>
                                             </PaperSettingItem>
                                         )}
                                     </For>

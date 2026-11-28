@@ -23,7 +23,7 @@ import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
 import type { OverviewStats } from "./overviewStats";
-import { joinPort } from "../core/portNames";
+import { joinPort, portMoveText, portSpan } from "../core/portNames";
 
 /** What a game's Overview says under the address, beside the button that edits it. */
 export function EditableDetail(props: { edit: string; onEdit(): void; children: JSX.Element }) {
@@ -173,11 +173,14 @@ export default function ServerOverview(props: {
 
                 {/* a taken port moved for this run alone: friends must join on the new one */}
                 <For each={portMoves()}>
-                    {(move) => (
-                        <PaperQuote variant="warning" icon="swap_horiz" title={`${move.primary ? "Port" : `${move.label} port`} ${move.from} was taken, so this run uses ${move.to}`}>
-                            {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${move.to} until the server stops.`} The next start asks for {move.from} again.
-                        </PaperQuote>
-                    )}
+                    {(move) => {
+                        const span = (from: number) => portSpan(move, from);
+                        return (
+                            <PaperQuote variant="warning" icon="swap_horiz" title={portMoveText(move, !move.primary)}>
+                                {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${span(move.to)} until the server stops.`} The next start asks for {span(move.from)} again.
+                            </PaperQuote>
+                        );
+                    }}
                 </For>
 
                 {props.children}

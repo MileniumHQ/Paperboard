@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 import * as fs from "node:fs";
+import * as dgram from "node:dgram";
 import * as net from "node:net";
 import * as path from "node:path";
 import { PaperCraneEngine } from "daemon/engine/index";
@@ -379,6 +380,59 @@ describe("the port registry", () => {
 		await withDaemon(async (daemon) => {
 			const a = await daemon.panelRpc("test.porta");
 			expect((await a.ok("ports:list", { panelId: "test.porta" })).claims.map((c: any) => c.port)).toEqual([granted]);
+			await a.close();
+		}, dir);
+	});
+
+	test("ports claimed in a row are checked and moved together, and never overlap another claim", async () => {
+		const dir = dataDir();
+		// a UDP port another program holds, the second of the pair asked for
+		const socket = dgram.createSocket("udp4");
+		await new Promise<void>((resolve) => socket.bind({ port: 0, address: "0.0.0.0" }, () => resolve()));
+		const busy = socket.address().port;
+		let pair = 0;
+		try {
+			await withDaemon(async (daemon) => {
+				const host = await daemon.rpc();
+				const a = await daemon.panelRpc("test.porta");
+				const b = await daemon.panelRpc("test.portb");
+				const claim = (rpc: Rpc, name: string, preferred: number, count?: number) =>
+					rpc.call("ports:claim", { panelId: rpc === a ? "test.porta" : "test.portb", name, label: `Server ${name}`, protocol: "udp", preferred, count });
+
+				await host.ok("ports:policy-set", { policy: "refuse" });
+				const refused = await claim(a, "valheim", busy - 1, 2);
+				expect(refused.code).toBe("CONFLICT");
+				expect(refused.error).toBe(`Server valheim can't use ports ${busy - 1} to ${busy}: another program on this computer is using it (port ${busy}).`);
+
+				await host.ok("ports:policy-set", { policy: "next-free" });
+				const moved = (await claim(a, "valheim", busy - 1, 2)).result;
+				// both ports move past the taken one, and stay in a row
+				expect(moved.port).toBeGreaterThan(busy);
+				expect(moved.count).toBe(2);
+				pair = moved.port;
+
+				// the second port of the pair is the pair's: a single claim on it moves
+				const single = (await claim(b, "game", pair + 1)).result;
+				expect(single.port).not.toBe(pair);
+				expect(single.port).not.toBe(pair + 1);
+				expect(single.count).toBe(1);
+				// and a pair asked for over a single claim moves off it whole
+				const over = (await claim(b, "pair", single.port - 1, 2)).result;
+				expect([over.port, over.port + 1]).not.toContain(single.port);
+				expect([over.port, over.port + 1]).not.toContain(pair + 1);
+
+				for (const bad of [0, 17, 1.5, "2"]) expect((await claim(a, "bad", 3000, bad as number)).code).toBe("INVALID_PARAMS");
+				expect((await claim(a, "bad", 65535, 2)).code).toBe("INVALID_PARAMS");
+				for (const s of [host, a, b]) await s.close();
+			}, dir);
+		} finally {
+			socket.close();
+		}
+
+		// the count is kept with the claim
+		await withDaemon(async (daemon) => {
+			const a = await daemon.panelRpc("test.porta");
+			expect((await a.ok("ports:list", { panelId: "test.porta" })).claims.map((c: any) => [c.port, c.count])).toEqual([[pair, 2]]);
 			await a.close();
 		}, dir);
 	});

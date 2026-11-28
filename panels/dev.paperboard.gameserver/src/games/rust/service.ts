@@ -375,7 +375,6 @@ export function rustService(ctx: Server): GameService {
             const rconPort = ctx.runPort("rust-rcon", Number(saved.rconPort ?? DEFAULT_RCON_PORT));
             connect(rconPort, password);
             local.started = false;
-            players.stop();
 
             const args = [
                 "-batchmode", "-nographics", "-logfile", "-",
@@ -424,6 +423,7 @@ export function rustService(ctx: Server): GameService {
             try { await rcon().exec("quit", { until: () => false, timeoutMs: 120_000 }); }
             catch (err) { if (!(err instanceof Error && err.message === "Rust closed its remote console")) throw err; }
         },
+        flushConsole: () => local.console.flush(ctx),
         commandLine(command) {
             if (/[\r\n\0]/.test(command)) throw new Error("A command must be a single line");
             if (/^\s*(?:global\.)?(?:quit|restart)\b|^\s*rcon\.password\b/i.test(command)) throw new Error("Paperboard manages the RCON password and stops the server; use Options, Stop and Restart");

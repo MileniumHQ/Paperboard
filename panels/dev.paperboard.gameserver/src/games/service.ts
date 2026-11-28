@@ -15,6 +15,10 @@ import { cs2 } from "./cs2";
 import { cs2Service } from "./cs2/service";
 import { rust } from "./rust";
 import { rustService } from "./rust/service";
+import { valheim } from "./valheim";
+import { valheimService } from "./valheim/service";
+import { factorio } from "./factorio";
+import { factorioService } from "./factorio/service";
 import type { GameService } from "./serviceTypes";
 
 /** A game as the service knows it: what makes its part of each server, and the Blocks types its blocks use. */
@@ -32,6 +36,8 @@ const modules: Readonly<Record<string, GameModule>> = {
     [gmod.id]: { create: gmodService },
     [rust.id]: { create: rustService },
     [cs2.id]: { create: cs2Service },
+    [valheim.id]: { create: valheimService },
+    [factorio.id]: { create: (server) => factorioService(server) },
 };
 /** A stored server's game; an id no game has throws. */
 export function gameModuleFor(id: string): GameModule {

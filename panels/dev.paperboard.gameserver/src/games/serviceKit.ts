@@ -87,7 +87,8 @@ const PLAYER_POLL_MS = 5_000;
  * remote console request), asked every few seconds while it runs: joins and
  * leaves are the difference from the last answer. A tick waits while a
  * request is still out, and an answer a newer request or a stop replaced is
- * dropped, so a slow answer never rewinds the list or repeats a join.
+ * dropped, so a slow answer never rewinds the list or repeats a join. The
+ * list ends with the run: nobody is online on a stopped server.
  */
 export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
     game: string;
@@ -141,18 +142,20 @@ export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
         if (state.timer) clearInterval(state.timer);
         Object.assign(state, { timer: null, online: [], baseline: false, error: "", latest: state.latest + 1, asking: false });
     }
+    ctx.onRunEnd(stop);
     return {
         /** who answered online last */
         online: (): readonly P[] => state.online,
         poll,
-        /** `baseline`: the first answer is who was already there (a reattach), not who joined */
+        /**
+         * `baseline`: the first answer is who was already there (a reattach), not who joined.
+         * A start's readiness probe calls it after an await, so a stop may have landed first:
+         * a server that is not starting or online gets no timer.
+         */
         start(baseline = false) {
-            if (state.timer) return;
+            if (state.timer || (ctx.state.serverStatus !== "starting" && ctx.state.serverStatus !== "online")) return;
             state.baseline = baseline;
-            state.timer = setInterval(() => {
-                if (ctx.state.serverStatus === "offline") stop();
-                else if (!state.asking) void poll();
-            }, PLAYER_POLL_MS);
+            state.timer = setInterval(() => { if (!state.asking) void poll(); }, PLAYER_POLL_MS);
             void poll();
         },
         stop,
@@ -238,7 +241,9 @@ function addConsoleLine<T>(lines: T[], line: T, text: (line: T) => string): T[] 
 
 /**
  * Console lines gathered for a tenth of a second and published together, so a
- * chatty server costs one state update per batch rather than one per line.
+ * chatty server costs one state update per batch rather than one per line. The
+ * process's exit publishes what is held at once (GameService.flushConsole), so
+ * a run's last lines come before what the exit says and the next start's line.
  */
 export class ConsoleBuffer {
     private pending: string[] = [];
@@ -250,15 +255,19 @@ export class ConsoleBuffer {
         if (!line) return;
         this.pending = addConsoleLine(this.pending, line, String).slice(-CONSOLE_LINES);
         if (this.timer) return;
-        this.timer = setTimeout(() => {
-            this.timer = null;
-            const lines = this.pending;
-            this.pending = [];
-            // added to what is published now: a line written in between keeps the old progress line
-            let entries: ConsoleLine[] = ctx.state.serverEntries;
-            for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
-            ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
-        }, 100);
+        this.timer = setTimeout(() => this.flush(ctx), 100);
+    }
+    /** Publishes the lines held back now. */
+    flush(ctx: Server) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = null;
+        const lines = this.pending;
+        this.pending = [];
+        if (lines.length === 0) return;
+        // added to what is published now: a line written in between keeps the old progress line
+        let entries: ConsoleLine[] = ctx.state.serverEntries;
+        for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
+        ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
     }
     dispose() {
         if (this.timer) clearTimeout(this.timer);

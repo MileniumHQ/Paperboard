@@ -1,0 +1,335 @@
+steamcmd.sh[1717046]: Starting  /home/steam/workspace/steamcmd/linux32/steamcmd
+Redirecting stderr to '/home/steam/workspace/steamhome/Steam/logs/stderr.txt'
+Logging directory: '/home/steam/workspace/steamhome/Steam/logs'
+[  0%] Checking for available updates...
+[----] Verifying installation...
+Steam Console Client (c) Valve Corporation - version 1794537082
+-- type 'quit' to exit --
+Loading Steam API...[0mCCompatManager::UpdateInvalidPlatformTracking: ignoring k_nAppIdAll, use YldRebuildInvalidPlatformTracking instead
+OK
+[0m
+Connecting anonymously to Steam Public...[0mOK
+[0mWaiting for client config...[0mOK
+[0mWaiting for user info...[0mOK
+[0mAppID : 896660, change number : 41516270/41516270, last change : Fri Nov 27 02:25:45 2026 
+"896660"
+{
+	"common"
+	{
+		"name"		"Valheim Dedicated Server"
+		"type"		"Tool"
+		"parent"		"892970"
+		"oslist"		"windows,macos,linux"
+		"osarch"		""
+		"icon"		"1aab0586723c8578c7990ced7d443568649d0df2"
+		"logo"		"233d73a1c963515ee4a9b59507bc093d85a4e2dc"
+		"logo_small"		"233d73a1c963515ee4a9b59507bc093d85a4e2dc_thumb"
+		"clienticon"		"c55a6b50b170ac6ed56cf90521273c30dccb5f12"
+		"clienttga"		"35e067b9efc8d03a9f1cdfb087fac4b970a48daf"
+		"ReleaseState"		"released"
+		"osextended"		"macos64,macosapplesilicon,macosnotarized"
+		"freetodownload"		"1"
+		"associations"
+		{
+		}
+		"gameid"		"896660"
+	}
+	"config"
+	{
+		"installdir"		"Valheim dedicated server"
+		"launch"
+		{
+			"0"
+			{
+				"executable"		"start_server_xterm.sh"
+				"type"		"server"
+				"config"
+				{
+					"oslist"		"linux"
+				}
+			}
+			"1"
+			{
+				"executable"		"start_headless_server.bat"
+				"type"		"server"
+				"config"
+				{
+					"oslist"		"windows"
+				}
+			}
+			"2"
+			{
+				"executable"		"start_server.command"
+				"type"		"server"
+				"config"
+				{
+					"oslist"		"macos"
+				}
+			}
+		}
+	}
+	"depots"
+	{
+		"1004"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"7604377918839582995"
+					"size"		"67863136"
+					"download"		"24251776"
+				}
+			}
+			"depotfromapp"		"1007"
+		}
+		"1005"
+		{
+			"config"
+			{
+				"oslist"		"macos"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"2135359612286175146"
+					"size"		"0"
+					"download"		"0"
+				}
+			}
+			"depotfromapp"		"1007"
+		}
+		"1006"
+		{
+			"config"
+			{
+				"oslist"		"linux"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"4559160656493359681"
+					"size"		"111284048"
+					"download"		"36733840"
+				}
+			}
+			"depotfromapp"		"1007"
+		}
+		"896661"
+		{
+			"config"
+			{
+				"oslist"		"linux"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"6134427154880338224"
+					"size"		"2076977866"
+					"download"		"1875785280"
+				}
+				"default_old"
+				{
+					"gid"		"6965848522742639928"
+					"size"		"2075482217"
+					"download"		"1874711248"
+				}
+				"default_pre1_0"
+				{
+					"gid"		"962159520942340660"
+					"size"		"1648960249"
+					"download"		"1432104384"
+				}
+				"default_preal"
+				{
+					"gid"		"4714844039240581373"
+					"size"		"1809855230"
+					"download"		"928137296"
+				}
+				"default_prebw"
+				{
+					"gid"		"125933883409730605"
+					"size"		"2296358615"
+					"download"		"1244596096"
+				}
+				"default_precta"
+				{
+					"gid"		"3745717239018859798"
+					"size"		"1627054796"
+					"download"		"1355852480"
+				}
+				"default_preml"
+				{
+					"gid"		"6784662710573794961"
+					"size"		"1244390550"
+					"download"		"683682096"
+				}
+			}
+		}
+		"896662"
+		{
+			"config"
+			{
+				"oslist"		"windows"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"6665245643235079405"
+					"size"		"2048637998"
+					"download"		"1868518704"
+				}
+				"default_old"
+				{
+					"gid"		"171106503873955013"
+					"size"		"2044385412"
+					"download"		"1866938400"
+				}
+				"default_pre1_0"
+				{
+					"gid"		"4092019362950122673"
+					"size"		"1572001805"
+					"download"		"1418790672"
+				}
+				"default_preal"
+				{
+					"gid"		"3407001158943500641"
+					"size"		"1728347336"
+					"download"		"909601984"
+				}
+				"default_prebw"
+				{
+					"gid"		"3720669077053597949"
+					"size"		"2214279680"
+					"download"		"1230754128"
+				}
+				"default_precta"
+				{
+					"gid"		"3567185908497052141"
+					"size"		"1545087054"
+					"download"		"1342060160"
+				}
+				"default_preml"
+				{
+					"gid"		"6502590622330440570"
+					"size"		"1129628196"
+					"download"		"667746320"
+				}
+			}
+		}
+		"896663"
+		{
+			"config"
+			{
+				"oslist"		"macos"
+			}
+			"manifests"
+			{
+				"public"
+				{
+					"gid"		"9106675823565839686"
+					"size"		"2086768538"
+					"download"		"1862548240"
+				}
+				"default_old"
+				{
+					"gid"		"8093774585643789786"
+					"size"		"2087305950"
+					"download"		"1862610080"
+				}
+				"default_pre1_0"
+				{
+					"gid"		"1988284746012428400"
+					"size"		"1629093763"
+					"download"		"1425572368"
+				}
+				"default_preal"
+				{
+					"gid"		"5549621211050618912"
+					"size"		"0"
+					"download"		"0"
+				}
+				"default_prebw"
+				{
+					"gid"		"1408443316269240087"
+					"size"		"2992022209"
+					"download"		"1569232624"
+				}
+				"default_precta"
+				{
+					"gid"		"4899617364751965308"
+					"size"		"1593747184"
+					"download"		"1340780208"
+				}
+				"default_preml"
+				{
+					"gid"		"5549621211050618912"
+					"size"		"0"
+					"download"		"0"
+				}
+			}
+		}
+		"branches"
+		{
+			"public"
+			{
+				"buildid"		"26949048"
+				"timeupdated"		"1795701922"
+				"timebuildupdated"		"1795700566"
+			}
+			"default_old"
+			{
+				"buildid"		"26266951"
+				"description"		"Previous stable"
+				"timeupdated"		"1793193375"
+				"timebuildupdated"		"1793180977"
+			}
+			"default_pre1_0"
+			{
+				"buildid"		"21981590"
+				"description"		"Last stable build before 1.0"
+				"timeupdated"		"1771576792"
+				"timebuildupdated"		"1771406785"
+			}
+			"default_preal"
+			{
+				"buildid"		"20221240"
+				"description"		"Last stable build before Ashlands"
+				"timeupdated"		"1759477966"
+				"timebuildupdated"		"1759402457"
+			}
+			"default_prebw"
+			{
+				"buildid"		"20221628"
+				"description"		"	Last stable build before Bog Witch"
+				"timeupdated"		"1759477997"
+				"timebuildupdated"		"1759404132"
+			}
+			"default_precta"
+			{
+				"buildid"		"20221863"
+				"description"		"Last stable build before Call to Arms"
+				"timeupdated"		"1759478062"
+				"timebuildupdated"		"1759405224"
+			}
+			"default_preml"
+			{
+				"buildid"		"20222098"
+				"description"		"Last stable build before Mistlands"
+				"timeupdated"		"1759478369"
+				"timebuildupdated"		"1759406180"
+			}
+		}
+		"privatebranches"		"1"
+	}
+}
+Unloading Steam API...[0mOK
+[0m
