@@ -284,7 +284,7 @@ export function PaperMenuLabel(props: ParentProps<PaperMenuLabelProps>) {
 }
 
 export interface PaperMenuItemProps
-    extends JSX.InputHTMLAttributes<HTMLInputElement> {
+    extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onContextMenu"> {
     value: string | number;
     description?: JSX.Element | string;
     icon?: JSX.Element | string;
@@ -294,6 +294,8 @@ export interface PaperMenuItemProps
         The menu's `value` still marks the matching entry as the current
         page (`aria-current="page"`). */
     href?: string;
+    /** A right-click or long press on the entry (its label, or its link), not on the hidden input. */
+    onContextMenu?: JSX.EventHandler<HTMLElement, MouseEvent>;
 }
 
 export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
@@ -309,6 +311,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
         "style",
         "href",
         "onClick",
+        "onContextMenu",
     ]);
 
     const { isSelected, select } = useSelectionItem(
@@ -409,6 +412,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                         );
                         activate();
                     }}
+                    onContextMenu={(e) => local.onContextMenu?.(e)}
                 >
                     {content()}
                 </a>
@@ -420,6 +424,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 classList={local.classList}
                 style={style()}
                 onClick={activate}
+                onContextMenu={(e) => local.onContextMenu?.(e)}
                 onKeyDown={(e) => {
                     if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();
@@ -437,5 +442,45 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 {content()}
             </label>
         </Show>
+    );
+}
+
+export interface PaperMenuActionProps extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
+    icon?: JSX.Element | string;
+    level?: number;
+}
+
+/**
+ * An entry that does something (opens a dialog, starts a new item) instead
+ * of being chosen: it looks like the menu's entries, but is never the
+ * menu's value, and never opens a page in a phone-width panel.
+ */
+export function PaperMenuAction(props: ParentProps<PaperMenuActionProps>) {
+    const [local, rest] = splitProps(props, ["icon", "level", "class", "style", "children"]);
+    const contextLevel = useMenuLevel();
+    return (
+        <button
+            {...rest}
+            type="button"
+            class={cx(styles.PaperMenuItem, styles.action, local.class)}
+            style={mergeStyle({ "--menu-indent-level": local.level ?? contextLevel }, local.style)}
+        >
+            <Show when={local.icon}>
+                {(glyph) =>
+                    typeof glyph() === "string" ? (
+                        <PaperIcon class={styles.menuIcon} zeroHeight>
+                            {glyph()}
+                        </PaperIcon>
+                    ) : (
+                        <span class={styles.menuIcon}>{glyph()}</span>
+                    )
+                }
+            </Show>
+            <div class={styles.itemText}>
+                <PaperText class={styles.menuTitle} size={2} weight={500}>
+                    {local.children}
+                </PaperText>
+            </div>
+        </button>
     );
 }

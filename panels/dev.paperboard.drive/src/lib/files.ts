@@ -57,7 +57,8 @@ export function mediaType(name: string): string {
 /** What a file is cached by: a change to it is a different file. */
 const keyOf = (entry: Pick<DriveEntry, "path" | "modified" | "size">) => `${entry.path}|${entry.modified}|${entry.size}`;
 
-export function createFiles(calls: Calls) {
+/** The files of one place: `place` is its id. */
+export function createFiles(calls: Calls, place: string) {
     const urls = createBlobUrlCache({ files: CACHE_FILES, bytes: CACHE_BYTES });
 
     /** A file's bytes, read piece by piece; an abort stops between pieces. */
@@ -68,7 +69,7 @@ export function createFiles(calls: Calls) {
             signal,
             onProgress,
             piece: async (offset) => {
-                const piece = await calls.read({ path: entry.path, offset });
+                const piece = await calls.read({ place, path: entry.path, offset });
                 if (piece.modified !== entry.modified || piece.size !== entry.size) throw new Error(`“${entry.name}” changed while it was being read.`);
                 return piece;
             },
@@ -95,14 +96,17 @@ export function createFiles(calls: Calls) {
                 onProgress,
                 signal,
                 begin: async () => {
-                    const { id } = await calls.uploadBegin({ folder, name: file.name, size: file.size });
+                    const { id } = await calls.uploadBegin({ place, folder, name: file.name, size: file.size });
                     return {
-                        put: (offset, data) => calls.uploadPut({ id, offset, data }),
-                        finish: () => calls.uploadFinish({ id }),
-                        cancel: () => calls.uploadCancel({ id }),
+                        put: (offset, data) => calls.uploadPut({ place, id, offset, data }),
+                        finish: () => calls.uploadFinish({ place, id }),
+                        cancel: () => calls.uploadCancel({ place, id }),
                     };
                 },
             }),
+
+        /** Lets go of every file read, held ones too: for when nothing shows them anymore. */
+        clear: () => urls.clear(),
     };
 }
 

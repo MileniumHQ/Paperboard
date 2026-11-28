@@ -94,4 +94,10 @@
     .title {
         display: block;
     }
+
+    /* at the place's top, the panel's page bar already names it and leads back */
+    .atTop .up,
+    .atTop .title {
+        display: none;
+    }
 }

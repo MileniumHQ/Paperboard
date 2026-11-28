@@ -309,4 +309,34 @@ describe("panel assets and /panel-files", () => {
 		expect(fs.readdirSync(outside)).toEqual([]);
 		expect(fs.readdirSync(path.join(files, "moved"))).toEqual([]);
 	});
+
+	test("an absolute path reads a file anywhere on the computer, through its links, for the host credential only", async () => {
+		const daemon = await withPanel();
+		const port = daemon.instance.localPort;
+		const auth = bearer(daemon.token);
+		const outside = tempDir();
+		fs.writeFileSync(path.join(outside, "photo.jpg"), "on the usb");
+		fs.symlinkSync(path.join(outside, "photo.jpg"), path.join(outside, "latest.jpg"));
+		const at = (p: string) => `/panel-files/test.assets?path=${encodeURIComponent(p)}`;
+
+		expect((await request(port, { path: at(path.join(outside, "photo.jpg")) })).status).toBe(401);
+		expect((await request(port, { path: at(path.join(outside, "photo.jpg")), headers: bearer(daemon.instance.auth.issuePanelToken("test.assets")) })).status).toBe(401);
+		expect((await request(port, { path: at(path.join(outside, "photo.jpg")), headers: auth })).body.toString()).toBe("on the usb");
+		expect((await request(port, { path: at(path.join(outside, "latest.jpg")), headers: auth })).body.toString()).toBe("on the usb");
+		expect((await request(port, { method: "HEAD", path: at(path.join(outside, "photo.jpg")), headers: auth })).status).toBe(200);
+		expect((await request(port, { path: at(path.join(outside, "gone.jpg")), headers: auth })).status).toBe(404);
+		expect((await request(port, { path: at(outside), headers: auth })).status).toBe(403);
+
+		const put = await request(port, { method: "PUT", path: at(path.join(outside, "new.txt")), headers: auth, body: "uploaded" });
+		expect(put.status).toBe(405);
+		expect(fs.existsSync(path.join(outside, "new.txt"))).toBe(false);
+
+		// only an absolute path rides in the query, and only with no path after the panel id
+		expect((await request(port, { path: "/panel-files/test.assets?path=doc.txt", headers: auth })).status).toBe(400);
+		expect((await request(port, { path: "/panel-files/test.assets?path=", headers: auth })).status).toBe(400);
+		expect((await request(port, { path: `/panel-files/settings?path=${encodeURIComponent(path.join(outside, "photo.jpg"))}`, headers: auth })).status).toBe(400);
+		// the panel's own files are still bounded by its storage
+		expect((await request(port, { path: `/panel-files/test.assets/doc.txt?path=${encodeURIComponent(path.join(outside, "photo.jpg"))}`, headers: auth })).body.toString()).toBe("doc");
+		expect((await request(port, { path: "/panel-files/test.assets/%2e%2e%2ftest.other%2ftheirs.txt", headers: auth })).status).toBe(403);
+	});
 });
