@@ -66,6 +66,7 @@ export class Server {
     readonly ports: ServerPorts;
     #state: GameServerState;
     readonly #host: ServerHost;
+    readonly #runEnds = new Set<() => void>();
 
     /**
      * A backup's copy or a restore holding the server's folder, from its
@@ -158,12 +159,23 @@ export class Server {
         const next = { ...before, ...(typeof patch === "function" ? patch(before) : patch) };
         next.onlineSince = onlineSinceAfter(before, next);
         // a run's ports end with it: the next start asks for the saved ones again
-        if (next.serverStatus === "offline" && before.serverStatus !== "offline") {
+        const ended = next.serverStatus === "offline" && before.serverStatus !== "offline";
+        if (ended) {
             next.portMoves = [];
             this.runPorts = new Map();
         }
         this.#state = next;
+        // before the change is told, so whatever it makes read again finds the run gone
+        if (ended) for (const end of this.#runEnds) end();
         this.#host.changed(this, before);
+    }
+    /**
+     * Calls `end` each time a run ends, as the server goes offline: a stop,
+     * a crash or a kill. For what a game keeps of one run, such as who is
+     * on, which must not outlive it. `end` reads state and never sets it.
+     */
+    onRunEnd(end: () => void): void {
+        this.#runEnds.add(end);
     }
     /**
      * The one way the server's settings change: a patch merges over them, a
