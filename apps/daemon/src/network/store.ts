@@ -63,6 +63,12 @@
 //   <dir>/cursors.json         {"pull:<peer>": {"log", "after"},
 //                               "push:<peer>": {"log", "after", "sink"}}
 //
+// It is sized for settings and documents: up to a few thousand records of
+// a few KB per space. Each space is one file, rewritten whole on every
+// change; everything is held in memory; changes() scans every record. Bulk
+// data (files, logs, media, anything that grows without bound) does not
+// belong here.
+//
 // Each file is replaced whole (writeFileAtomic), so a crash leaves it old or
 // new. A change that spans files writes where a record goes before where it
 // leaves, and loading drops a held copy of a record already kept. A file
