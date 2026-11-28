@@ -256,15 +256,22 @@ describe("links", () => {
 		await members([a, b]);
 		a.start();
 		b.start();
-		await waitFor("both dials to have been taken", () => a.upgrades + b.upgrades === 2);
-		await waitFor("one link both sides agree on", () => linked(a, b));
+		await waitFor("both dials to have been taken", () => a.upgrades + b.upgrades >= 2);
+		// for a moment both may hold the larger id's dial, which each took first; they end on the smaller id's
 		const [smaller, larger] = ordered(a, b);
-		expect(peer(smaller, larger).reach).toMatchObject({ dialedBy: "this" });
-		expect(peer(larger, smaller).reach).toMatchObject({ dialedBy: "peer" });
-		// the dropped one was no failure: nobody redials, and the kept link syncs
+		const settled = () =>
+			linked(a, b) &&
+			(peer(smaller, larger).reach as { dialedBy?: string }).dialedBy === "this" &&
+			(peer(larger, smaller).reach as { dialedBy?: string }).dialedBy === "peer";
+		await waitFor("both on the link the smaller id dialed", settled);
+		// and stay there: the kept link syncs, nobody redials, and the dropped one was no failure
+		const upgrades = a.upgrades + b.upgrades;
 		await a.records.put("notes", "x", 1);
 		await waitFor("the note over the kept link", () => note(b, "x") === 1);
-		expect(a.upgrades + b.upgrades).toBe(2);
+		await b.records.put("notes", "y", 2);
+		await waitFor("the note back over it", () => note(a, "y") === 2);
+		expect(settled()).toBe(true);
+		expect(a.upgrades + b.upgrades).toBe(upgrades);
 		expect([peer(a, b), peer(b, a)].map((p) => p.sync.lastFailure)).toEqual([null, null]);
 	});
 

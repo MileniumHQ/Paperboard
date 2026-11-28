@@ -581,6 +581,7 @@ export class NetworkLinks {
     /** sockets on /network that haven't proven themselves, by address */
     private readonly unproven = new Map<string, Set<WebSocket | Duplex>>();
     private unprovenCount = 0;
+    private readonly pulls = new Set<Promise<void>>();
     private readonly cleanups: (() => void)[] = [];
     private started = false;
     private stopped = false;
@@ -639,7 +640,8 @@ export class NetworkLinks {
         }
         this.wss.close();
         this.refusals.flush();
-        await Promise.all(saves);
+        // a pull mid-write finishes its write; its next request fails at once, its link being closed
+        await Promise.all([...saves, ...this.pulls]);
     }
 
     /** Hears every change to what status() reports. */
@@ -961,7 +963,7 @@ export class NetworkLinks {
         const early = take();
         const link = new Link(ws, id, dialer, this.now(), this.timing, {
             request: (op, params) => this.answer(op, params),
-            notice: () => void this.pull(peer),
+            notice: () => this.startPull(peer),
             closed: (ended, code, reason) => this.linkClosed(peer, ended, code, reason),
         });
         const current = peer.link;
@@ -985,7 +987,7 @@ export class NetworkLinks {
         this.clearTimers(peer);
         void this.saveSeen(peer);
         link.begin(early);
-        void this.pull(peer);
+        this.startPull(peer);
         this.changed();
         return true;
     }
@@ -1011,6 +1013,13 @@ export class NetworkLinks {
         if (!isCursor(cursor)) throw new Error("A change cursor must be null or {log, after}");
         if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_SERVED_LIMIT) throw new Error(`A batch holds 1 to ${MAX_SERVED_LIMIT} records`);
         return this.options.store.changes(cursor, limit as number);
+    }
+
+    /** a pull stop() waits for: its store writes end before the store closes */
+    private startPull(peer: Peer): void {
+        const pulling = this.pull(peer);
+        this.pulls.add(pulling);
+        void pulling.finally(() => this.pulls.delete(pulling));
     }
 
     /** takes what the peer has that this computer hasn't, over its link; one pull per peer at a time */
