@@ -252,6 +252,7 @@ export class RecordStore {
     private readonly queue = new SerialQueue();
     private readonly peerLines = new KeyedQueue();
     private readonly watchers = new Map<string, Set<(ids: string[]) => void>>();
+    private readonly acceptedListeners = new Set<() => void>();
 
     // loaded state: load() replaces all of it
     private log = "";
@@ -331,6 +332,12 @@ export class RecordStore {
             set.delete(onChange);
             if (!set.size) this.watchers.delete(space);
         };
+    }
+
+    /** Calls `listener` after every saved change that accepted a version, written here or taken from anywhere: what this store's peers have not seen. */
+    onAccepted(listener: () => void): () => void {
+        this.acceptedListeners.add(listener);
+        return () => this.acceptedListeners.delete(listener);
     }
 
     /** The network keys this computer holds (no key bytes), and why any "@keys" record addressed to it could not be opened. */
@@ -559,11 +566,14 @@ export class RecordStore {
     private change<T>(mutate: () => T): Promise<T> {
         return this.queue.run(async () => {
             const keysBefore = new Set(this.keyring.keys());
+            const seqBefore = this.nextSeq;
             try {
                 const out = mutate();
                 if (this.dirtySpaces.has(KEYS_SPACE)) this.rebuildKeyring(keysBefore);
                 await this.flush();
                 this.announce();
+                // every accepted version takes the next sequence number
+                if (this.nextSeq !== seqBefore) this.announceAccepted();
                 return out;
             } catch (err) {
                 try {
@@ -765,6 +775,16 @@ export class RecordStore {
                 } catch (err) {
                     logger.error(`[network] a watcher of ${space} failed:`, err); // quiet: the change is saved; one watcher's failure must not reach the writer or the other watchers
                 }
+            }
+        }
+    }
+
+    private announceAccepted(): void {
+        for (const listener of this.acceptedListeners) {
+            try {
+                listener();
+            } catch (err) {
+                logger.error("[network] a listener for accepted records failed:", err); // quiet: the change is saved; one listener's failure must not reach the writer or the others
             }
         }
     }
