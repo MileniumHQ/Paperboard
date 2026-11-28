@@ -11,7 +11,6 @@ import { pickCall } from "./helpers/serverCall";
 import { gameServer, type GameServer } from "./helpers/game";
 import { installFactorio, playersOnline, serverSays } from "./helpers/factorio";
 import { freePort } from "./helpers/palworld";
-import { standIn } from "./helpers/standIn";
 import { tempDir } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { TRIGGER_IDS } from "../src/service/contract";
@@ -83,8 +82,9 @@ describe("Factorio", () => {
         const server_ = (root: string) => {
             fs.mkdirSync(path.join(root, "factorio", "bin", "x64"), { recursive: true });
             fs.mkdirSync(path.join(root, "factorio", "data", "base"), { recursive: true });
-            fs.copyFileSync(standIn("fakeFactorio", "factorio"), path.join(root, "factorio", "bin", "x64", "factorio"));
-            fs.chmodSync(path.join(root, "factorio", "bin", "x64", "factorio"), 0o755);
+            // unpacking only checks the server is an executable file, so a script stands in: the compiled
+            // stand-in is ~90 MB, and xz-packing it four times outran the test's time on CI
+            fs.writeFileSync(path.join(root, "factorio", "bin", "x64", "factorio"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
             fs.writeFileSync(path.join(root, "factorio", "data", "base", "info.json"), "{}");
         };
 
