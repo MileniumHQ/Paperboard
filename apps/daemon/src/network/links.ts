@@ -603,7 +603,9 @@ export class NetworkLinks {
             ws.once("open", () => settle(null));
             ws.once("unexpected-response", (_req, res) => {
                 const why = res.statusCode === 403 ? "this computer isn't one of its members" : res.statusCode === 401 ? "it wanted this computer's certificate" : res.statusMessage || "no reason given";
-                settle(new RefusedError(`refused the link (${res.statusCode}): ${why}`));
+                const message = `refused the link (${res.statusCode}): ${why}`;
+                // a peer still starting (503) is dialed again soon, like any failure
+                settle(res.statusCode === 403 || res.statusCode === 401 ? new RefusedError(message) : new Error(message));
             });
             ws.once("error", (err) => settle(err));
             ws.once("close", (code, reason) => settle(new Error(`closed before it opened (${code}${reason.length ? `: ${reason}` : ""})`)));
@@ -633,6 +635,7 @@ export class NetworkLinks {
                 loser.close(LINK_CLOSE.duplicate, "Another link to this computer is kept");
                 return;
             }
+            // first, so the old link's close isn't taken for the peer going; its pull fails, and the new link's (queued behind it) takes over
             peer.link = link;
             loser.close(LINK_CLOSE.duplicate, "Another link to this computer is kept");
         }
@@ -693,7 +696,9 @@ export class NetworkLinks {
             // the first sync is saved at once: "never synced" must not come back after a restart
             if (first) await this.saveSeen(peer);
         } catch (err) {
-            peer.sync = { ...peer.sync, lastFailure: { at: this.now(), error: errorMessage(err) } };
+            // a link replaced by another mid-pull didn't fail to sync: the pull over the new one is queued
+            const superseded = err instanceof LinkError && peer.link !== null && peer.link !== link;
+            if (!superseded) peer.sync = { ...peer.sync, lastFailure: { at: this.now(), error: errorMessage(err) } };
             // a link that can't carry a pull is made again; a store that couldn't keep what came keeps the link
             if (err instanceof LinkError) {
                 if (peer.link === link) link.fail(err.message);
