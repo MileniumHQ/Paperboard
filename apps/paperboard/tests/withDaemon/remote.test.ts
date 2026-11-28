@@ -344,6 +344,8 @@ describe("a paired computer found again", () => {
 		const other = await scriptedRemote(unanswering, { bind: "127.0.0.6", port: misnamed.port });
 		const pool = new ConnectionPool();
 		try {
+			// not listed yet: nothing to name it by but what is found
+			expect(await pool.probe("127.0.0.2", far.port)).toEqual({ reachable: true });
 			const named = await pool.pairComputer("127.0.0.2", far.port, "123456");
 			expect({ host: named.host, address: named.address }).toEqual({ host: "127.0.0.3", address: "127.0.0.2" });
 			const unnamed = await pool.pairComputer("127.0.0.5", misnamed.port, "123456");
@@ -353,6 +355,9 @@ describe("a paired computer found again", () => {
 			expect(await pool.renameComputer(named.id, "Game Box")).toBe(true);
 			const again = await pool.pairComputer("127.0.0.2", far.port, "123456");
 			expect([again.id, again.name]).toEqual([named.id, "Game Box"]);
+			// the wizard names a computer it finds by the name this app lists it under: told by the certificate that answers
+			expect(await pool.probe("127.0.0.2", far.port)).toEqual({ reachable: true, listedAs: "Game Box" });
+			expect(await pool.probe("127.0.0.5", misnamed.port)).toEqual({ reachable: true, listedAs: unnamed.name });
 			// Inventory: Data loss — an app whose list is out of date never undoes a rename when it pairs a computer again.
 			// renamed on the daemon while this app's list still says "Game Box", then paired again at once: the roster keeps "Rack"
 			const daemon = pool.getClient("local").getEmbeddedServer()!;

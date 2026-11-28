@@ -4,6 +4,7 @@ import * as path from "path";
 import { DEFAULT_PORT, getNetworkIp } from "daemon";
 import { readStateFileSync, writeJsonAtomicSync } from "daemon/core/storage";
 import { getLocalDir } from "daemon/core/paths";
+import { memberIdOf } from "daemon/network/memberId";
 import { logger } from "daemon/core/logger";
 import { certFingerprint, pinnedRequest } from "daemon/security/pinnedTls";
 import { readTlsCert } from "daemon/security/tlsIdentity";
@@ -256,6 +257,17 @@ export class ConnectionPool extends EventEmitter {
         return this.byMember.get(member)?.id ?? null;
     }
 
+    /** the listed computer holding the key in this certificate (PEM); none for one that doesn't parse */
+    private listedBy(cert: string): KnownComputer | undefined {
+        let member: string;
+        try {
+            member = memberIdOf(cert);
+        } catch {
+            return undefined; // quiet: a certificate that doesn't parse is no computer this app lists; pairing refuses it
+        }
+        return this.byMember.get(member);
+    }
+
     private known(id: string): KnownComputer | undefined {
         const resolved = this.resolve(id);
         return resolved === null ? undefined : this.computers.get(resolved);
@@ -482,7 +494,7 @@ export class ConnectionPool extends EventEmitter {
     public async probe(
         host: string,
         port: number | string = DEFAULT_PORT,
-    ): Promise<{ reachable: boolean; hostname?: string; error?: string; invalidAddress?: boolean }> {
+    ): Promise<{ reachable: boolean; listedAs?: string; error?: string; invalidAddress?: boolean }> {
         const checked = checkProbeTarget(host, port);
         if ("error" in checked) return checked;
         try {
@@ -490,9 +502,11 @@ export class ConnectionPool extends EventEmitter {
             // not-yet-pinned certificate is not checked here
             const res = await pinnedRequest(`https://${bracketHost(host)}:${checked.port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
-                // /health carries liveness + version only; hostname arrives
-                // over the authenticated pair/verify handshake instead
-                return { reachable: true };
+                // /health carries liveness + version only; the computer's
+                // name comes with pairing. The certificate it answered with
+                // says whether it is a computer this app lists, wherever it is
+                const listed = res.peerCert ? this.listedBy(res.peerCert) : undefined;
+                return { reachable: true, ...(listed ? { listedAs: listed.name } : {}) };
             }
             // the daemon always answers /health with 200, so any other
             // status came from a different server on that port

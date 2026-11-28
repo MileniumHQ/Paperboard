@@ -11,8 +11,8 @@ export interface RenameComputerModalProps {
     onClose: () => void;
 }
 
-// The name is this app's label for the computer. It stays on this device
-// and never renames the machine itself.
+// The name is the computer list's label for the computer, which pairing it
+// again keeps. It never renames the machine itself.
 const RenameComputerModal: Component<RenameComputerModalProps> = (props) => {
     const [name, setName] = createSignal("");
     const action = createAction();

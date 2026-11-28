@@ -47,7 +47,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const [method, setMethod] = createSignal("");
     const [host, setHost] = createSignal("");
     const [port, setPort] = createSignal(String(DAEMON_PORT));
-    const [name, setName] = createSignal("");
     const [code, setCode] = createSignal("");
 
     const [isPairing, setIsPairing] = createSignal(false);
@@ -66,7 +65,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         `${c.host}:${c.port}`;
 
     let probeTimeout: ReturnType<typeof setTimeout> | undefined;
-    let lastAutoName = "";
     // the address being checked; only the latest check answers for it: one
     // for an address that has since been changed is dropped, so Next can't
     // be enabled by a check of something other than what's typed
@@ -95,15 +93,15 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const unreachableWords = () =>
         `Can't reach ${host().trim()}${probeInvalid() ? "" : `:${port().trim() || DAEMON_PORT}`}${probeDetail() ? `. ${probeDetail()}` : ""}`;
     const probeInvalid = () => !probe.error() && probe.value()?.invalidAddress === true;
-    // a computer that answers names itself, unless a name was typed
-    createEffect(on(probe.value, (res) => {
-        if (!res?.reachable) return;
-        const rawName = (res.hostname || checking()?.host || "").replace(/\.local$/i, "").trim();
-        if (!name().trim() || name() === lastAutoName) {
-            setName(rawName);
-            lastAutoName = rawName;
-        }
-    }));
+    // the name the computer has: the one this app lists it under (the
+    // certificate that answered is one it lists), else, for a new computer,
+    // the name it is found by nearby, else the address typed
+    const computerName = () => {
+        const listed = probe.value()?.listedAs;
+        if (listed) return listed;
+        const nearby = discovered().find((d) => suggestionKey(d) === method());
+        return nearby?.name.replace(/\.local$/i, "").trim() || host().trim();
+    };
 
     // the probe timer must not fire past this component's lifecycle
     onCleanup(() => clearTimeout(probeTimeout));
@@ -266,15 +264,12 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         if (val === "custom") {
             setHost("");
             setPort(String(DAEMON_PORT));
-            setName("");
             return;
         }
         const s = discovered().find((d) => suggestionKey(d) === val);
         if (s) {
             setHost(s.host);
             setPort(String(s.port));
-            const cleanName = s.name.replace(/\.local$/i, "").trim();
-            setName(cleanName || s.host);
             setPicked(true);
             probeTarget({ host: s.host, port: String(s.port) });
         }
@@ -333,7 +328,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 props.onComplete({ id: result.paired.id });
                 props.onClose();
                 // said where it outlives the wizard
-                if (result.paired.notice) showToast({ variant: "warning", title: `${name() || host()} is added`, message: result.paired.notice });
+                if (result.paired.notice) showToast({ variant: "warning", title: `${result.paired.name} is added`, message: result.paired.notice });
             } else if ("useCode" in result) {
                 setCodeHint(result.useCode);
                 go(CODE);
@@ -473,7 +468,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 <PaperFlex center fullWidth fullHeight padding="full">
                     <PaperFlex direction="column" gap="full" fullWidth maxWidth="panel-small">
                         {/* the steps say what it does; the dialog keeps its height for them */}
-                        <PaperText preset="title">Setting Up {name() || host()}</PaperText>
+                        <PaperText preset="title">Setting Up {computerName()}</PaperText>
 
                         <PaperLoaderGroup>
                             {/* a step shows once it starts, so the sign-in form has room below the
@@ -521,7 +516,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                         <Show when={failure()}>
                             {(failed) => (
                                 <PaperError
-                                    title={`Couldn't set up ${name() || host()}`}
+                                    title={`Couldn't set up ${computerName()}`}
                                     error={failed()}
                                     action={{ label: "Try Again", onClick: startSetup }}
                                 />
@@ -557,7 +552,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperText preset="text">
                                 Enter the 6-digit pairing code shown by the
                                 Paperboard server daemon on{" "}
-                                {name() || host() || "the target computer"}.
+                                {computerName() || "the target computer"}.
                             </PaperText>
                             <Show when={codeHint()}>
                                 <PaperText preset="hint">{codeHint()}</PaperText>

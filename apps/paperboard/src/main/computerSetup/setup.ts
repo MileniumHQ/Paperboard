@@ -31,7 +31,8 @@ export interface ComputerSetupDeps {
     craneIndex(): Promise<{ entries: Record<string, CraneIndexEntry>; downloadUrl(target: string): string }>;
     /** whether a Paperboard Server answers at host:port */
     probe(host: string, port: number): Promise<boolean>;
-    pair(host: string, port: number, code: string, expect: { fingerprint: string }): Promise<{ id: string }>;
+    /** the computer as it is listed once paired: a new one under its hostname, one paired before under the name it has */
+    pair(host: string, port: number, code: string, expect: { fingerprint: string }): Promise<{ id: string; name: string }>;
     /** where the download is unpacked; removed afterwards */
     tempDir(): string;
     /** called with each new state */
@@ -138,8 +139,8 @@ export class ComputerSetupJob {
 
     async run(): Promise<void> {
         try {
-            const id = await this.setUp();
-            this.finish({ paired: { id, ...(this.notice ? { notice: this.notice } : {}) } });
+            const { id, name } = await this.setUp();
+            this.finish({ paired: { id, name, ...(this.notice ? { notice: this.notice } : {}) } });
         } catch (err) {
             if (err instanceof Cancelled || this.cancelled) return;
             this.failRunning();
@@ -170,7 +171,7 @@ export class ComputerSetupJob {
         this.session?.close();
     }
 
-    private async setUp(): Promise<string> {
+    private async setUp(): Promise<{ id: string; name: string }> {
         this.begin("connect");
         this.session = await this.signInStep();
         const session = this.session;
@@ -199,9 +200,9 @@ export class ComputerSetupJob {
         }
 
         this.begin("pair");
-        const id = await this.pairOver(remote, binary, session);
+        const paired = await this.pairOver(remote, binary, session);
         this.done("pair", STEP_LABELS.pair.done);
-        return id;
+        return paired;
     }
 
     // keys and the agent first; the person is asked only when they fail
@@ -356,7 +357,7 @@ export class ComputerSetupJob {
         this.notice = `Paperboard Server stops when you sign out of ${this.host}. To keep it running, run "sudo loginctl enable-linger $USER" there.`;
     }
 
-    private async pairOver(remote: Remote, binary: string, session: SshSession): Promise<string> {
+    private async pairOver(remote: Remote, binary: string, session: SshSession): Promise<{ id: string; name: string }> {
         const command = this.crane(remote, binary, "pair --json");
         let pairing: PairingLine | null = null;
         let opened!: (line: PairingLine) => void;
@@ -383,7 +384,7 @@ export class ComputerSetupJob {
         // a daemon on every address is reached where SSH reached it
         const host = listen.host === "0.0.0.0" || listen.host === "::" ? session.host : listen.host;
         const paired = await this.deps.pair(host, listen.port, code, { fingerprint });
-        return paired.id;
+        return { id: paired.id, name: paired.name };
     }
 
     // ── state ──

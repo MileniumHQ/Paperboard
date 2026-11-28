@@ -38,6 +38,8 @@ export interface PinnedResponse {
     ok: boolean;
     headers: Record<string, string | string[] | undefined>;
     body: Buffer;
+    /** the certificate the server answered with (PEM): unchecked when the request pinned none */
+    peerCert: string | null;
 }
 
 export interface PinnedRequestInit {
@@ -71,6 +73,8 @@ export function pinnedRequest(url: string, cert: string | null, init: PinnedRequ
                 ...(cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false }),
             },
             (res) => {
+                const raw = (res.socket as tls.TLSSocket).getPeerCertificate?.()?.raw;
+                const peerCert = raw?.length ? new crypto.X509Certificate(raw).toString() : null;
                 const chunks: Buffer[] = [];
                 let size = 0;
                 res.on("data", (chunk: Buffer) => {
@@ -84,7 +88,7 @@ export function pinnedRequest(url: string, cert: string | null, init: PinnedRequ
                 res.on("error", reject);
                 res.on("end", () => {
                     const status = res.statusCode ?? 0;
-                    resolve({ status, ok: status >= 200 && status < 300, headers: res.headers, body: Buffer.concat(chunks) });
+                    resolve({ status, ok: status >= 200 && status < 300, headers: res.headers, body: Buffer.concat(chunks), peerCert });
                 });
             },
         );

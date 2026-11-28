@@ -59,7 +59,8 @@ export interface ComputerListResult {
 
 export interface ComputerProbeResult {
     reachable: boolean;
-    hostname?: string;
+    /** the name the computer is listed under here, when the certificate it answered with is one this app lists */
+    listedAs?: string;
     error?: string;
     // what was typed is no address, so there is no port to name
     invalidAddress?: boolean;
@@ -91,9 +92,10 @@ export interface ComputerSetupState {
     steps: SetupStep[];
     // keys and the agent didn't sign in: the account and password are asked
     signIn: { username: string; error?: string } | null;
-    // paired (the computer's id, and what to know about it now: "stops when
-    // you sign out"), the pairing code is the way left (why), or what stopped it
-    result: { paired: { id: string; notice?: string } } | { useCode: string } | { failed: string } | null;
+    // paired (the computer's id, the name it is listed under, and what to know
+    // about it now: "stops when you sign out"), the pairing code is the way
+    // left (why), or what stopped it
+    result: { paired: { id: string; name: string; notice?: string } } | { useCode: string } | { failed: string } | null;
 }
 
 /** A Paperboard server found nearby over mDNS. */

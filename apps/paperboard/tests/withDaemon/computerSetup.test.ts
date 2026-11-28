@@ -64,7 +64,10 @@ describe("setting a computer up over SSH", () => {
 				throw new Error("this test publishes no releases");
 			},
 			probe: async (host, port) => (await pool.probe(host, port)).reachable,
-			pair: async (host, port, code, expect) => ({ id: (await pool.pairComputer(host, port, code, expect)).id }),
+			pair: async (host, port, code, expect) => {
+				const paired = await pool.pairComputer(host, port, code, expect);
+				return { id: paired.id, name: paired.name };
+			},
 			tempDir: () => tempDir(),
 			changed: (state) => {
 				states.push(state);
@@ -86,7 +89,7 @@ describe("setting a computer up over SSH", () => {
 		const server = await startServer({ env: box.env });
 
 		const { pool, states, sshDir, result } = await run(server);
-		expect(result).toEqual({ paired: { id: expect.any(String) } });
+		expect(result).toEqual({ paired: { id: expect.any(String), name: expect.any(String) } });
 		// asked once, after the keys were refused
 		expect(states.filter((s) => s.signIn).length).toBe(1);
 		expect(states.at(-1)!.steps.map((s) => [s.id, s.status])).toEqual([["connect", "success"], ["signIn", "success"], ["check", "success"], ["install", "success"], ["pair", "success"]]);
@@ -120,7 +123,8 @@ describe("setting a computer up over SSH", () => {
 		expect(await first.pool.renameComputer(id, "Game Box")).toBe(true);
 		// the same pool sets it up again, as a second Add Computer would
 		const again = await run(server, {}, first.pool);
-		expect(again.result).toEqual({ paired: { id } });
+		// and the wizard says it by the name it keeps
+		expect(again.result).toEqual({ paired: { id, name: "Game Box" } });
 		expect(first.pool.listComputers().filter((c) => c.id !== "local").map((c) => [c.id, c.name])).toEqual([[id, "Game Box"]]);
 		await waitFor("the old token to be given back", () => tokens() === issued);
 		await waitFor("the computer to connect on the new token", () => first.pool.listComputers().find((c) => c.id === id)?.status.connected);

@@ -26,7 +26,10 @@ export const computerSetups = new ComputerSetups(() => ({
         };
     },
     probe: async (host, port) => (await connectionPool.probe(host, port)).reachable,
-    pair: async (host, port, code, expect) => ({ id: (await connectionPool.pairComputer(host, port, code, expect)).id }),
+    pair: async (host, port, code, expect) => {
+        const paired = await connectionPool.pairComputer(host, port, code, expect);
+        return { id: paired.id, name: paired.name };
+    },
     tempDir: defaultTempDir,
     changed: (state) => pushToShells("computer-setup-changed", state),
 }));

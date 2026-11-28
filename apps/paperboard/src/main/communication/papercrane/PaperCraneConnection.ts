@@ -210,6 +210,8 @@ export class PaperCraneConnection extends EventEmitter {
                 ok: res.ok,
                 headers: Object.fromEntries(res.headers),
                 body: Buffer.from(await res.arrayBuffer()),
+                // plaintext on loopback: no certificate answered
+                peerCert: null,
             };
         }
         if (!this.cert) throw new Error(this.missingCertMessage());
