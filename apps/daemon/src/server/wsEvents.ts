@@ -18,11 +18,12 @@ export class EventSubscriptions {
 
     constructor(private monitor: TrafficMonitor) {}
 
-    // sends an event to the sockets that declared it; fromPanel is who raised it
-    deliver<E extends string>(event: E, payload: EventPayload<E>, fromPanel: string | null): void {
+    // sends an event to the sockets that declared it; fromPanel is who raised
+    // it, and `audience`, when given, the sockets it may reach at all
+    deliver<E extends string>(event: E, payload: EventPayload<E>, fromPanel: string | null, audience?: (socket: WebSocket) => boolean): void {
         const recipients = new Set<WebSocket>();
-        for (const client of this.byEvent.get(event) ?? []) recipients.add(client);
-        for (const client of this.byEvent.get("*") ?? []) recipients.add(client);
+        for (const client of this.byEvent.get(event) ?? []) if (!audience || audience(client)) recipients.add(client);
+        for (const client of this.byEvent.get("*") ?? []) if (!audience || audience(client)) recipients.add(client);
         if (recipients.size === 0 && !this.monitor.active) return;
         const msg = JSON.stringify({ type: "event", event, payload });
         this.monitor.event(fromPanel, event, msg, recipients.size);

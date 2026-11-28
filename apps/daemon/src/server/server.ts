@@ -34,6 +34,9 @@ import { readDaemonStatus } from "../cli/localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFile";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { Roster } from "../network/roster";
+import { NETWORK_DIR, RosterRecords } from "../network/rosterStore";
+import { SharedDocuments } from "../network/shared";
+import type { RecordStore } from "../network/store";
 import { importPairedComputers } from "../network/importPairedComputers";
 
 export const DEFAULT_PORT =
@@ -61,6 +64,8 @@ export interface ServerInstance {
     wss: WebSocketServer;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
+    /** the network's record store: the computer list's records and the shared documents' */
+    records: RecordStore;
     /** the computers of the network, this one among them */
     roster: Roster;
     port: number;
@@ -82,6 +87,9 @@ interface DaemonConfig {
     // computer's pinned identity. Plaintext exists only on loopback.
     tlsIdentity: TlsIdentity | null;
     roster: Roster;
+    records: RecordStore;
+    // the panels' and the shell's documents every computer holds
+    shared: SharedDocuments;
 }
 
 // handshake file for local clients, written on every listen. Throws: a
@@ -143,7 +151,8 @@ export async function startPaperCraneServer(
     // is in the roster, whether or not other computers can reach it yet
     const localDir = ensurePrivateDir(getLocalDir());
     const identity = loadOrCreateTlsIdentity(localDir);
-    const roster = await Roster.open(localDir, identity);
+    const members = await RosterRecords.open(path.join(localDir, NETWORK_DIR), identity);
+    const roster = await Roster.open(localDir, identity, members);
     try {
         // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
         await importPairedComputers(localDir, roster);
@@ -163,6 +172,8 @@ export async function startPaperCraneServer(
         staticToken: options.staticToken ?? (noAuth ? null : crypto.randomBytes(24).toString("hex")),
         tlsIdentity: isLoopbackHost(host) ? null : identity,
         roster,
+        records: members.records,
+        shared: new SharedDocuments({ store: members.records, nameOf: (id) => roster.member(id)?.name }),
     };
 
     const port = options.port ?? DEFAULT_PORT;
@@ -173,6 +184,7 @@ export async function startPaperCraneServer(
             const inUse = err?.code === "EADDRINUSE" || /already in use|in use/i.test(err?.message || "");
             if (inUse && (await killStalePaperCrane(port))) continue;
             // this start is over: nothing reads the roster for it
+            config.shared.close();
             roster.close();
             if (!inUse) throw err;
             // Port is held by a foreign, non-PaperCrane application.
@@ -253,7 +265,7 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
             });
         });
     }
-    setupWebSocketServer(wss, engine, auth, { roster: config.roster, staticToken });
+    setupWebSocketServer(wss, engine, auth, { roster: config.roster, shared: config.shared, staticToken });
     return { server, localServer, wss };
 }
 
@@ -324,6 +336,7 @@ function daemonLifecycle(parts: DaemonParts) {
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
+        step("closing the shared documents", () => config.shared.close());
         step("closing the computer list", () => config.roster.close());
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
@@ -513,7 +526,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 }).start();
             }
 
-            resolve({ server, wss, engine, auth, roster: config.roster, port: actualPort, localPort, host, stop: lifecycle.stop });
+            resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, port: actualPort, localPort, host, stop: lifecycle.stop });
         };
 
         const onListening = () => {

@@ -358,6 +358,26 @@ export class RecordStore {
         };
     }
 
+    /**
+     * What a space holds, read from its records' headers (no body is
+     * opened): how many ids, deletes included; how many aren't deleted; and
+     * the bytes of those winners' bodies, and of `id`'s when it is one.
+     */
+    usage(space: string, id?: string): { ids: number; live: number; bytes: number; idBytes: number } {
+        checkOwnSpace(space);
+        const ids = this.spaces.get(space);
+        let live = 0;
+        let bytes = 0;
+        for (const versions of ids?.values() ?? []) {
+            const winner = versions[0].record;
+            if (winner.deleted) continue;
+            live++;
+            bytes += Buffer.byteLength(winner.body, "base64");
+        }
+        const own = id === undefined ? undefined : ids?.get(id)?.[0].record;
+        return { ids: ids?.size ?? 0, live, bytes, idBytes: own && !own.deleted ? Buffer.byteLength(own.body, "base64") : 0 };
+    }
+
     /** How many records wait to be admitted. */
     get heldCount(): number {
         return this.held.size;
@@ -379,6 +399,36 @@ export class RecordStore {
         return this.change(() => {
             this.writeLocal(space, id, null, true);
         });
+    }
+
+    /**
+     * A write decided on the record's winner, in the store's line, so no
+     * other change comes between: `decide` is given the winner (null for
+     * none, a delete included as one) and answers what to write, or null for
+     * nothing. A throw refuses the write with nothing changed. Resolves with
+     * what was written and the winner it replaced.
+     */
+    write(
+        space: string,
+        id: string,
+        decide: (current: StoredRecord | null) => { value: unknown } | { deleted: true } | null,
+    ): Promise<{ written: StoredRecord | null; replaced: StoredRecord | null }> {
+        checkOwnSpace(space);
+        checkId(id);
+        let replaced: StoredRecord | null = null;
+        let decision: { value: unknown } | { deleted: true } | null = null;
+        return this.change(
+            () => {
+                if (decision === null) return { written: null, replaced };
+                const written = "value" in decision ? this.writeLocal(space, id, decision.value, false) : this.writeLocal(space, id, null, true);
+                return { written, replaced };
+            },
+            () => {
+                const winner = this.spaces.get(space)?.get(id)?.[0];
+                replaced = winner ? this.view(winner) : null;
+                decision = decide(replaced);
+            },
+        );
     }
 
     /** Makes an earlier version (from versions()) the winner again, as a new write that syncs like any other. */
@@ -570,9 +620,15 @@ export class RecordStore {
 
     // ─── Inside ──────────────────────────────────────────────────────────────
 
-    /** Runs `mutate` alone, saves what it touched, then tells watchers. Any failure puts the store back to what is on disk. */
-    private change<T>(mutate: () => T): Promise<T> {
+    /**
+     * Runs `mutate` alone, saves what it touched, then tells watchers. Any
+     * failure puts the store back to what is on disk. `prepare` runs first,
+     * in the same line, and changes nothing: its throw refuses the change
+     * without a reload.
+     */
+    private change<T>(mutate: () => T, prepare?: () => void): Promise<T> {
         return this.queue.run(async () => {
+            prepare?.();
             const keysBefore = new Set(this.keyring.keys());
             try {
                 const out = mutate();

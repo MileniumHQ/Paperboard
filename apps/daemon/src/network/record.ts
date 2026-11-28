@@ -94,6 +94,8 @@ const KEY_ID_RE = /^[0-9a-f]{16}$/;
 const MAGIC = Buffer.from("PBR1", "ascii");
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
+/** what sealing adds to a value's JSON: a body is this many bytes longer */
+export const SEALED_OVERHEAD = NONCE_BYTES + TAG_BYTES;
 const NETWORK_KEY_BYTES = 32;
 // a P-256 public key as SubjectPublicKeyInfo DER is always 91 bytes
 const SPKI_BYTES = 91;

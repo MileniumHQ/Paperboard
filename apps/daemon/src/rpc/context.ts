@@ -2,6 +2,7 @@ import type { WebSocket, WebSocketServer } from "ws";
 import type { PaperCraneEngine } from "../engine/index";
 import type { PaperCraneAuth } from "../security/auth";
 import type { Roster } from "../network/roster";
+import type { SharedDocuments } from "../network/shared";
 import type { EventPayload } from "@mileniumhq/paperapi/protocol";
 
 // per-connection context for all RPC handlers
@@ -11,6 +12,7 @@ export interface RpcContext {
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
     roster: Roster;
+    shared: SharedDocuments;
     // panel scope granted at token issuance (auth panelId claim). Null =
     // full-authority caller (master/host token or noAuth dev mode).
     // Handlers derive identity from this, never from a caller parameter.
