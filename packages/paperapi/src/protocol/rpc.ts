@@ -133,8 +133,8 @@ export interface RosterMember {
  * The roster as this computer's own app sees it: the members in the order
  * the person put them in here (an order no other computer shares), which
  * one is this computer, the ids an older app gave them, and the pairing
- * tokens this computer holds for them (step two of the network replaces
- * these with mutual TLS).
+ * tokens this computer holds for them (until every computer it lists has
+ * joined its network, where the daemons' own keys do this).
  */
 export interface RosterView {
     /** counts the roster's changes since this daemon started: a lower one is an older answer */

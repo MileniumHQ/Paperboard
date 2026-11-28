@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "../core/logger";
-import { readStateFileSync } from "../core/storage";
+import { readStateFileSync, writeJsonAtomicSync } from "../core/storage";
 import { errorCode } from "@mileniumhq/paperapi/errors";
 import { isSafeId, type RosterMember } from "@mileniumhq/paperapi/protocol";
 import { readDial, readFacts } from "./rosterStore";
@@ -20,6 +20,8 @@ import { LOCAL_COMPUTER_ID, type Roster } from "./roster";
 import { memberIdOf } from "./memberId";
 
 const PAIRED_COMPUTERS_FILE = "paired_computers.json";
+// where the desktop app keeps the computer it has selected
+const ACTIVE_COMPUTER_FILE = "active_computer.json";
 // what 0.4 named this computer until the person gave it a name
 const OLD_DEFAULT_NAME = "This Computer";
 
@@ -53,7 +55,7 @@ export async function importPairedComputers(dir: string, roster: Roster): Promis
     const file = path.join(dir, PAIRED_COMPUTERS_FILE);
     if (!fs.existsSync(file)) return;
     // an unparseable file is set aside with its bytes (readStateFileSync), and there is nothing to import
-    const raw = readStateFileSync<{ computers?: unknown }>(file, {}, PAIRED_COMPUTERS_FILE);
+    const raw = readStateFileSync<{ computers?: unknown; activeId?: unknown }>(file, {}, PAIRED_COMPUTERS_FILE);
     if (!fs.existsSync(file)) return;
     const listed: unknown[] = Array.isArray(raw?.computers) ? raw.computers : [];
     const members = new Map<string, RosterMember>();
@@ -101,6 +103,13 @@ export async function importPairedComputers(dir: string, roster: Roster): Promis
     if (selfName) adopted.push({ ...self, name: selfName });
     if (!order.includes(roster.self)) order.push(roster.self);
     await roster.adoptImported(adopted, order, tokens, aliases);
+
+    // 0.4 kept the app's selected computer in this file too. The app carries
+    // it over when it starts first; a daemon that starts first (a service
+    // on the same data folder) does it here, before the file goes.
+    const activeId = raw?.activeId;
+    const activeFile = path.join(dir, ACTIVE_COMPUTER_FILE);
+    if (typeof activeId === "string" && !fs.existsSync(activeFile)) writeJsonAtomicSync(activeFile, { activeId });
 
     if (left.length) {
         // what couldn't be imported keeps its bytes, the way a damaged state file does

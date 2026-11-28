@@ -13,7 +13,7 @@ import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity
 import { ED25519_CERT } from "./support/ed25519Cert";
 import { dataDir } from "testkit/fs";
 import { startDaemon, stopDaemon } from "testkit/inproc";
-import { TEST_TIMEOUT_MS } from "testkit/wait";
+import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS);
 
@@ -246,6 +246,80 @@ describe("the roster", () => {
 	});
 });
 
+describe("listed, and a member", () => {
+	const everything = async (records: RecordStore) => (await records.changes(null, 500)).records;
+
+	// Inventory: Security — pairing lists a computer; only a member sharing the network's keys lets one in.
+	test("two computers that paired each other are listed, not members: neither takes the other's records nor loses itself", async () => {
+		const [aKey, bKey] = [createTlsIdentity(), createTlsIdentity()];
+		const a = await openWithRecords(localDir(), aKey);
+		const b = await openWithRecords(localDir(), bKey);
+		const [aId, bId] = [memberIdOf(aKey.cert), memberIdOf(bKey.cert)];
+		await a.roster.pair({ cert: bKey.cert, token: "pc_b", name: "B", dial: { host: "b.local", port: 45464 }, facts: {} });
+		await b.roster.pair({ cert: aKey.cert, token: "pc_a", name: "A", dial: { host: "a.local", port: 45464 }, facts: {} });
+		await b.records.put("notes", "x", "written on b");
+
+		expect(a.roster.isMember(aId)).toBe(true);
+		expect(a.roster.isMember(bId)).toBe(false);
+		// everything b holds, its own record of a among it, is offered to a
+		const taken = await a.records.apply(await everything(b.records));
+		expect(taken.accepted).toBe(0);
+		expect(taken.held).toBeGreaterThan(0);
+		expect(a.records.get("notes", "x")).toBeNull();
+		// a still lists itself and b, as it wrote them
+		expect(a.roster.list().map((m) => m.id).sort()).toEqual([aId, bId].sort());
+		expect(a.roster.member(bId)!.name).toBe("B");
+		expect(a.roster.member(aId)).toBeDefined();
+	});
+
+	test("a computer becomes a member when a member shares the network's keys with it, and its held records are taken then", async () => {
+		const [aKey, bKey] = [createTlsIdentity(), createTlsIdentity()];
+		const a = await openWithRecords(localDir(), aKey);
+		const b = await openWithRecords(localDir(), bKey);
+		const bId = memberIdOf(bKey.cert);
+		await a.roster.pair({ cert: bKey.cert, token: "pc_b", dial: { host: "b.local", port: 45464 }, facts: {} });
+		await b.roster.pair({ cert: aKey.cert, token: "pc_a", dial: { host: "a.local", port: 45464 }, facts: {} });
+		await b.records.put("notes", "x", "written on b");
+		await a.records.apply(await everything(b.records));
+		let told = 0;
+		a.roster.onChange(() => told++);
+
+		// what joining does on each side
+		await a.records.shareKeys([bKey.cert]);
+		await b.records.shareKeys([aKey.cert]);
+		expect(a.roster.isMember(bId)).toBe(true);
+		expect(told).toBeGreaterThan(0);
+		await a.records.apply(await everything(b.records));
+		await waitFor("a to take what it held from b", () => a.records.get("notes", "x")?.state === "value");
+	});
+
+	test("a record this computer can't read yet takes no one off the list, itself least of all", async () => {
+		const [aKey, bKey] = [createTlsIdentity(), createTlsIdentity()];
+		const a = await openWithRecords(localDir(), aKey);
+		const b = await openWithRecords(localDir(), bKey);
+		const aId = memberIdOf(aKey.cert);
+		await a.roster.pair({ cert: bKey.cert, token: "pc_b", dial: { host: "b.local", port: 45464 }, facts: {} });
+		await b.roster.pair({ cert: aKey.cert, token: "pc_a", dial: { host: "a.local", port: 45464 }, facts: {} });
+		await a.records.shareKeys([bKey.cert]);
+		await b.records.shareKeys([aKey.cert]);
+		await b.records.apply(await everything(a.records));
+
+		// b writes a's record under a key a doesn't hold yet
+		await b.records.createEpoch([bKey.cert]);
+		await b.records.put(ROSTER_SPACE, aId, { cert: aKey.cert, name: "Named on b", facts: {} });
+		await a.records.apply(await everything(b.records));
+		expect(a.records.get(ROSTER_SPACE, aId)?.state).toBe("unreadable");
+		expect(a.roster.member(aId)).toBeDefined();
+		expect(a.roster.member(aId)!.name).toBeUndefined();
+		expect(a.roster.list().map((m) => m.id)).toContain(aId);
+
+		// the key comes, and the record reads
+		await b.records.shareKeys([aKey.cert]);
+		await a.records.apply(await everything(b.records));
+		await waitFor("a to read its record once the key came", () => a.roster.member(aId)?.name === "Named on b");
+	});
+});
+
 describe("importing 0.4's paired_computers.json", () => {
 	const certs = () => ({ rack: createTlsIdentity().cert, laptop: createTlsIdentity().cert, twin: createTlsIdentity().cert });
 
@@ -314,6 +388,15 @@ describe("importing 0.4's paired_computers.json", () => {
 		await importPairedComputers(dir, roster);
 		expect(fs.readdirSync(dir).filter((f) => f.startsWith("paired_computers.json"))).toEqual([]);
 		expect(roster.list()).toHaveLength(3);
+		// the computer the app had selected was in that file: it is kept for the app, which may start after this
+		expect(readJson(path.join(dir, "active_computer.json"))).toEqual({ activeId: "remote-1731000000000-abc123" });
+
+		// a selection the app already saved is the newer one, and stays
+		const chosen = localDir();
+		fs.writeFileSync(path.join(chosen, "paired_computers.json"), JSON.stringify(file));
+		fs.writeFileSync(path.join(chosen, "active_computer.json"), JSON.stringify({ activeId: "local" }));
+		await importPairedComputers(chosen, await open(chosen, createTlsIdentity()));
+		expect(readJson(path.join(chosen, "active_computer.json"))).toEqual({ activeId: "local" });
 
 		const broken = localDir();
 		fs.writeFileSync(path.join(broken, "paired_computers.json"), "{\"computers\": [");
@@ -341,6 +424,7 @@ describe("importing 0.4's paired_computers.json", () => {
 			write: (member: RosterMember) => (++writes > 2 ? Promise.reject(new Error("ENOSPC: no space left on device")) : records.write(member)),
 			remove: (id) => records.remove(id),
 			watch: (listener) => records.watch(listener),
+			isMember: (id) => records.isMember(id),
 			close: () => records.close(),
 		};
 		const first = await open(dir, self, failing);

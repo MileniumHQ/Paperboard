@@ -7,7 +7,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import * as tls from "node:tls";
 import { WebSocket, WebSocketServer } from "ws";
-import { LINK_CLOSE, LINK_PATH, linkProof, NetworkLinks, type LinkLimits, type LinkTiming, type NetworkStatus, type PeerStatus } from "../src/network/links";
+import { LINK_CLOSE, LINK_PATH, linkProof, NetworkLinks, type LinkLimits, type LinkTiming, type PeerStatus } from "../src/network/links";
 import { logger } from "../src/core/logger";
 import { memberIdOf } from "../src/network/memberId";
 import { Roster } from "../src/network/roster";
@@ -164,7 +164,7 @@ function permutations<T>(items: T[]): T[][] {
 }
 
 describe("links", () => {
-	// Inventory: Core contract — two members link over mutual TLS and end up holding the same records.
+	// Inventory: Core contract — two members link, each sure of the other's key, and end up holding the same records.
 	test("two members link, the smaller id dialing, and converge; both report it", async () => {
 		const [a, b] = [await node("a"), await node("b")];
 		await members([a, b]);
@@ -213,9 +213,10 @@ describe("links", () => {
 	test("a stranger is refused, and a member's address answered by another computer is never trusted", async () => {
 		const [a, b] = [await node("a"), await node("b")];
 		await members([a, b]);
-		// the stranger thinks a is a member of its network; a has never heard of it
+		// the stranger has let a into its network on its own side; a has never heard of it
 		const stranger = await node("stranger", { listening: false });
 		await stranger.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await stranger.records.shareKeys([a.identity.cert]);
 		a.start();
 		stranger.start();
 		await waitFor("the stranger to be refused", () => peer(stranger, a).reach.state === "dialing" && /refused the link \(4003\)/.test(String((peer(stranger, a).reach as { lastError: string }).lastError)));
@@ -231,6 +232,28 @@ describe("links", () => {
 		await waitFor("b to refuse what answered at a's address", () => /another computer answered there|certificate/i.test(String((peer(b, a).reach as { lastError?: string }).lastError ?? "")));
 		expect(peer(b, a).online).toBe(false);
 		expect(impostor.upgrades).toBe(0);
+	});
+
+	// Inventory: Security — listing a computer (a pairing) makes no link; only a member is dialed or let in.
+	test("a computer that is only listed is neither dialed nor let in", async () => {
+		const [a, b] = [await node("a"), await node("b")];
+		// each lists the other, as two 0.4 pairings would; neither shared its keys
+		await a.records.put("@roster", b.id, { cert: b.identity.cert, dial: dialOf(b), facts: {} });
+		await b.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await a.records.put("notes", "on-a", "stays on a");
+		a.start();
+		b.start();
+		expect(a.links.status().peers).toEqual([]);
+		expect(b.links.status().peers).toEqual([]);
+		// a member of neither that dials anyway is refused like any stranger
+		const dialer = await node("dialer", { listening: false });
+		await dialer.records.put("@roster", a.id, { cert: a.identity.cert, dial: dialOf(a), facts: {} });
+		await dialer.records.shareKeys([a.identity.cert]);
+		dialer.start();
+		await waitFor("a to refuse it", () => /refused the link \(4003\)/.test(String((peer(dialer, a).reach as { lastError?: string }).lastError ?? "")));
+		expect(a.upgrades).toBeGreaterThan(0);
+		expect(b.upgrades).toBe(0);
+		expect(note(b, "on-a")).toBeUndefined();
 	});
 
 	// Inventory: Security — a computer removed from the roster loses its link at once and can't make another.
@@ -359,6 +382,7 @@ describe("links", () => {
 			const id = memberIdOf(identity.cert);
 			await members([a, b]);
 			await a.records.put("@roster", id, { cert: identity.cert, dial: { host: "127.0.0.1", port }, facts: {} });
+			await a.records.shareKeys([identity.cert]);
 			a.start();
 			b.start();
 			const failed = misbehaves === "garbage" ? /isn't a link message/ : /didn't answer within/;
@@ -375,22 +399,6 @@ describe("links", () => {
 			for (const n of [a, b]) await n.stop();
 			wss.close();
 		}
-	});
-
-	test("an address a member is seen at is tried at once, and kept only once its key answers there", async () => {
-		const [a, b] = [await node("a"), await node("b")];
-		await members([a, b], false);
-		a.start();
-		b.start();
-		const status = (): NetworkStatus => a.links.status();
-		expect(status().peers[0]!.reach.state).not.toBe("linked");
-		// another computer at the address: not b, nothing kept
-		const other = await node("other");
-		expect(await a.links.addressSeen(b.id, { host: "127.0.0.1", port: other.port! })).toBe(false);
-		expect(a.roster.member(b.id)!.dial).toBeUndefined();
-		expect(await a.links.addressSeen(b.id, { host: "127.0.0.1", port: b.port! })).toBe(true);
-		expect(a.roster.member(b.id)!.dial).toEqual({ host: "127.0.0.1", port: b.port! });
-		await waitFor("a and b to link", () => linked(a, b));
 	});
 
 	test("when a member was last seen and synced is this computer's own, and outlives a restart", async () => {

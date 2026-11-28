@@ -374,6 +374,8 @@ class Link {
         this.answered = true;
         const frame = data.toString();
         if (frame[0] === "+" || frame[0] === "=") {
+            // an empty part adds nothing to the length that bounds them: endless ones would still be kept
+            if (frame.length === 1 && frame[0] === "+") return this.fail(`${this.peer} sent an empty part of a message`);
             this.partsLength += frame.length - 1;
             if (this.partsLength > MAX_LINK_PAYLOAD) return this.fail(`${this.peer} sent a message over ${MAX_LINK_PAYLOAD} characters`);
             this.parts.push(frame.slice(1));
@@ -650,20 +652,6 @@ export class NetworkLinks {
         return () => this.listeners.delete(listener);
     }
 
-    /**
-     * An address a member was seen at (an mDNS sighting): it is dialed there
-     * now, and once its key answers there the roster keeps the address.
-     */
-    async addressSeen(id: string, dial: { host: string; address?: string; port: number }): Promise<boolean> {
-        const peer = this.peers.get(id);
-        const member = this.options.roster.member(id);
-        if (!peer || !member || peer.link || this.stopped) return false;
-        // its own attempt beside any dial under way: two links that result collapse to one
-        const linked = (await this.reach(peer, dialHosts({ ...dial }), dial.port, member.cert)) === null;
-        if (linked) await this.options.roster.update(id, { dial });
-        return linked;
-    }
-
     // ─── Accepting ───────────────────────────────────────────────────────────
 
     /**
@@ -730,7 +718,7 @@ export class NetworkLinks {
             if (!id || !sig) return fail(LINK_CLOSE.unproven, "Its proof is damaged");
             if (dialed !== this.self) return fail(LINK_CLOSE.unproven, "Its proof is for another computer");
             if (!proofVerifies(cert as string, linkProofBytes(nonce, id, this.self), sig)) return fail(LINK_CLOSE.unproven, "Its proof doesn't verify on this link");
-            if (id === this.self || !this.options.roster.member(id)) {
+            if (id === this.self || !this.options.roster.isMember(id)) {
                 this.refusals.refused(id, () => `[network] refused a link from ${id} at ${address}: not a member of this network`);
                 return fail(LINK_CLOSE.notMember, "This computer isn't one of this network's members");
             }
@@ -757,13 +745,14 @@ export class NetworkLinks {
         if (this.stopped) return;
         const { roster } = this.options;
         for (const [id, peer] of this.peers) {
-            if (roster.member(id)) continue;
+            if (roster.isMember(id)) continue;
             this.clearTimers(peer);
             peer.socket?.terminate();
             peer.link?.close(LINK_CLOSE.notMember, "No longer a member of this network");
             this.peers.delete(id);
         }
         for (const member of roster.list()) {
+            if (!roster.isMember(member.id)) continue;
             if (member.id === this.self) continue;
             let peer = this.peers.get(member.id);
             if (!peer) {
@@ -949,7 +938,7 @@ export class NetworkLinks {
      */
     private adopt(ws: WebSocket, id: string, dialer: string, take: () => RawData[]): boolean {
         // a member the roster has and the links haven't taken in yet (its change is on its way)
-        if (!this.peers.has(id) && !this.stopped && this.options.roster.member(id)) this.reconcile();
+        if (!this.peers.has(id) && !this.stopped && this.options.roster.isMember(id)) this.reconcile();
         const peer = this.peers.get(id);
         if (!peer || this.stopped) {
             closeUnlinked(ws, peer ? 1001 : LINK_CLOSE.notMember, peer ? "This computer's Paperboard stopped" : "Not a member of this network", this.timing.connectTimeoutMs);
@@ -1090,6 +1079,7 @@ export class NetworkLinks {
         const { roster, store } = this.options;
         const peers: PeerStatus[] = [];
         for (const member of roster.list()) {
+            if (!roster.isMember(member.id)) continue;
             if (member.id === this.self) continue;
             const peer = this.peers.get(member.id);
             const seen = roster.observed(member.id);

@@ -155,6 +155,8 @@ describe("links between running daemons", () => {
 		const rackCert = loadOrCreateTlsIdentity(path.join(rackDir, "local")).cert;
 		const rackId = memberIdOf(rackCert);
 		await stranger.records.put("@roster", rackId, { cert: rackCert, dial: { host: "127.0.0.1", port: crane.port }, facts: {} });
+		// on its own side it has let the rack in; the rack has never heard of it
+		await stranger.records.shareKeys([rackCert]);
 		stranger.roster.close();
 		const daemon = await startDaemon({ dataDir: strangerDir });
 		const status = () => daemon.instance.network.status().peers.find((p) => p.id === rackId)!;

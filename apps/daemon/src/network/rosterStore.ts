@@ -22,15 +22,26 @@
 // conflict; two that change one member apart keep both versions, the later
 // one winning (store.ts).
 //
-// ─── Who is a member ─────────────────────────────────────────────────────────
+// ─── Listed, and a member ────────────────────────────────────────────────────
 //
-// The store asks the roster (Membership) who may write; the roster is itself
-// records the store admitted. That is no circle: this computer is a member by
-// its own key, without any record, and every other member is one because a
-// "@roster" record about it was admitted from a computer that already was. A
-// record whose author isn't a member yet is held by the store, and every
-// change to who is a member asks the store to readmit() what it holds, so a
-// member and the records that need it arrive in any order.
+// A "@roster" record lists a computer: the app shows it, and this computer
+// may hold a pairing for it. Listing alone lets it into nothing. A listed
+// computer is a member, one whose records are accepted and that links are
+// made with, only once a member has shared the network's keys with it: there
+// is an accepted "@keys" record addressed to it, written by this computer or
+// by another member (store.ts keyShares). Sharing keys is the act of letting
+// a computer in, which only joining does; a pairing an older Paperboard made,
+// or one typed in today, lists a computer and shares nothing, so the two
+// neither link nor take each other's records.
+//
+// This computer is a member by its own key, without any record. A record
+// whose author isn't a member is held by the store, and every change to who
+// is one asks the store to readmit() what it holds, so a member and the
+// records that need it arrive in any order.
+//
+// A record's winner this computer can't read (its key hasn't come yet), or
+// that is damaged, takes no computer off the list: the newest version that
+// reads is what is listed, and the list says so loudly. Only a delete does.
 //
 // ─── A new computer ──────────────────────────────────────────────────────────
 //
@@ -45,8 +56,8 @@ import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { RosterDial, RosterFacts, RosterMember } from "@mileniumhq/paperapi/protocol";
 import type { IdentityPart } from "@mileniumhq/paperapi";
 import type { TlsIdentity } from "../security/tlsIdentity";
-import { ROSTER_SPACE } from "./record";
-import { RecordStore, RecordStoreOwnerError, type StoredRecord } from "./store";
+import { KEYS_SPACE, ROSTER_SPACE } from "./record";
+import { RecordStore, RecordStoreOwnerError } from "./store";
 import { memberIdOf } from "./memberId";
 
 /** the record store's folder in local/ */
@@ -62,8 +73,10 @@ export interface RosterStore {
     /** adds the member, or replaces the one with its id; the same member again saves nothing */
     write(member: SharedMember): Promise<void>;
     remove(id: string): Promise<void>;
-    /** hears every member written or removed, by anyone; returns the unsubscribe */
+    /** hears every member written or removed, by anyone, and every listed computer that became or stopped being a member; returns the unsubscribe */
     watch(listener: (id: string, member: SharedMember | null) => void): () => void;
+    /** whether the computer is a member: listed, and let in by a member (the top of rosterStore.ts); this computer always is */
+    isMember(id: string): boolean;
     close(): void;
 }
 
@@ -150,7 +163,9 @@ export class RosterRecords implements RosterStore {
     private readonly byId = new Map<string, SharedMember>();
     private readonly listeners = new Set<(id: string, member: SharedMember | null) => void>();
     private readonly self: string;
-    private unwatch: (() => void) | null = null;
+    /** the listed computers that are members, this one among them; null until worked out, and after anything it depends on changes */
+    private memberIds: Set<string> | null = null;
+    private readonly unwatch: (() => void)[] = [];
     /** the store the members are records in: its own rules for who may write are this roster's */
     readonly records: RecordStore;
 
@@ -161,7 +176,7 @@ export class RosterRecords implements RosterStore {
             identity,
             membership: {
                 certFor: (author) => this.certFor(author),
-                admits: (header) => this.certFor(header.author) !== null,
+                admits: (header) => this.isMember(header.author),
             },
         });
     }
@@ -196,43 +211,78 @@ export class RosterRecords implements RosterStore {
             if (keys.problems.length) throw new Error(`This computer's network keys can't be opened: ${keys.problems.join("; ")}`);
             await this.records.createEpoch([this.identity.cert]);
         }
-        for (const record of this.records.list(ROSTER_SPACE)) this.take(record.id, record);
-        this.unwatch = this.records.watch(ROSTER_SPACE, (ids) => this.changed(ids));
+        for (const record of this.records.list(ROSTER_SPACE)) this.take(record.id);
+        this.unwatch.push(this.records.watch(ROSTER_SPACE, (ids) => this.changed(ids)));
+        this.unwatch.push(this.records.watch(KEYS_SPACE, () => this.changed([])));
         // a change to who is a member that a crash cut off before its readmit
         await this.records.readmit();
     }
 
+    /** the certificate of a member; the store verifies no one else's records */
     private certFor(author: string): string | null {
         if (author === this.self) return this.identity.cert;
-        return this.byId.get(author)?.cert ?? null;
+        return this.isMember(author) ? (this.byId.get(author)?.cert ?? null) : null;
     }
 
-    /** reads the record into the roster; one that isn't a member is left out, loudly, and stays in the store */
-    private take(id: string, record: StoredRecord | null): SharedMember | null {
-        if (!record) {
+    isMember(id: string): boolean {
+        return (this.memberIds ??= this.workOutMembers()).has(id);
+    }
+
+    /** this computer, and every listed computer a member shared keys with: found from this computer outward */
+    private workOutMembers(): Set<string> {
+        const members = new Set([this.self]);
+        const shares = this.records.keyShares().filter((share) => this.byId.has(share.recipient));
+        for (let grew = true; grew; ) {
+            grew = false;
+            for (const { recipient, creator } of shares) {
+                if (members.has(recipient) || !members.has(creator)) continue;
+                members.add(recipient);
+                grew = true;
+            }
+        }
+        return members;
+    }
+
+    /**
+     * Reads the newest version of a computer's record that reads into the
+     * list. A winner that doesn't read is said loudly and removes no one;
+     * a deleted winner, or no record, takes the computer off the list.
+     */
+    private take(id: string): SharedMember | null {
+        const [winner, ...earlier] = this.records.versions(ROSTER_SPACE, id);
+        if (!winner || winner.state === "deleted") {
             this.byId.delete(id);
             return null;
         }
-        // get() and list() give no deleted record
-        const member = record.state === "value" ? readMember(id, record.value) : record.state === "unreadable" ? record.error : "it is deleted";
-        if (typeof member === "string") {
-            this.byId.delete(id);
-            logger.error(`[roster] the computer record ${ROSTER_SPACE}/${id} (version ${record.version}, written by ${record.author}) is left out of the list: ${member}`);
-            return null;
+        for (const version of [winner, ...earlier]) {
+            const member = version.state === "value" ? readMember(id, version.value) : version.state === "unreadable" ? version.error : "it is deleted";
+            if (typeof member !== "string") {
+                this.byId.set(id, member);
+                return member;
+            }
+            if (version === winner) {
+                logger.error(`[roster] the computer record ${ROSTER_SPACE}/${id} (version ${winner.version}, written by ${winner.author}) can't be listed: ${member}. The newest version that reads is listed instead.`);
+            }
         }
-        this.byId.set(id, member);
-        return member;
+        // none of its versions reads: what was listed before, if anything, stays
+        return this.byId.get(id) ?? null;
     }
 
+    /** records of "@roster" (their ids) or of "@keys" changed: the list is read again, and who is a member worked out again */
     private changed(ids: string[]): void {
+        const wasMember = this.memberIds ?? this.workOutMembers();
+        const listedBefore = new Map(this.byId);
+        for (const id of ids) this.take(id);
+        this.memberIds = null;
+        // told of: every computer whose listing changed, and every one that became or stopped being a member
+        const tell = new Set(ids.filter((id) => listedBefore.has(id) || this.byId.has(id)));
         let membership = false;
-        for (const id of ids) {
-            const before = this.byId.get(id);
-            const after = this.take(id, this.records.get(ROSTER_SPACE, id));
-            if (before?.cert !== after?.cert) membership = true;
-            if (!after && !before) continue;
-            for (const listener of this.listeners) listener(id, after);
+        for (const id of new Set([...listedBefore.keys(), ...this.byId.keys()])) {
+            if (wasMember.has(id) === this.isMember(id) && listedBefore.get(id)?.cert === this.byId.get(id)?.cert) continue;
+            membership = true;
+            tell.add(id);
         }
+        for (const id of tell) for (const listener of this.listeners) listener(id, this.byId.get(id) ?? null);
         // records waiting on a member that just came, and records of one that just went
         if (membership) {
             this.records.readmit().catch((err) => {
@@ -264,7 +314,7 @@ export class RosterRecords implements RosterStore {
     }
 
     close(): void {
-        this.unwatch?.();
+        for (const unwatch of this.unwatch.splice(0)) unwatch();
         this.listeners.clear();
     }
 }

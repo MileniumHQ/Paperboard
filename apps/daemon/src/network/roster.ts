@@ -158,6 +158,11 @@ export class Roster {
         return member && this.asSeenHere(member);
     }
 
+    /** Whether a listed computer is a member: one a member let in by sharing the network's keys (rosterStore.ts). Only members link and sync. */
+    isMember(id: string): boolean {
+        return this.members.has(id) && this.store.isMember(id);
+    }
+
     /** the member with the address this computer last reached it at beside the name it answers to */
     private asSeenHere(member: SharedMember): RosterMember {
         const address = this.secrets.get().observed[member.id]?.address;

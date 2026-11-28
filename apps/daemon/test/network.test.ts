@@ -260,7 +260,7 @@ describe("records converge", () => {
 		}
 	});
 
-	test("the loser of a conflict can be restored, and the restore syncs", async () => {
+	test("the loser of a conflict is kept, and writing it again brings it back everywhere", async () => {
 		const [a, b] = await network("a", "b");
 		wall = T0 + 1000;
 		await a.store.put("notes", "x", "from a");
@@ -268,15 +268,12 @@ describe("records converge", () => {
 		await syncAll([a, b]);
 		const [winner, loser] = b.store.versions("notes", "x");
 		expect(a.store.versions("notes", "x").map((v) => v.version)).toEqual([winner.version, loser.version]);
-		expect(loser.state).toBe("value");
+		if (loser.state !== "value") throw new Error("the loser can't be read");
 
 		wall = T0 + 2000;
-		const restored = await b.store.restore("notes", "x", loser.version);
-		expect(restored?.state === "value" && restored.value).toBe(loser.state === "value" && loser.value);
+		await b.store.put("notes", "x", loser.value);
 		await syncAll([a, b]);
-		expect(value(a.store, "notes", "x")).toBe(loser.state === "value" ? (loser.value as string) : "");
-		await expect(a.store.restore("notes", "x", a.store.versions("notes", "x")[0].version)).rejects.toThrow("already the current one");
-		await expect(a.store.restore("notes", "x", "0".repeat(64))).rejects.toThrow("no earlier version");
+		expect(value(a.store, "notes", "x")).toBe(loser.value as string);
 	});
 });
 

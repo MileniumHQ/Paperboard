@@ -11,7 +11,7 @@
 // Last writer wins per space and id (record.ts "Order"). The store keeps,
 // beside the winner, the newest version each other author wrote of that
 // record, up to MAX_VERSIONS authors: that is what a conflict loses, and
-// restore() brings one back as a new write. A version an author replaced
+// writing its value again brings it back. A version an author replaced
 // itself is not kept. Which versions are kept depends only on the versions
 // seen, so every computer keeps the same ones.
 //
@@ -208,7 +208,7 @@ export interface ApplyResult {
 export interface RecordMeta {
     space: string;
     id: string;
-    /** this version's digest: what restore() takes */
+    /** this version's digest: what names it among versions() */
     version: string;
     wall: number;
     counter: number;
@@ -355,6 +355,19 @@ export class RecordStore {
         return () => this.acceptedListeners.delete(listener);
     }
 
+    /**
+     * Whom network keys were shared with, and by whom: one pair per accepted
+     * "@keys" record. Sharing its keys with a computer is how a member lets
+     * it into the network (rosterStore.ts), so the roster reads this.
+     */
+    keyShares(): { recipient: string; creator: string }[] {
+        return [...(this.spaces.get(KEYS_SPACE)?.keys() ?? [])].map((id) => {
+            // "<recipient>/<creator>", checked when the record was parsed (record.ts)
+            const slash = id.indexOf("/");
+            return { recipient: id.slice(0, slash), creator: id.slice(slash + 1) };
+        });
+    }
+
     /** The network keys this computer holds (no key bytes), and why any "@keys" record addressed to it could not be opened. */
     networkKeys(): { keys: { epoch: number; id: string }[]; current: { epoch: number; id: string } | null; problems: string[] } {
         const current = this.writeKey();
@@ -436,25 +449,6 @@ export class RecordStore {
                 decision = decide(replaced);
             },
         );
-    }
-
-    /** Makes an earlier version (from versions()) the winner again, as a new write that syncs like any other. */
-    async restore(space: string, id: string, version: string): Promise<StoredRecord | null> {
-        checkOwnSpace(space);
-        checkId(id);
-        return this.change(() => {
-            const versions = this.spaces.get(space)?.get(id) ?? [];
-            const found = versions.find((v) => v.digest === version);
-            if (!found) throw new Error(`${space}/${id} has no earlier version ${version}`);
-            if (found === versions[0]) throw new Error(`Version ${version} of ${space}/${id} is already the current one`);
-            if (found.record.deleted) {
-                this.writeLocal(space, id, null, true);
-                return null;
-            }
-            const view = this.view(found);
-            if (view.state !== "value") throw new Error(`Version ${version} of ${space}/${id} can't be read: ${view.state === "unreadable" ? view.error : "deleted"}`);
-            return this.writeLocal(space, id, view.value, false);
-        });
     }
 
     // ─── Network keys ────────────────────────────────────────────────────────
