@@ -71,6 +71,12 @@ export default function TroubleshootingDoc() {
                 Only one daemon runs for each data directory. Use the one that is running, stop it first, or start the new one with another <PaperCode>--data-dir</PaperCode>.
             </PaperText>
 
+            <PaperText preset="title" as="h3" id="already-starting">Another Paperboard server is already starting or running with the data folder</PaperText>
+            <PaperText preset="body" as="p">
+                Another daemon holds the data folder and hasn't said yet how to reach it, often because it is still starting. Wait for it, or stop it.
+                If no Paperboard server is running, the message names what holds the folder's claim instead: another program on this computer took it, and no daemon starts on the folder until that program stops. See <PaperLink href="/docs/paperboard/data-directory/#one-server">One server per folder</PaperLink>.
+            </PaperText>
+
             <PaperText preset="title" as="h3" id="needs-root">A --system service needs root, or This is running as root</PaperText>
             <PaperText preset="body" as="p">
                 A system service is installed with <PaperCode>sudo papercrane install-service --system</PaperCode>. A user service is installed as your own account, without <PaperCode>sudo</PaperCode>.

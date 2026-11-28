@@ -134,7 +134,7 @@ Waiting for a computer to pair... (Ctrl+C cancels)`}
             </PaperText>
             <PaperText preset="body" as="p">
                 Paperboard removes the computer from the rail and, if it can reach it, tells the daemon to drop this pairing.
-                Panels on that computer keep running. To use it again, pair it again.
+                Panels on that computer keep running. To use it again, pair it again. Pairing a computer again keeps the name it has.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="remove-from-the-daemon">Remove a paired computer from the daemon</PaperText>
