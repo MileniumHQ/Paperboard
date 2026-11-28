@@ -771,10 +771,16 @@ export class RecordStore {
         return "held";
     }
 
+    /** The record changed: it is saved with the next flush, and watchers hear of it. */
     private touch(space: string, id: string): void {
         let dirty = this.dirty.get(space);
         if (!dirty) this.dirty.set(space, (dirty = new Set()));
         dirty.add(id);
+        this.announceLater(space, id);
+    }
+
+    /** Watchers hear of the record with the next announce; its file stays as it is. */
+    private announceLater(space: string, id: string): void {
         let ids = this.changed.get(space);
         if (!ids) this.changed.set(space, (ids = new Set()));
         ids.add(id);
@@ -799,12 +805,12 @@ export class RecordStore {
                 logger.error(`[network] ${problem}`);
             }
         }
-        // records under a key that just arrived can be read now
+        // records under a key that just arrived can be read now: watchers hear of them, and the files stay as they are
         const arrived = new Set([...this.keyring.keys()].filter((k) => !before.has(k)));
         if (!arrived.size) return;
         for (const [space, ids] of this.spaces) {
             if (space === KEYS_SPACE) continue;
-            for (const [id, versions] of ids) if (arrived.has(versions[0].record.key)) this.touch(space, id);
+            for (const [id, versions] of ids) if (arrived.has(versions[0].record.key)) this.announceLater(space, id);
         }
     }
 

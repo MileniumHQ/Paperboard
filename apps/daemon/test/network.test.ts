@@ -886,6 +886,39 @@ describe("on disk", () => {
 		expect(ids.map((id) => value(a.store, "notes", id))).toEqual([`first ${ids[0]}`, "second", `first ${ids[2]}`]);
 	});
 
+	// Inventory: Data loss — a restart rewrites nothing: the first change after it writes its own record's bucket alone, so a folder that can't be written stops nothing it didn't touch.
+	test("after a restart, a change writes only its own record's bucket, and watchers still hear of records a newly arrived key made readable", async () => {
+		const [a, b] = await network("a", "b");
+		wall = T0 + 1000;
+		const ids = idsInDistinctBuckets(3);
+		for (const id of ids) await a.store.put("notes", id, `first ${id}`);
+		// every start rebuilds the keyring: each key "arrives" again
+		a.reopen();
+		const inode = (id: string) => fs.statSync(bucketFile(a.dir, "notes", id)).ino;
+		const before = ids.map(inode);
+		await a.store.put("notes", ids[1], "second");
+		const after = ids.map(inode);
+		expect(after[0]).toBe(before[0]);
+		expect(after[2]).toBe(before[2]);
+		expect(after[1]).not.toBe(before[1]);
+
+		// b writes under a new key whose share reaches a after the record does
+		await b.store.createEpoch([b.identity.cert, a.identity.cert]);
+		wall += 1000;
+		await b.store.put("plans", "trip", "by train");
+		await a.store.apply(await ownRecords(b.store, "plans"));
+		expect(a.store.get("plans", "trip")?.state).toBe("unreadable");
+		const heard: string[][] = [];
+		a.store.watch("plans", (changed) => heard.push(changed));
+		const planBucket = () => fs.statSync(bucketFile(a.dir, "plans", "trip")).ino;
+		const planBefore = planBucket();
+		await a.store.apply(await ownRecords(b.store, KEYS_SPACE));
+		expect(a.store.get("plans", "trip")?.state).toBe("value");
+		expect(heard).toContainEqual(["trip"]);
+		// readable now, and its file stays as it was
+		expect(planBucket()).toBe(planBefore);
+	});
+
 	test("a bucket a readmit empties is removed, and a crash before its removal leaves the record once", async () => {
 		const [a, b] = await network("a", "b");
 		wall = T0 + 1000;
