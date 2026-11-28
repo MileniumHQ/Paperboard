@@ -195,6 +195,7 @@ export function Example() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
+                <PaperCode>onContextMenu</PaperCode> goes to the visible entry, so a right-click or long press on it opens your menu.
                 Any other prop goes to the hidden radio input, not to the visible entry. With <PaperCode>href</PaperCode> they go to the <PaperCode>a</PaperCode>, and its <PaperCode>onClick</PaperCode> runs on a click unless the entry is disabled.
             </PaperText>
 
@@ -259,6 +260,17 @@ export function Example() {
                 It takes <PaperLink href="/docs/paperui/papertext/">PaperText</PaperLink>'s props, except that its preset is fixed, and lines up with the entries around it.
             </PaperText>
 
+            <PaperText preset="subheader" as="h3" id="action-props">PaperMenuAction</PaperText>
+            <PaperText preset="body" as="p">
+                PaperMenuAction is an entry that does something, such as opening a dialog to add an item, instead of being chosen.
+                It takes a button's props, plus <PaperCode>icon</PaperCode> and <PaperCode>level</PaperCode> as on PaperMenuItem. The label is the children.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperMenuLabel>Folders</PaperMenuLabel>
+<For each={folders()}>{(f) => <PaperMenuItem value={f.id} icon="folder">{f.name}</PaperMenuItem>}</For>
+<PaperMenuAction icon="add" onClick={() => setLinking(true)}>Link a folder</PaperMenuAction>`}
+            </PaperCode>
+
             <PaperText preset="subheader" as="h2" id="behavior">Behavior</PaperText>
             <PaperText preset="subheader" as="h3" id="selection">Choosing an entry</PaperText>
             <PaperTextList>
@@ -273,6 +285,12 @@ export function Example() {
                 <li>The menu's <PaperCode>value</PaperCode> still marks the matching entry, and gives it <PaperCode>aria-current="page"</PaperCode>. Derive <PaperCode>value</PaperCode> from the current location.</li>
                 <li>A disabled link loses its <PaperCode>href</PaperCode>, gets <PaperCode>aria-disabled="true"</PaperCode>, and is not focusable.</li>
                 <li>Link entries are reached with Tab and the arrow keys, like the other entries.</li>
+            </PaperTextList>
+
+            <PaperText preset="subheader" as="h3" id="actions">Actions</PaperText>
+            <PaperTextList>
+                <li>A PaperMenuAction is a <PaperCode>button</PaperCode> that looks like any other entry. It is never the menu's value, is never drawn highlighted, and never opens a page in a phone-width panel.</li>
+                <li>It is reached with Tab and the arrow keys, like the other entries.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h3" id="keyboard">Keyboard</PaperText>
