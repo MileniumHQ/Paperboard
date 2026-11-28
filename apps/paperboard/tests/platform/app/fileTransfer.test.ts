@@ -77,6 +77,31 @@ describe("panel file export and import", () => {
 		expect(fs.readdirSync(path.dirname(dest))).toEqual(["world.dat"]);
 	});
 
+	test("an export onComputer saves a file from anywhere on the computer; without it, and for an import, a path stays in storage", async () => {
+		const outside = tempDir();
+		const content = bytes(50_000, 3);
+		const photo = path.join(outside, "photo.jpg");
+		fs.writeFileSync(photo, content);
+		const dest = path.join(tempDir(), "photo.jpg");
+		const exported = await runPanelExport({ computerId: "local", panelId: PANEL, path: photo, onComputer: true }, deps({ save: dest }));
+		expect(exported).toEqual({ status: "exported", name: "photo.jpg", bytes: content.length });
+		expect(fs.readFileSync(dest).equals(content)).toBe(true);
+
+		// a leading slash alone still names the panel's storage
+		fs.writeFileSync(path.join(storage, "photo.jpg"), "in storage");
+		const inStorage = path.join(tempDir(), "photo.jpg");
+		const plain = await runPanelExport({ computerId: "local", panelId: PANEL, path: "/photo.jpg" }, deps({ save: inStorage }));
+		expect(plain).toEqual({ status: "exported", name: "photo.jpg", bytes: 10 });
+		expect(fs.readFileSync(inStorage, "utf8")).toBe("in storage");
+		expect(await runPanelExport({ computerId: "local", panelId: PANEL, path: "photo.jpg", onComputer: true }, deps({ save: dest }))).toMatchObject({ status: "failed", code: "invalid-request" });
+
+		const source = path.join(tempDir(), "notes.txt");
+		fs.writeFileSync(source, "picked");
+		const imported = await runPanelImport({ computerId: "local", panelId: PANEL, path: path.join(outside, "notes.txt"), onComputer: true }, deps({ open: source }));
+		expect(imported).toMatchObject({ status: "failed", code: "invalid-request" });
+		expect(fs.readdirSync(outside)).toEqual(["photo.jpg"]);
+	});
+
 	test("a canceled export and a transfer cut off midway leave the chosen file as it was", async () => {
 		fs.writeFileSync(path.join(storage, "big.dat"), bytes(300_000, 3));
 		const dir = tempDir();

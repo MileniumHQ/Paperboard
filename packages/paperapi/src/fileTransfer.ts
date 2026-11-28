@@ -1,7 +1,9 @@
 // Exporting and importing files: an export copies a file out of the panel's
-// storage to where the user chooses, an import copies a file the user picks
-// into it. The shell owns the picker window; the panel names only a path in
-// its own storage. The panel frame asks its shell through requestShell.
+// storage (or, with onComputer, any file on its computer) to where the user
+// chooses, an import copies a file the user picks into the panel's storage.
+// The shell owns the picker window; the panel names only the path, never
+// learning where the user saved or picked. The panel frame asks its shell
+// through requestShell.
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
 
@@ -16,6 +18,12 @@ export interface ExportFileOptions {
     /** the file name the dialog starts with; defaults to the source file's name */
     suggestedName?: string;
     filters?: FileTypeFilter[];
+    /**
+     * The source path is absolute and names a file anywhere on the panel's
+     * computer, not in its storage: for a panel that shows files outside it
+     * (Drive's disks and linked folders).
+     */
+    onComputer?: boolean;
 }
 
 export interface ImportFileOptions {
@@ -79,9 +87,9 @@ function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Pro
 }
 
 /**
- * Asks the user where to save a copy of a file from the panel's storage.
- * Resolves with what the user chose; throws FileTransferError when the
- * copy failed.
+ * Asks the user where to save a copy of a file from the panel's storage,
+ * or, with onComputer, of a file anywhere on its computer. Resolves with
+ * what the user chose; throws FileTransferError when the copy failed.
  */
 export function exportFile(sourcePath: string, appId: string, options: ExportFileOptions = {}): Promise<ExportFileResult> {
     return ask<ExportFileResult>("export", {
@@ -89,6 +97,7 @@ export function exportFile(sourcePath: string, appId: string, options: ExportFil
         path: sourcePath,
         suggestedName: options.suggestedName,
         filters: options.filters,
+        onComputer: options.onComputer,
     });
 }
 

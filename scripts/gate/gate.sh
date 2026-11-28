@@ -303,6 +303,7 @@ if [ "${#SELECTED[@]}" -gt 0 ]; then
     gstep platform "paperboard platform tests" run_in "$ROOT/apps/paperboard" bun test ./tests/platform
     gstep platform "gameserver platform tests" run_in "$ROOT/panels/dev.paperboard.gameserver" bun test --isolate --conditions browser ./test/platform
     gstep platform "agents platform tests" run_in "$ROOT/panels/dev.paperboard.agents" bun test ./test/platform
+    gstep platform "drive platform tests" run_in "$ROOT/panels/dev.paperboard.drive" bun test ./test/platform
     gstep platform "terminal platform tests" run_in "$ROOT/panels/dev.paperboard.terminal" bun test ./test/platform
     gstep platform "npx platform tests" run_in "$ROOT/packages/npx" bash -c "bun run build && bun test ./test/platform"
 fi

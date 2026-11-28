@@ -3,6 +3,12 @@
 // path check lives here, in the same resolver file:read and file:write use
 // (engine.resolveSecureTargetPath). Host credential only: the shell asks on
 // behalf of the panel frame the user is looking at.
+//
+// /panel-files/<panelId>?path=<absolute path>: reads a file anywhere on this
+// computer, for a panel that shows files outside its storage (Drive's
+// disks and linked folders). Panels are trusted and their services already
+// reach every file, so this only lets the save dialog reach them too. Only
+// the panel's storage is written to.
 import type * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
@@ -17,6 +23,37 @@ import { isMissingPathError, openResolvedFile } from "../core/pathContainment";
 
 export const PANEL_FILES_PREFIX = "/panel-files/";
 export const PANEL_FILE_PATH_MAX = 1024;
+
+export interface PanelFileTarget {
+    panelId: string;
+    filePath: string;
+    /** a path anywhere on this computer, not in the panel's storage */
+    absolute: boolean;
+}
+
+/**
+ * What a /panel-files request names: "<panelId>/<path>" in the panel's
+ * storage, or "<panelId>?path=<absolute path>"; null when malformed.
+ */
+export function parsePanelFileTarget(url: string): PanelFileTarget | null {
+    if (!url.startsWith(PANEL_FILES_PREFIX)) return null;
+    const question = url.indexOf("?");
+    const rest = url.slice(PANEL_FILES_PREFIX.length, question < 0 ? undefined : question);
+    if (!rest.includes("/")) {
+        const filePath = question < 0 ? null : new URLSearchParams(url.slice(question + 1)).get("path");
+        let panelId: string;
+        try {
+            panelId = decodeURIComponent(rest);
+        } catch (err) {
+            logger.debug("[panel-files] undecodable panel id:", err);
+            return null;
+        }
+        if (!isPanelId(panelId) || !filePath || filePath.length > PANEL_FILE_PATH_MAX || filePath.includes("\0") || !path.isAbsolute(filePath)) return null;
+        return { panelId, filePath: path.resolve(filePath), absolute: true };
+    }
+    const parsed = parsePanelFilePath(rest);
+    return parsed && { ...parsed, absolute: false };
+}
 
 /** "<panelId>/<path>" after the prefix, decoded; null when malformed */
 export function parsePanelFilePath(rest: string): { panelId: string; filePath: string } | null {
@@ -64,14 +101,34 @@ async function servePanelFile(
     // the raw request path, never a URL-normalized one: normalizing turns
     // "<panel>/../<other>/x" and its %2e%2e spelling into another panel's
     // path before the resolver could refuse the traversal
-    const raw = (req.url || "").split("?")[0];
-    const parsed = raw.startsWith(PANEL_FILES_PREFIX) ? parsePanelFilePath(raw.slice(PANEL_FILES_PREFIX.length)) : null;
+    const parsed = parsePanelFileTarget(req.url || "");
     if (!parsed) {
         req.resume();
         reply(res, 400, "Invalid panel id or file path");
         return;
     }
-    const validate = () => engine.resolveSecureTargetPath(parsed.filePath, parsed.panelId);
+    const method = (req.method || "GET").toUpperCase();
+    // a file named anywhere on the computer is read through its links, as the
+    // panel's service would read it; only the panel's storage is a boundary
+    let validate: () => string;
+    if (parsed.absolute) {
+        if (method !== "GET" && method !== "HEAD") {
+            req.resume();
+            reply(res, 405, "Only a file in the panel's storage can be written", { Allow: "GET, HEAD" });
+            return;
+        }
+        let real: string;
+        try {
+            real = fs.realpathSync(parsed.filePath);
+        } catch (err) {
+            if (!isMissingPathError(err)) throw err;
+            reply(res, 404, "No such file");
+            return;
+        }
+        validate = () => real;
+    } else {
+        validate = () => engine.resolveSecureTargetPath(parsed.filePath, parsed.panelId);
+    }
     let target: string;
     try {
         target = validate();
@@ -80,13 +137,11 @@ async function servePanelFile(
         reply(res, 403, (err as Error).message);
         return;
     }
-    const base = engine.resolveSecureTargetPath("", parsed.panelId);
-    if (target === base) {
+    if (!parsed.absolute && target === engine.resolveSecureTargetPath("", parsed.panelId)) {
         req.resume();
         reply(res, 400, "A file path is required");
         return;
     }
-    const method = (req.method || "GET").toUpperCase();
 
     if (method === "GET" || method === "HEAD") {
         let st: fs.Stats;
@@ -99,7 +154,7 @@ async function servePanelFile(
             reply(res, 404, "No such file");
             return;
         }
-        // a symlink is never followed out of the panel's storage
+        // a symlink is never followed out of the panel's storage (an absolute path was resolved through its links above)
         if (!st.isFile() || st.isSymbolicLink()) {
             reply(res, 403, "Not a file");
             return;

@@ -105,6 +105,8 @@ interface ExportFileOptions {
     /** the name the dialog starts with; defaults to the source file's */
     suggestedName?: string;
     filters?: FileTypeFilter[];
+    /** sourcePath is absolute: a file anywhere on the panel's computer */
+    onComputer?: boolean;
 }
 interface ImportFileOptions {
     filters?: FileTypeFilter[];
@@ -127,7 +129,8 @@ interface ImportedFile {
 }`}
             </PaperCode>
             <PaperText preset="body" as="p">
-                The shell opens the system dialog and copies the file. The panel names only the path in its own folder, and never learns where the person picked or saved.
+                The shell opens the system dialog and copies the file. By default, the panel names a path in its own folder, and it never learns where the person picked or saved.
+                An export with <PaperCode>onComputer: true</PaperCode> takes an absolute path, such as <PaperCode>/media/usb/photo.jpg</PaperCode>, and saves a copy of that file from anywhere on the panel's computer, for a panel that shows files outside its folder. Imports always land in the panel's folder.
                 A canceled dialog resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode>; it is not an error.
             </PaperText>
             <PaperTable>
