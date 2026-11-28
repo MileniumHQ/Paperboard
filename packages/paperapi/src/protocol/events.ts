@@ -49,6 +49,8 @@ export interface RpcEventPayloads {
         problems: PanelProblem[];
     };
     "blocks:registry-updated": RegistryChangeEvent;
+    /** the roster changed: this computer's app asks computers:list again */
+    "computers:changed": Record<string, never>;
 }
 
 export type RpcEvent = keyof RpcEventPayloads;

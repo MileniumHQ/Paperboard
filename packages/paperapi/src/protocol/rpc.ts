@@ -99,6 +99,53 @@ export interface RpcSystemFacts extends RpcOsFacts, RpcNetworkFacts {
     arch: string;
 }
 
+/** What a computer is: its OS and its layers (rpc RosterMember.facts). */
+export interface RosterFacts extends RpcOsFacts {
+    os?: string;
+    arch?: string;
+}
+
+/** Where a computer is dialed: its .local name or the address it was paired at, and the IP it last answered at. */
+export interface RosterDial {
+    host: string;
+    address?: string;
+    port: number;
+}
+
+/**
+ * One computer of the network, as every computer may know it: named by its
+ * daemon's TLS key, never by an address. Nothing in it is a secret.
+ */
+export interface RosterMember {
+    /** derived from the key its pinned certificate holds (network/memberId.ts) */
+    id: string;
+    /** the name the person gave it; absent until it is given one */
+    name?: string;
+    /** absent for a computer nobody here dials (this one) */
+    dial?: RosterDial;
+    /** its daemon's certificate, pinned when it was paired */
+    cert: string;
+    facts: RosterFacts;
+    /** its place in the person's order; lower comes first */
+    order: number;
+}
+
+/**
+ * The roster as this computer's own app sees it: the members in order, which
+ * one is this computer, the ids an older app gave them, and the pairing
+ * tokens this computer holds for them (step two of the network replaces
+ * these with mutual TLS).
+ */
+export interface RosterView {
+    /** counts the roster's changes since this daemon started: a lower one is an older answer */
+    revision: number;
+    self: string;
+    members: RosterMember[];
+    /** an id an older Paperboard gave a computer → its member id */
+    aliases: Record<string, string>;
+    tokens: Record<string, string>;
+}
+
 export interface RpcPairingStatus {
     active: boolean;
     computers: Array<{ name?: string; pairedAt: string }>;
@@ -171,7 +218,14 @@ export interface RpcDefinition {
     readonly params: ObjectShape;
     /** host authority only: a panel's scoped credential is refused before its params are read */
     readonly host?: true;
+    /** this computer's own host credential only (local/crane.json): never a panel, a relay or a paired computer's token */
+    readonly owner?: true;
 }
+
+// a computer's name as the rail shows it (the shell's own check says why it is refused)
+const computerName = () => text(4096);
+const memberRef = () => text(128);
+const dial = () => object({ host: text(255), address: opt(text(255)), port: numeric() });
 
 export const RPC = {
     // auth: the daemon answers these, and checks authority, before any other action
@@ -181,6 +235,20 @@ export const RPC = {
     // relayTo names the computer that serves the panel; "local" is this one
     "auth:panel-token": { params: object({ panelId: panelId(), relayTo: shape.optional(text(128)) }) },
     "auth:revoke-self": { params: nothing },
+
+    // the computers of the network: this computer's own app keeps them here
+    "computers:list": { params: nothing, owner: true },
+    // pairToken, not token: every call carries the caller's own credential as "token"
+    "computers:pair": {
+        params: object({ cert: text(16_384), pairToken: text(512), name: opt(computerName()), dial: dial(), facts: typed<RosterFacts>() }),
+        owner: true,
+    },
+    "computers:update": {
+        params: object({ id: memberRef(), name: opt(computerName()), dial: opt(dial()), facts: shape.optional(typed<RosterFacts>()) }),
+        owner: true,
+    },
+    "computers:reorder": { params: object({ ids: list(memberRef()) }), owner: true },
+    "computers:remove": { params: object({ id: memberRef() }), owner: true },
 
     // the broadcast events this socket hears, replacing what it declared before; [] hears none
     "events:subscribe": { params: object({ events: eventNames() }) },
@@ -350,6 +418,12 @@ export interface RpcResults {
     "auth:panel-token": { token: string };
     "auth:revoke-self": { revoked: boolean };
     "events:subscribe": { success?: boolean; count?: number };
+
+    "computers:list": RosterView;
+    "computers:pair": RosterView & { id: string };
+    "computers:update": RosterView;
+    "computers:reorder": RosterView;
+    "computers:remove": RosterView;
 
     "term:create": Ack;
     "term:write": Ack;
