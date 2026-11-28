@@ -278,6 +278,13 @@ describe("links", () => {
 		expect(note(a, "after")).toBeUndefined();
 	});
 
+	// Inventory: Data loss — stopped links never start again over a store that may be closed.
+	test("links that were stopped refuse to start again", async () => {
+		const a = await node("a");
+		await a.links.stop();
+		expect(() => a.links.start()).toThrow("were stopped");
+	});
+
 	test("two links made at once collapse to the one the smaller id dialed, on both sides", async () => {
 		// no waiting: both dial the moment they start
 		const [a, b] = [await node("a", { timing: { takeoverMs: 0 } }), await node("b", { timing: { takeoverMs: 0 } })];

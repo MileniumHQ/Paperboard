@@ -614,6 +614,8 @@ export class NetworkLinks {
     /** Begins dialing the members this computer dials, and syncing over every link. */
     start(): void {
         if (this.started) throw new Error("The network links are already started");
+        // its store and roster may be closed by now: a timer armed on them would fire on a closed store
+        if (this.stopped) throw new Error("The network links were stopped; a stopped daemon's links don't start again");
         this.started = true;
         const { roster, store } = this.options;
         this.cleanups.push(roster.onChange(() => this.reconcile()));
@@ -1062,8 +1064,10 @@ export class NetworkLinks {
             // a link that can't carry a pull is made again; a store that couldn't keep what came keeps the link
             if (err instanceof LinkError) {
                 if (peer.link === link) link.fail(err.message);
+            } else if (this.stopped) {
+                // quiet: a pull that fails once the links are stopping ends with them; the next start pulls from where its cursor got to
             } else {
-                logger.error(`[network] pulling from ${peer.id} failed:`, err); // quiet: the failure is the peer's sync state, which the network status reports
+                logger.error(`[network] pulling from ${peer.id} failed:`, err); // quiet: said in the log and kept as the peer's last failure; the next notice pulls again
             }
         } finally {
             peer.pulling = false;
