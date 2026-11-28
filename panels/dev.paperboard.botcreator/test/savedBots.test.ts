@@ -4,7 +4,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { secretsApi } from "@mileniumhq/paperapi";
+import { errorMessage, secretsApi } from "@mileniumhq/paperapi";
 import { LEGACY_TOKEN_NAME, tokenName, type BotsServiceState } from "../src/bots";
 import { GLOBAL_SCOPE } from "../src/types";
 import { testDaemon } from "./helpers/daemon";
@@ -97,7 +97,9 @@ describe("the saved bots", () => {
 
         fs.chmodSync(path.dirname(file), 0o555);
         try {
-            await expect(call.disconnectBot({ bot: "b-steady" })).rejects.toThrow("Could not save the bots");
+            // flipped back while the first save is still failing: each goes back to what the one before left saved
+            const [off] = await Promise.allSettled([call.disconnectBot({ bot: "b-steady" }), call.connectBot({ bot: "b-steady" })]);
+            expect(off.status === "rejected" && errorMessage(off.reason)).toContain("Could not save the bots");
         } finally {
             fs.chmodSync(path.dirname(file), 0o755);
         }
