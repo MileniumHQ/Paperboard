@@ -38,6 +38,7 @@
 // only member, and then the roster writes this computer's own record. A
 // crash between the two finds the key on the next start and only writes the
 // record; the key is made only while this computer holds none.
+import * as crypto from "crypto";
 import * as fs from "fs";
 import { logger } from "../core/logger";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -107,9 +108,11 @@ export function readDial(value: unknown): RosterDial | null {
     return address === undefined || address === host ? { host, port } : { host, address, port };
 }
 
+/** whether the certificate holds the key `id` names, and it is a daemon's kind of key (ECDSA P-256), the only kind records are verified with */
 function holdsKeyOf(id: string, cert: string): boolean {
     try {
-        return memberIdOf(cert) === id;
+        const key = new crypto.X509Certificate(cert).publicKey;
+        return key.asymmetricKeyType === "ec" && key.asymmetricKeyDetails?.namedCurve === "prime256v1" && memberIdOf(cert) === id;
     } catch {
         return false; // quiet: a certificate that doesn't parse holds no key, and the record is reported as damaged
     }
@@ -119,7 +122,7 @@ function holdsKeyOf(id: string, cert: string): boolean {
 function readMember(id: string, value: unknown): SharedMember | string {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "it isn't an object";
     const given = value as Record<string, unknown>;
-    if (!isText(given.cert, CERT_MAX) || !holdsKeyOf(id, given.cert)) return "its certificate isn't the key its id names";
+    if (!isText(given.cert, CERT_MAX) || !holdsKeyOf(id, given.cert)) return "its certificate isn't the P-256 key its id names";
     if (given.name !== undefined && !isText(given.name)) return "its name is damaged";
     const facts = readFacts(given.facts);
     if (!facts) return "its OS details are damaged";

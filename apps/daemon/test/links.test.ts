@@ -14,6 +14,7 @@ import { Roster } from "../src/network/roster";
 import { NETWORK_DIR, RosterRecords } from "../src/network/rosterStore";
 import type { RecordStore } from "../src/network/store";
 import { createTlsIdentity, loadOrCreateTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
+import { ED25519_CERT } from "./support/ed25519Cert";
 import { standInForJoining } from "./support/standInForJoining";
 import { tempDir } from "testkit/fs";
 import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
@@ -506,6 +507,21 @@ describe("proving who dials", () => {
 		await closedWith(forged, LINK_CLOSE.unproven, /doesn't verify/);
 		expect(peer(a, c).online).toBe(false);
 		expect(a.links.status().unproven).toBe(0);
+	});
+
+	// Inventory: Security — a certificate anyone may send can't take the daemon down.
+	test("a proof with a key that isn't P-256, or with no proof in it at all, is refused and nothing breaks", async () => {
+		const a = await node("a");
+		a.start();
+		for (const cert of [ED25519_CERT, "not a certificate"]) {
+			const raw = rawDial(a);
+			await nonceOf(raw);
+			raw.ws.send(JSON.stringify({ t: "proof", cert, dialed: a.id, sig: Buffer.alloc(64).toString("base64") }));
+			await closedWith(raw, LINK_CLOSE.unproven);
+		}
+		// a still takes links
+		const after = rawDial(a);
+		await nonceOf(after);
 	});
 
 	// Inventory: Security — holding a key proves who you are, not that you belong.

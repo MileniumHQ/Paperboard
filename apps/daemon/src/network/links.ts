@@ -486,6 +486,21 @@ function refuse(socket: Duplex, reason: string): void {
     socket.end(`HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(reason)}\r\n\r\n${reason}`);
 }
 
+/**
+ * Whether `sig` is the P-256 signature of the key in `cert` over `proof`. A
+ * certificate anyone may send: any other kind of key proves nothing, and
+ * nothing in it makes this throw.
+ */
+function proofVerifies(cert: string, proof: Buffer, sig: Buffer): boolean {
+    try {
+        const key = new crypto.X509Certificate(cert).publicKey;
+        if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") return false;
+        return crypto.verify("sha256", proof, { key, dsaEncoding: "ieee-p1363" }, sig);
+    } catch {
+        return false; // quiet: a certificate verification can't use proves nothing, and the caller closes the socket for it
+    }
+}
+
 /** a link message's JSON object, or null for anything else */
 function parseMessage(data: RawData): Record<string, unknown> | null {
     try {
@@ -712,8 +727,7 @@ export class NetworkLinks {
             const id = typeof cert === "string" && cert.length <= MAX_PROOF_CERT ? memberIdOfPem(cert) : null;
             if (!id || !sig) return fail(LINK_CLOSE.unproven, "Its proof is damaged");
             if (dialed !== this.self) return fail(LINK_CLOSE.unproven, "Its proof is for another computer");
-            const verified = crypto.verify("sha256", linkProofBytes(nonce, id, this.self), { key: cert as string, dsaEncoding: "ieee-p1363" }, sig);
-            if (!verified) return fail(LINK_CLOSE.unproven, "Its proof doesn't verify on this link");
+            if (!proofVerifies(cert as string, linkProofBytes(nonce, id, this.self), sig)) return fail(LINK_CLOSE.unproven, "Its proof doesn't verify on this link");
             if (id === this.self || !this.options.roster.member(id)) {
                 this.refusals.refused(id, () => `[network] refused a link from ${id} at ${address}: not a member of this network`);
                 return fail(LINK_CLOSE.notMember, "This computer isn't one of this network's members");

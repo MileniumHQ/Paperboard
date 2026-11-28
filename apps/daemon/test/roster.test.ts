@@ -10,6 +10,7 @@ import { ROSTER_PRIVATE_FILE } from "../src/network/rosterPrivate";
 import { ROSTER_SPACE } from "../src/network/record";
 import { RecordStore } from "../src/network/store";
 import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
+import { ED25519_CERT } from "./support/ed25519Cert";
 import { dataDir } from "testkit/fs";
 import { startDaemon, stopDaemon } from "testkit/inproc";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
@@ -216,6 +217,14 @@ describe("the roster", () => {
 		expect(reopened.records.versions(ROSTER_SPACE, idA)[0]).toMatchObject({ version: damaged.version, state: "value" });
 		// what the roster won't write, it never lets out of this computer either
 		await expect(reopened.roster.pair({ cert: a.cert, token: "pc_a", dial: { host: "10.0.0.2", port: 1 }, facts: { os: "x".repeat(300) } })).rejects.toThrow("OS details are damaged");
+		reopened.roster.close();
+
+		// a key that hashes to its id but isn't a daemon's kind: no record of its could be verified
+		await store.put(ROSTER_SPACE, memberIdOf(ED25519_CERT), { cert: ED25519_CERT, facts: {} });
+		const again = await openWithRecords(dir, self);
+		expect(again.roster.member(memberIdOf(ED25519_CERT))).toBeUndefined();
+		expect(again.roster.list().map((m) => m.id)).toEqual([idB, again.roster.self]);
+		again.roster.close();
 	});
 
 	test("a daemon given a new key is a new computer: its list starts over, and the old one is kept aside untouched", async () => {
