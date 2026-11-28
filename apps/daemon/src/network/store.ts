@@ -60,24 +60,31 @@
 //                              out; owner is the member id whose key signs
 //                              and unwraps here (a store is one key's: opened
 //                              with another it throws RecordStoreOwnerError)
-//   <dir>/spaces/<hex>.json    {"records": [{"seq", "record"}]} per space,
-//                              its name as hex of UTF-8 (case-proof filenames)
+//   <dir>/spaces/<hex>/<bb>.json
+//                              {"records": [{"seq", "record"}]}: one bucket of
+//                              a space, the folder its name as hex of UTF-8
+//                              (case-proof filenames), the file the first byte
+//                              of SHA-256 over the record id's UTF-8, as two
+//                              lowercase hex characters. A bucket with no
+//                              records has no file.
 //   <dir>/held.json            {"records": [record]}
 //   <dir>/cursors.json         {"pull:<peer>": {"log", "after"},
 //                               "push:<peer>": {"log", "after", "sink"}}
 //
 // It is sized for settings and documents: up to a few thousand records of
-// a few KB per space. Each space is one file, rewritten whole on every
-// change; everything is held in memory; changes() scans every record. Bulk
-// data (files, logs, media, anything that grows without bound) does not
-// belong here.
+// a few KB per space. A space is split into SPACE_BUCKETS files by a hash
+// of the record id, so a change rewrites only the buckets of the ids it
+// touched: about 1/256 of a big space. Everything is held in memory;
+// changes() scans every record. Bulk data (files, logs, media, anything
+// that grows without bound) does not belong here.
 //
-// Each file is replaced whole (writeFileAtomic), so a crash leaves it old or
-// new. A change that spans files writes where a record goes before where it
-// leaves, and loading drops a held copy of a record already kept. A file
-// that doesn't parse stops the store from opening: it is never read as
-// empty, because starting over would hand out sequence numbers peers have
-// already passed and lose records only this computer had.
+// Each file is replaced whole (writeFileAtomic), or removed when its bucket
+// empties, so a crash leaves it old or new. A change that spans files writes
+// where a record goes before where it leaves, and loading drops a held copy
+// of a record already kept. A file that doesn't parse, or a record in a
+// bucket or space that isn't its own, stops the store from opening: it is
+// never read as empty, because starting over would hand out sequence
+// numbers peers have already passed and lose records only this computer had.
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -131,6 +138,8 @@ export const FUTURE_TOLERANCE_MS = 60_000;
  * that adds it), which can be a whole computer's worth.
  */
 export const MAX_HELD = 10_000;
+/** How many files a space is split into (store.ts "Disk"). */
+export const SPACE_BUCKETS = 256;
 const SEQ_BLOCK = 1024;
 const MAX_COUNTER = 0xffff_ffff;
 
@@ -239,7 +248,10 @@ interface Version {
 
 type Verdict = "accepted" | "known" | "held" | { reason: Refusal; message: string };
 
-const spaceFile = (space: string) => `${Buffer.from(space, "utf8").toString("hex")}.json`;
+const spaceFolder = (space: string) => Buffer.from(space, "utf8").toString("hex");
+/** the bucket a record id is kept in: the first byte of SHA-256 over its UTF-8, as hex (SPACE_BUCKETS of them) */
+const bucketOf = (id: string) => crypto.createHash("sha256").update(id, "utf8").digest("hex").slice(0, 2);
+const BUCKET_FILE_RE = /^([0-9a-f]{2})\.json$/;
 
 export class RecordStore {
     /** this computer's member id: the author of what it writes */
@@ -268,7 +280,10 @@ export class RecordStore {
     private keyErrors = new Map<string, string>();
 
     // what the running change touched, saved and announced by flush()
-    private dirtySpaces = new Set<string>();
+    /** space → the ids whose bucket the running change must save */
+    private dirty = new Map<string, Set<string>>();
+    /** space → bucket → the ids kept in it, as saved: flush() keeps it in step with `spaces` */
+    private buckets = new Map<string, Map<string, Set<string>>>();
     private heldDirty = false;
     private cursorsDirty = false;
     /** held records accepted by the running change, until flush() has saved them in their space */
@@ -561,7 +576,7 @@ export class RecordStore {
             const keysBefore = new Set(this.keyring.keys());
             try {
                 const out = mutate();
-                if (this.dirtySpaces.has(KEYS_SPACE)) this.rebuildKeyring(keysBefore);
+                if (this.dirty.has(KEYS_SPACE)) this.rebuildKeyring(keysBefore);
                 await this.flush();
                 this.announce();
                 return out;
@@ -678,7 +693,9 @@ export class RecordStore {
     }
 
     private touch(space: string, id: string): void {
-        this.dirtySpaces.add(space);
+        let dirty = this.dirty.get(space);
+        if (!dirty) this.dirty.set(space, (dirty = new Set()));
+        dirty.add(id);
         let ids = this.changed.get(space);
         if (!ids) this.changed.set(space, (ids = new Set()));
         ids.add(id);
@@ -739,16 +756,41 @@ export class RecordStore {
         // it is. A crash in between leaves a copy in both, and load() drops
         // the held one.
         if (this.heldDirty) await this.writeHeld([...this.held.values(), ...this.leavingHeld.values()]);
-        for (const space of this.dirtySpaces) {
-            const ids = this.spaces.get(space);
-            const records = ids ? [...ids.values()].flat().map((v) => ({ seq: v.seq, record: v.record })) : [];
-            await writeFileAtomic(path.join(this.spacesDir, spaceFile(space)), JSON.stringify({ records }));
-        }
+        for (const [space, touched] of this.dirty) await this.writeBuckets(space, touched);
         if (this.leavingHeld.size) await this.writeHeld([...this.held.values()]);
-        this.dirtySpaces.clear();
+        this.dirty.clear();
         this.heldDirty = false;
         this.cursorsDirty = false;
         this.leavingHeld.clear();
+    }
+
+    /** Saves the buckets that hold the touched ids, each as it is now; one left empty is removed. */
+    private async writeBuckets(space: string, touched: Set<string>): Promise<void> {
+        const ids = this.spaces.get(space);
+        let index = this.buckets.get(space);
+        if (!index) this.buckets.set(space, (index = new Map()));
+        const write = new Set<string>();
+        for (const id of touched) {
+            const bucket = bucketOf(id);
+            write.add(bucket);
+            let held = index.get(bucket);
+            if (!held) index.set(bucket, (held = new Set()));
+            if (ids?.has(id)) held.add(id);
+            else held.delete(id);
+        }
+        const folder = path.join(this.spacesDir, spaceFolder(space));
+        ensurePrivateDir(folder);
+        for (const bucket of [...write].sort()) {
+            const file = path.join(folder, `${bucket}.json`);
+            const inBucket = index.get(bucket)!;
+            if (!inBucket.size) {
+                index.delete(bucket);
+                await fs.promises.rm(file, { force: true });
+                continue;
+            }
+            const records = [...inBucket].flatMap((id) => ids!.get(id)!.map((v) => ({ seq: v.seq, record: v.record })));
+            await writeFileAtomic(file, JSON.stringify({ records }));
+        }
     }
 
     private writeHeld(records: WireRecord[]): Promise<void> {
@@ -811,27 +853,40 @@ export class RecordStore {
         }
 
         this.spaces = new Map();
+        this.buckets = new Map();
         this.clock = { wall: 0, counter: 0 };
         let maxSeq = 0;
         for (const name of fs.readdirSync(this.spacesDir)) {
-            const file = path.join(this.spacesDir, name);
-            const match = /^((?:[0-9a-f]{2})+)\.json$/.exec(name);
-            if (!match) throw new RecordStoreCorruptError(file, "it isn't a space file");
+            const folder = path.join(this.spacesDir, name);
+            const match = /^((?:[0-9a-f]{2})+)$/.exec(name);
+            if (!match || !fs.statSync(folder).isDirectory()) throw new RecordStoreCorruptError(folder, "it isn't a space folder");
             const space = Buffer.from(match[1], "hex").toString("utf8");
+            sweepTemps(folder);
             const ids = new Map<string, Version[]>();
-            for (const entry of recordsOf(file, readJson(file))) {
-                const { seq, record: raw } = (entry ?? {}) as { seq?: unknown; record?: unknown };
-                if (!Number.isSafeInteger(seq) || (seq as number) < 1) throw new RecordStoreCorruptError(file, "a record has no sequence number");
-                const record = parseStored(file, raw);
-                if (record.space !== space) throw new RecordStoreCorruptError(file, `it holds a record of ${record.space}`);
-                let versions = ids.get(record.id);
-                if (!versions) ids.set(record.id, (versions = []));
-                versions.push({ record, digest: recordDigest(record), seq: seq as number });
-                maxSeq = Math.max(maxSeq, seq as number);
-                this.see(record);
+            const index = new Map<string, Set<string>>();
+            for (const fileName of fs.readdirSync(folder)) {
+                const file = path.join(folder, fileName);
+                const bucket = BUCKET_FILE_RE.exec(fileName)?.[1];
+                if (!bucket) throw new RecordStoreCorruptError(file, "it isn't a bucket file");
+                const inBucket = new Set<string>();
+                for (const entry of recordsOf(file, readJson(file))) {
+                    const { seq, record: raw } = (entry ?? {}) as { seq?: unknown; record?: unknown };
+                    if (!Number.isSafeInteger(seq) || (seq as number) < 1) throw new RecordStoreCorruptError(file, "a record has no sequence number");
+                    const record = parseStored(file, raw);
+                    if (record.space !== space) throw new RecordStoreCorruptError(file, `it holds a record of ${record.space}`);
+                    if (bucketOf(record.id) !== bucket) throw new RecordStoreCorruptError(file, `it holds ${record.id}, which belongs in bucket ${bucketOf(record.id)}`);
+                    let versions = ids.get(record.id);
+                    if (!versions) ids.set(record.id, (versions = []));
+                    versions.push({ record, digest: recordDigest(record), seq: seq as number });
+                    inBucket.add(record.id);
+                    maxSeq = Math.max(maxSeq, seq as number);
+                    this.see(record);
+                }
+                if (inBucket.size) index.set(bucket, inBucket);
             }
             for (const versions of ids.values()) versions.sort((a, b) => compareRecords(b, a));
             if (ids.size) this.spaces.set(space, ids);
+            this.buckets.set(space, index);
         }
         this.nextSeq = Math.max(this.reservedSeq, maxSeq + 1);
 
@@ -860,7 +915,7 @@ export class RecordStore {
         }
         this.cursors = cursors as Record<string, ChangeCursor | PushCursor>;
 
-        this.dirtySpaces = new Set();
+        this.dirty = new Map();
         this.heldDirty = false;
         this.cursorsDirty = false;
         this.leavingHeld = new Map();
