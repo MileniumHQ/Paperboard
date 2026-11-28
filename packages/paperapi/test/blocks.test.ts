@@ -109,6 +109,7 @@ describe("templates are data a panel registers on its own handle", () => {
         expect(refused([{ ...template, steps: [] }])).toThrow("needs at least one step");
         expect(refused([{ ...template, steps: [{ command: "restart", log: "both" }] }])).toThrow("step 1 must be { command } or { log }");
         expect(refused([{ ...template, steps: [{ command: "restart", inputs: { server: {} } }] }])).toThrow('input "server" must start as text, a number or true/false');
+        expect(refused([{ ...template, steps: [{ command: "restart", inputs: { count: Number.NaN } }] }])).toThrow('input "count" must start as text, a number or true/false');
         expect(refused([{ ...template, steps: [{ log: "{project} restarted" }] }])).toThrow("logs {project}, but the template isn't made for each project");
         expect(refused([{ ...template, needs: "server" }])).toThrow('needs "server", which is not a type this panel defines');
         expect(refused([{ ...template, description: "" }])).toThrow('Template "restart" needs a description');
