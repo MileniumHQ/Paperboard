@@ -144,11 +144,13 @@ export class Scheduler {
                     continue;
                 }
                 const stored = armed ? undefined : this.stored[project]?.[hat.id];
-                const anchor = stored && stored.signature === signature ? Math.min(stored.anchor, now) : now;
+                const kept = stored && stored.signature === signature;
+                const anchor = kept ? Math.min(stored.anchor, now) : now;
                 if (anchor !== stored?.anchor) changed = true;
                 const next: Armed = { project, hat: hat.id, schedule, signature, anchor };
-                // only an anchor read from the file can be from before the service started
-                if (nextRun(schedule, anchor) <= this.openedAt) next.notBefore = this.openedAt + CATCH_UP_DELAY_MS;
+                // only a schedule read from the file can have missed a run while the service was away;
+                // a new or edited one counts from now, even on a clock set back behind the start
+                if (kept && nextRun(schedule, anchor) <= this.openedAt) next.notBefore = this.openedAt + CATCH_UP_DELAY_MS;
                 wanted.set(key, next);
             }
         }

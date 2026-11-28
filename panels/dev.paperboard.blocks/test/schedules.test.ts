@@ -150,6 +150,15 @@ describe("the service's schedules", () => {
         expect(runs(back, id)).toBe(1);
     });
 
+    test("a schedule made after the clock is set back behind the service's start runs on time, with no catch-up minute", async () => {
+        const s = await serviceAt("2026-06-10T12:00:00");
+        // the clock was three hours ahead when the service started, and is put right
+        s.time.setBack(3 * HOUR);
+        const id = await s.make("Often", flows(every(10, "SECONDS", say("ran"))));
+        await s.time.advance(10_000 + 1000);
+        expect(runs(s, id)).toBe(1);
+    });
+
     test("after the computer sleeps through many runs, it runs once when it wakes, then counts from then", async () => {
         const s = await serviceAt("2026-06-10T12:00:00");
         const id = await s.make("Poll", flows(every(10, "MINUTES", say("ran"))));
