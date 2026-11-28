@@ -97,7 +97,7 @@ describe("the master token goes only to a daemon that proves itself", () => {
 			const local = connectionPool.getClient("local");
 			expect(local.getLocalCredentials()).toBeNull();
 			await local.connect();
-			const html = await (await servePanelAsset("local", "test.page", "/index.html", null)).text();
+			const html = await (await servePanelAsset("local", "test.page", "/index.html", () => null)).text();
 			const payload = JSON.parse(/window\.__PAPERBOARD_CRANE=(\{.*?\});<\/script>/.exec(html)![1]!);
 			expect(payload.token).not.toBe(local.getToken());
 			expect(payload.panelId).toBe("test.page");
