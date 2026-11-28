@@ -133,7 +133,7 @@ describe("the roster", () => {
 
 		// the private file names no computer and no address
 		const own = readJson(path.join(dir, ROSTER_PRIVATE_FILE));
-		expect(own).toEqual({ tokens: { [farId]: "pc_far" }, aliases: {}, order: [farId, memberIdOf(self.cert)] });
+		expect(own).toEqual({ tokens: { [farId]: "pc_far" }, aliases: {}, order: [farId, memberIdOf(self.cert)], observed: {} });
 		const reopened = await openWithRecords(dir, self);
 		expect(reopened.roster.list().map((m) => [m.id, m.name, m.dial, m.cert])).toEqual([
 			[farId, "Far", { host: "10.0.0.2", port: 45464 }, far.cert],
@@ -163,6 +163,35 @@ describe("the roster", () => {
 		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).tokens).toEqual({});
 		expect(records.get(ROSTER_SPACE, farId)).toBeNull();
 		expect(records.versions(ROSTER_SPACE, farId)[0]).toMatchObject({ state: "deleted" });
+	});
+
+	// Inventory: Core contract — a member's record holds only what is true from every computer; the IP this one reached it at stays here.
+	test("the address a computer answered at from here is this computer's own; the record keeps the name it answers to and its port", async () => {
+		const dir = localDir();
+		const self = createTlsIdentity();
+		const { roster, records } = await openWithRecords(dir, self);
+		const far = createTlsIdentity();
+		const id = await roster.pair({ cert: far.cert, token: "pc_far", name: "Far", dial: { host: "far.local", address: "10.0.0.2", port: 45464 }, facts: {} });
+		expect(roster.member(id)!.dial).toEqual({ host: "far.local", address: "10.0.0.2", port: 45464 });
+		expect((rosterRecords(records)[id] as { dial: unknown }).dial).toEqual({ host: "far.local", port: 45464 });
+		const version = records.get(ROSTER_SPACE, id)!.version;
+		// a new address from here changes no record, only this computer's file, and the list says so
+		let heard = 0;
+		roster.onChange(() => heard++);
+		await roster.update(id, { dial: { host: "far.local", address: "10.0.0.9", port: 45464 } });
+		expect(records.get(ROSTER_SPACE, id)!.version).toBe(version);
+		expect(heard).toBe(1);
+		expect(roster.view().members.find((m) => m.id === id)!.dial).toEqual({ host: "far.local", address: "10.0.0.9", port: 45464 });
+		await roster.update(id, { dial: { host: "far.local", port: 45464 } });
+		expect(roster.member(id)!.dial).toEqual({ host: "far.local", port: 45464 });
+		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).observed).toEqual({});
+		roster.close();
+
+		// a record that carries an observed address is another computer's view: left out, kept
+		const store = RecordStore.open({ dir: path.join(dir, NETWORK_DIR), identity: self, membership: { certFor: () => self.cert, admits: () => true } });
+		await store.put(ROSTER_SPACE, id, { cert: far.cert, dial: { host: "far.local", address: "10.0.0.2", port: 45464 }, facts: {} });
+		const reopened = await open(dir, self);
+		expect(reopened.member(id)).toBeUndefined();
 	});
 
 	test("a reorder must name every computer and writes no record; a damaged member record is left out and kept, the rest still load", async () => {
@@ -247,7 +276,8 @@ describe("importing 0.4's paired_computers.json", () => {
 		// Inventory: Data loss — what 0.4 paired lands in the record store, one record per computer, and nothing else does.
 		expect(rosterRecords(records)).toEqual({
 			[roster.self]: { name: "Workstation", cert: self.cert, facts: expect.any(Object) },
-			[rack]: { name: "Rack", dial: { host: "rack.local", address: "192.168.1.20", port: 45464 }, cert: c.rack, facts: roster.member(rack)!.facts },
+			// the IP 0.4 last reached it at is this computer's own observation
+			[rack]: { name: "Rack", dial: { host: "rack.local", port: 45464 }, cert: c.rack, facts: roster.member(rack)!.facts },
 			[laptop]: { name: "Laptop", dial: { host: "fe80::1", port: 50000 }, cert: c.laptop, facts: { os: "darwin", arch: "arm64" } },
 			[twin]: { name: "Twin", dial: { host: "10.0.0.7", port: 45464 }, cert: c.twin, facts: {} },
 		});
@@ -256,6 +286,7 @@ describe("importing 0.4's paired_computers.json", () => {
 			for (const secret of ["activeId", "pc_rack", "pc_laptop", "pc_twin_first"]) expect(stored).not.toContain(secret);
 		}
 		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).order).toEqual([roster.self, rack, laptop, twin]);
+		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).observed).toEqual({ [rack]: { address: "192.168.1.20" } });
 		roster.close();
 
 		// across a restart, the same ids and the same aliases

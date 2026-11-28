@@ -15,8 +15,8 @@ import { getDetailedOsInfo } from "../system/osInfo";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { RosterDial, RosterFacts, RosterMember, RosterView } from "@mileniumhq/paperapi/protocol";
 import type { TlsIdentity } from "../security/tlsIdentity";
-import { NETWORK_DIR, readDial, readFacts, RosterRecords, type RosterStore } from "./rosterStore";
-import { RosterPrivate, ROSTER_PRIVATE_FILE } from "./rosterPrivate";
+import { NETWORK_DIR, readDial, readFacts, RosterRecords, type RosterStore, type SharedDial, type SharedMember } from "./rosterStore";
+import { RosterPrivate, ROSTER_PRIVATE_FILE, type Observed } from "./rosterPrivate";
 import { memberIdOf } from "./memberId";
 
 /** how the app and panels name this computer; never stored as an id */
@@ -53,6 +53,21 @@ function checkFacts(value: unknown): RosterFacts {
 
 const sameFacts = (a: RosterFacts, b: RosterFacts) => JSON.stringify(checkFacts(a)) === JSON.stringify(checkFacts(b));
 
+/** A dial split into what is true from everywhere (the name it answers to, its port) and the IP it answered at from here. */
+function splitDial(dial: RosterDial): { shared: SharedDial; address: string | undefined } {
+    return { shared: { host: dial.host, port: dial.port }, address: dial.address };
+}
+
+/** this computer's observed address beside what the record holds; one change to a member's observations */
+function withAddress(observed: Record<string, Observed>, id: string, address: string | undefined): Record<string, Observed> {
+    const { address: _old, ...rest } = observed[id] ?? {};
+    const next = address === undefined ? rest : { ...rest, address };
+    const out = { ...observed };
+    if (Object.keys(next).length) out[id] = next;
+    else delete out[id];
+    return out;
+}
+
 export interface PairedMember {
     cert: string;
     token: string;
@@ -69,7 +84,7 @@ export interface MemberChange {
 }
 
 export class Roster {
-    private members = new Map<string, RosterMember>();
+    private members = new Map<string, SharedMember>();
     // every change counts once, so an answer can say how new it is
     private revision = 0;
     private readonly listeners = new Set<() => void>();
@@ -135,11 +150,30 @@ export class Roster {
     list(): RosterMember[] {
         const place = new Map(this.secrets.get().order.map((id, at) => [id, at]));
         const rank = (id: string) => place.get(id) ?? Number.MAX_SAFE_INTEGER;
-        return [...this.members.values()].sort((a, b) => rank(a.id) - rank(b.id) || (a.id < b.id ? -1 : 1));
+        return [...this.members.values()].sort((a, b) => rank(a.id) - rank(b.id) || (a.id < b.id ? -1 : 1)).map((m) => this.asSeenHere(m));
     }
 
     member(id: string): RosterMember | undefined {
-        return this.members.get(id);
+        const member = this.members.get(id);
+        return member && this.asSeenHere(member);
+    }
+
+    /** the member with the address this computer last reached it at beside the name it answers to */
+    private asSeenHere(member: SharedMember): RosterMember {
+        const address = this.secrets.get().observed[member.id]?.address;
+        if (!member.dial || !address || address === member.dial.host) return member;
+        return { ...member, dial: { host: member.dial.host, address, port: member.dial.port } };
+    }
+
+    /** what this computer observed of a member: its address from here, when it was last linked and synced */
+    observed(id: string): Readonly<Observed> {
+        return this.secrets.get().observed[id] ?? {};
+    }
+
+    /** saves when a member was last linked or synced; nothing the app lists changes */
+    async observe(id: string, seen: Pick<Observed, "lastSeen" | "lastSync">): Promise<void> {
+        if (!this.members.has(id)) return;
+        await this.secrets.update((state) => ({ ...state, observed: { ...state.observed, [id]: { ...state.observed[id], ...seen } } }));
     }
 
     /** The member an id names: its own id, "local" for this computer, or an id an older Paperboard gave it; null for none. */
@@ -188,7 +222,7 @@ export class Roster {
         const id = memberIdOf(paired.cert);
         if (id === this.self) throw new Error("That's this computer's own Paperboard server, not another computer");
         const name = paired.name === undefined ? undefined : checkComputerName(paired.name);
-        const dial = checkDial(paired.dial);
+        const { shared, address } = splitDial(checkDial(paired.dial));
         const facts = checkFacts(paired.facts);
         if (typeof paired.token !== "string" || !paired.token) throw new Error("A pairing needs the token the computer gave.");
         const before = this.members.get(id);
@@ -198,21 +232,29 @@ export class Roster {
             ...state,
             tokens: { ...state.tokens, [id]: paired.token },
             order: state.order.includes(id) ? state.order : [...state.order, id],
+            observed: withAddress(state.observed, id, address),
         }));
-        await this.store.write({ id, ...(kept ? { name: kept } : {}), dial, cert: paired.cert, facts });
+        await this.store.write({ id, ...(kept ? { name: kept } : {}), dial: shared, cert: paired.cert, facts });
+        // a record that didn't change still lists the new address
+        this.changed();
         return id;
     }
 
     /** a new name, address or OS details for a member; a change that changes nothing saves nothing */
     async update(id: string, change: MemberChange): Promise<void> {
         const member = this.requireMember(id);
-        const next: RosterMember = {
+        const dial = change.dial === undefined ? undefined : splitDial(checkDial(change.dial));
+        const next: SharedMember = {
             ...member,
             ...(change.name !== undefined ? { name: checkComputerName(change.name) } : {}),
-            ...(change.dial !== undefined ? { dial: checkDial(change.dial) } : {}),
+            ...(dial ? { dial: dial.shared } : {}),
             ...(change.facts !== undefined ? { facts: checkFacts(change.facts) } : {}),
         };
         await this.store.write(next);
+        if (dial && dial.address !== this.secrets.get().observed[id]?.address) {
+            await this.secrets.update((state) => ({ ...state, observed: withAddress(state.observed, id, dial.address) }));
+            this.changed();
+        }
     }
 
     /**
@@ -238,7 +280,8 @@ export class Roster {
         try {
             await this.secrets.update((state) => {
                 const { [id]: _gone, ...tokens } = state.tokens;
-                return { ...state, tokens, order: state.order.filter((other) => other !== id) };
+                const { [id]: _seen, ...observed } = state.observed;
+                return { ...state, tokens, observed, order: state.order.filter((other) => other !== id) };
             });
         } catch (err) {
             throw new Error(`The computer was forgotten, but its pairing token couldn't be deleted from ${ROSTER_PRIVATE_FILE}: ${errorMessage(err)}`, { cause: err });
@@ -252,17 +295,22 @@ export class Roster {
      * are listed. Saving the same again changes nothing.
      */
     async adoptImported(members: RosterMember[], order: string[], tokens: Record<string, string>, aliases: Record<string, string>): Promise<void> {
-        await this.secrets.update((state) => ({
-            ...state,
-            tokens: { ...state.tokens, ...tokens },
-            aliases: { ...state.aliases, ...aliases },
-            order: [...order, ...state.order.filter((id) => !order.includes(id))],
-        }));
+        await this.secrets.update((state) => {
+            let observed = state.observed;
+            for (const member of members) if (member.dial?.address) observed = withAddress(observed, member.id, member.dial.address);
+            return {
+                ...state,
+                tokens: { ...state.tokens, ...tokens },
+                aliases: { ...state.aliases, ...aliases },
+                order: [...order, ...state.order.filter((id) => !order.includes(id))],
+                observed,
+            };
+        });
         this.changed();
-        for (const member of members) await this.store.write(member);
+        for (const member of members) await this.store.write({ ...member, ...(member.dial ? { dial: splitDial(member.dial).shared } : {}) });
     }
 
-    private requireMember(id: string): RosterMember {
+    private requireMember(id: string): SharedMember {
         const member = this.members.get(id);
         if (!member) throw new Error("Paperboard doesn't know this computer anymore.");
         return member;

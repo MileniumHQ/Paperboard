@@ -9,10 +9,14 @@
 //   space  "@roster" (record.ts: the network's own spaces, which nothing a
 //          panel or the app writes can reach)
 //   id     the member id of the computer it is about
-//   value  {"cert": PEM, "name"?: text, "dial"?: {"host", "address"?, "port"},
-//           "facts": {...}}: what every computer may know of it. The cert's
-//          key must hash to the id; a record that breaks that, or any field
-//          of it, is left out of the roster and kept in the store as it is.
+//   value  {"cert": PEM, "name"?: text, "dial"?: {"host", "port"},
+//           "facts": {...}}: what is true of it from every computer. The
+//          cert's key must hash to the id; a record that breaks that, or any
+//          field of it, is left out of the roster and kept in the store as
+//          it is. "host" is the name it answers to (its .local name, or what
+//          it was paired at); the IP it last answered at is what one
+//          computer observed from where it is, so it is kept in that
+//          computer's own file (rosterPrivate.ts), never here.
 //
 // One record per member, so computers that change different members never
 // conflict; two that change one member apart keep both versions, the later
@@ -47,14 +51,18 @@ import { memberIdOf } from "./memberId";
 /** the record store's folder in local/ */
 export const NETWORK_DIR = "network";
 
+/** A member as every computer may know it: its dial holds the name it answers to and its port, nothing observed from one place. */
+export type SharedMember = Omit<RosterMember, "dial"> & { dial?: SharedDial };
+export type SharedDial = Omit<RosterDial, "address">;
+
 export interface RosterStore {
     /** every member it holds now */
-    members(): RosterMember[];
+    members(): SharedMember[];
     /** adds the member, or replaces the one with its id; the same member again saves nothing */
-    write(member: RosterMember): Promise<void>;
+    write(member: SharedMember): Promise<void>;
     remove(id: string): Promise<void>;
     /** hears every member written or removed, by anyone; returns the unsubscribe */
-    watch(listener: (id: string, member: RosterMember | null) => void): () => void;
+    watch(listener: (id: string, member: SharedMember | null) => void): () => void;
     close(): void;
 }
 
@@ -108,7 +116,7 @@ function holdsKeyOf(id: string, cert: string): boolean {
 }
 
 /** A roster record's value as the member it describes, or why it isn't one. */
-function readMember(id: string, value: unknown): RosterMember | string {
+function readMember(id: string, value: unknown): SharedMember | string {
     if (!value || typeof value !== "object" || Array.isArray(value)) return "it isn't an object";
     const given = value as Record<string, unknown>;
     if (!isText(given.cert, CERT_MAX) || !holdsKeyOf(id, given.cert)) return "its certificate isn't the key its id names";
@@ -117,6 +125,7 @@ function readMember(id: string, value: unknown): RosterMember | string {
     if (!facts) return "its OS details are damaged";
     const dial = given.dial === undefined ? undefined : readDial(given.dial);
     if (dial === null) return "its address is damaged";
+    if (dial?.address !== undefined) return "its address holds an IP one computer observed, which is that computer's own";
     return {
         id,
         ...(given.name !== undefined ? { name: given.name as string } : {}),
@@ -127,7 +136,7 @@ function readMember(id: string, value: unknown): RosterMember | string {
 }
 
 /** What a member's record holds: the member without its id, which is the record's. */
-function valueOf(member: RosterMember): Omit<RosterMember, "id"> {
+function valueOf(member: SharedMember): Omit<SharedMember, "id"> {
     const { id: _id, ...value } = member;
     return value;
 }
@@ -135,8 +144,8 @@ function valueOf(member: RosterMember): Omit<RosterMember, "id"> {
 
 /** The roster's members as "@roster" records in this computer's record store (local/network/). */
 export class RosterRecords implements RosterStore {
-    private readonly byId = new Map<string, RosterMember>();
-    private readonly listeners = new Set<(id: string, member: RosterMember | null) => void>();
+    private readonly byId = new Map<string, SharedMember>();
+    private readonly listeners = new Set<(id: string, member: SharedMember | null) => void>();
     private readonly self: string;
     private unwatch: (() => void) | null = null;
     /** the store the members are records in: its own rules for who may write are this roster's */
@@ -196,7 +205,7 @@ export class RosterRecords implements RosterStore {
     }
 
     /** reads the record into the roster; one that isn't a member is left out, loudly, and stays in the store */
-    private take(id: string, record: StoredRecord | null): RosterMember | null {
+    private take(id: string, record: StoredRecord | null): SharedMember | null {
         if (!record) {
             this.byId.delete(id);
             return null;
@@ -229,11 +238,11 @@ export class RosterRecords implements RosterStore {
         }
     }
 
-    members(): RosterMember[] {
+    members(): SharedMember[] {
         return [...this.byId.values()];
     }
 
-    async write(member: RosterMember): Promise<void> {
+    async write(member: SharedMember): Promise<void> {
         // written as it is read back, so what one computer writes every other lists
         const next = readMember(member.id, valueOf(member));
         if (typeof next === "string") throw new Error(`The computer ${member.id} can't be saved: ${next}`);
@@ -246,7 +255,7 @@ export class RosterRecords implements RosterStore {
         await this.records.delete(ROSTER_SPACE, id);
     }
 
-    watch(listener: (id: string, member: RosterMember | null) => void): () => void {
+    watch(listener: (id: string, member: SharedMember | null) => void): () => void {
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);
     }
