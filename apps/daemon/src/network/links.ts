@@ -1,8 +1,52 @@
 // Links: how the computers of a network reach each other. Every pair of
-// members keeps one WebSocket on /network, over TLS where both sides present
-// their daemon certificate, and syncs its record stores over it. Who may link
-// is the roster: a peer is accepted only when its key hashes to a current
+// members keeps one WebSocket on /network, on the daemon's TLS port, and
+// syncs its record stores over it. Who may link is the roster: a peer is
+// accepted only when it proves it holds a key that hashes to a current
 // member id, and a member that stops being one is cut at once.
+//
+// ─── Proving who is on each end ──────────────────────────────────────────────
+//
+// The dialer knows whom it dialed: it trusts only that member's certificate
+// and checks the key the TLS handshake presents hashes to its id. The
+// answering side asks for no client certificate (browsers, WebDAV clients
+// and the app share the port, and a certificate request shows a browser's
+// picker or breaks some clients), so the dialer proves itself in the link's
+// first messages, and nothing else is read until it has:
+//
+//   answerer → {"t":"hello","v":1,"nonce":"<base64, 32 random bytes>"}
+//   dialer   → {"t":"proof","cert":<PEM>,"dialed":<member id>,"sig":"<base64>"}
+//   answerer → {"t":"welcome"}     or closes with 4003 (not a member) or
+//                                  4004 (not proven)
+//
+//   proof = "PBL1"                  4 ASCII bytes: a link proof, version 1
+//           u8(32) nonce            the answerer's nonce for this socket
+//           str(dialer)             member id of cert's key (memberId.ts)
+//           str(dialed)             member id of the key the dialer pinned
+//   sig   = ECDSA P-256 with SHA-256 over `proof` by the dialer's daemon key,
+//           IEEE P1363 (r ‖ s, 64 bytes), as records are signed (record.ts)
+//
+//   str(s) = u16(byte length of UTF-8 s) ‖ UTF-8 s
+//
+// Why each field:
+//   "PBL1"  the same key signs records ("PBR1", record.ts): no proof is ever
+//           a record's signature, nor a record's signature a proof
+//   nonce   fresh from the answerer for each socket, so a proof seen once
+//           opens no other socket: a replay signs the wrong nonce
+//   dialer  the id the signature is for, checked against the cert's key:
+//           the signature counts only for the computer it names
+//   dialed  whom the dialer was talking to. Without it a member M that C
+//           dials could hand C a nonce it got from dialing B, and pass C's
+//           answer to B as its own link from C. C signs "dialed = M", which B
+//           refuses: it isn't M.
+// The answering side accepts when the cert's key hashes to a current member
+// id other than its own, `dialed` is its own id, and sig verifies. The link
+// needs no binding to the TLS session: only the dialer could have opened it
+// (it pinned the answerer's key), and the nonce came over that session.
+//
+// An unproven socket may send one frame (at most 64 KiB, below), and only
+// a proof; it must prove itself within proofTimeoutMs, and only a few may be
+// open at once, in all and per address. The link endpoint holds nothing for
+// anyone who can't prove.
 //
 // ─── Who dials ───────────────────────────────────────────────────────────────
 //
@@ -28,6 +72,10 @@
 //   {"t":"res","n":<int>,"ok":true,"value":<ChangeBatch>}
 //   {"t":"res","n":<int>,"ok":false,"error":<text>}
 //   {"t":"changed"}            this side accepted records the other may lack
+// Each message is one text frame, or, when its JSON is longer than 16384
+// UTF-16 units, its JSON cut into frames of that many: "+" ‖ part for each
+// but the last, "=" ‖ part for the last (a whole message begins with "{").
+// So no frame is bigger than 64 KiB, and a whole message at most 64 MiB.
 // Each side pulls from the other (RecordStore.pull, one cursor per peer)
 // when the link opens and when the other says it changed. A peer that sends
 // what isn't one of these, or doesn't answer a request or a ping in time,
@@ -38,9 +86,10 @@
 // Online is a link that is up now, known only in memory. When a member was
 // last linked and last synced is this computer's own observation, saved in
 // its private roster file (rosterPrivate.ts).
+import * as crypto from "crypto";
 import type * as http from "http";
+import type { Socket } from "net";
 import type { Duplex } from "stream";
-import type * as tls from "tls";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import { logger } from "../core/logger";
@@ -59,6 +108,8 @@ export const LINK_CLOSE = {
     protocol: 4002,
     /** the peer isn't (or stopped being) a member here */
     notMember: 4003,
+    /** the dialer didn't prove it holds the key it claims, in time */
+    unproven: 4004,
 } as const;
 
 // a batch is at most this many records, and a record's body at most 1 MiB
@@ -66,8 +117,42 @@ export const LINK_CLOSE = {
 const PULL_LIMIT = 32;
 const MAX_SERVED_LIMIT = 500;
 const MAX_LINK_PAYLOAD = 64 * 1024 * 1024;
+// No WebSocket frame is bigger than this, proven or not: a message longer
+// than PART_CHARS goes as parts (the format at the top of this file), and a
+// UTF-8 character is at most 3 bytes per UTF-16 unit. So a socket that hasn't
+// proven itself can make this computer hold one small frame, never a whole
+// batch, on Bun's ws and Node's alike.
+const PART_CHARS = 16 * 1024;
+const MAX_FRAME = 64 * 1024;
 // requests a peer may have waiting on this side at once; a pull makes one
 const MAX_INBOUND_REQUESTS = 4;
+// the largest certificate a proof may carry: what a roster record holds
+const MAX_PROOF_CERT = 16 * 1024;
+const NONCE_BYTES = 32;
+const PROOF_TAG = "PBL1";
+// refused computers each said once, up to this many lines an hour; the rest are counted in one line
+const REFUSALS_REMEMBERED = 64;
+const REFUSAL_LINES_PER_HOUR = 16;
+const HOUR_MS = 60 * 60_000;
+
+function str(value: string): Buffer {
+    const bytes = Buffer.from(value, "utf8");
+    const length = Buffer.alloc(2);
+    length.writeUInt16BE(bytes.length);
+    return Buffer.concat([length, bytes]);
+}
+
+/** The bytes a dialer signs to prove it holds `dialer`'s key to the computer `dialed`, on the socket `nonce` was sent on (the format above). */
+export function linkProofBytes(nonce: Buffer, dialer: string, dialed: string): Buffer {
+    if (nonce.length !== NONCE_BYTES) throw new Error(`A link nonce is ${NONCE_BYTES} bytes`);
+    return Buffer.concat([Buffer.from(PROOF_TAG, "ascii"), Buffer.from([NONCE_BYTES]), nonce, str(dialer), str(dialed)]);
+}
+
+/** The proof message a dialer holding `identity` answers a hello with, having dialed the computer `dialed`. */
+export function linkProof(identity: TlsIdentity, nonce: Buffer, dialed: string): { t: "proof"; cert: string; dialed: string; sig: string } {
+    const sig = crypto.sign("sha256", linkProofBytes(nonce, memberIdOf(identity.cert), dialed), { key: identity.key, dsaEncoding: "ieee-p1363" });
+    return { t: "proof", cert: identity.cert, dialed, sig: sig.toString("base64") };
+}
 
 export interface LinkTiming {
     /** how often a link is pinged; one that misses a ping is ended */
@@ -88,7 +173,18 @@ export interface LinkTiming {
     readmitMs: number;
     /** how often a link's last-seen time is saved while it is up */
     presenceSaveMs: number;
+    /** how long a dialer has to prove itself */
+    proofTimeoutMs: number;
 }
+
+export interface LinkLimits {
+    /** sockets not yet proven that may be open at once */
+    unprovenTotal: number;
+    /** ...from one address */
+    unprovenPerAddress: number;
+}
+
+export const DEFAULT_LINK_LIMITS: LinkLimits = { unprovenTotal: 64, unprovenPerAddress: 8 };
 
 export const DEFAULT_LINK_TIMING: LinkTiming = {
     pingMs: 15_000,
@@ -100,6 +196,7 @@ export const DEFAULT_LINK_TIMING: LinkTiming = {
     noticeDebounceMs: 200,
     readmitMs: 5 * 60_000,
     presenceSaveMs: 5 * 60_000,
+    proofTimeoutMs: 10_000,
 };
 
 export interface NetworkLinksOptions {
@@ -109,6 +206,7 @@ export interface NetworkLinksOptions {
     /** whether other computers can dial this one: it has a TLS listener */
     listening: boolean;
     timing?: Partial<LinkTiming>;
+    limits?: Partial<LinkLimits>;
     /** the wall clock, in ms; tests pass their own */
     now?: () => number;
     /** 0 ≤ x < 1, for jitter */
@@ -146,6 +244,8 @@ export interface NetworkStatus {
     listening: boolean;
     /** records waiting to be admitted, from any peer */
     held: number;
+    /** sockets on /network whose dialer hasn't proven itself yet */
+    unproven: number;
     peers: PeerStatus[];
 }
 
@@ -176,6 +276,9 @@ class Link {
     private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }>();
     private inbound = 0;
     private answered = true;
+    /** the parts of a message still coming */
+    private parts: string[] = [];
+    private partsLength = 0;
     private readonly pinger: ReturnType<typeof setInterval>;
     closed = false;
 
@@ -203,6 +306,14 @@ class Link {
             ws.ping();
         }, timing.pingMs);
         this.pinger.unref?.();
+    }
+
+    /** what came after the proof exchange, before this link listened, read now in order */
+    begin(early: RawData[]): void {
+        for (const data of early) {
+            if (this.closed) return;
+            this.receive(data);
+        }
     }
 
     request(op: string, params: Record<string, unknown>): Promise<unknown> {
@@ -243,16 +354,43 @@ class Link {
 
     private send(message: object): void {
         if (this.closed) return;
-        this.ws.send(JSON.stringify(message), (err) => {
+        const failed = (err?: Error | null) => {
             if (err) this.ended(LINK_CLOSE.protocol, `sending to ${this.peer} failed: ${errorMessage(err)}`);
-        });
+        };
+        const text = JSON.stringify(message);
+        if (text.length <= PART_CHARS) return this.ws.send(text, failed);
+        for (let at = 0; at < text.length; ) {
+            let end = Math.min(at + PART_CHARS, text.length);
+            // never between the two halves of a surrogate pair: half of one would go as U+FFFD
+            const before = text.charCodeAt(end - 1);
+            if (end < text.length && before >= 0xd800 && before <= 0xdbff) end--;
+            this.ws.send(`${end === text.length ? "=" : "+"}${text.slice(at, end)}`, failed);
+            at = end;
+        }
     }
 
+    /** a frame: a whole message, or a part of one (the format at the top of this file) */
     private receive(data: RawData): void {
         this.answered = true;
+        const frame = data.toString();
+        if (frame[0] === "+" || frame[0] === "=") {
+            this.partsLength += frame.length - 1;
+            if (this.partsLength > MAX_LINK_PAYLOAD) return this.fail(`${this.peer} sent a message over ${MAX_LINK_PAYLOAD} characters`);
+            this.parts.push(frame.slice(1));
+            if (frame[0] === "+") return;
+            const whole = this.parts.join("");
+            this.parts = [];
+            this.partsLength = 0;
+            return this.handle(whole);
+        }
+        if (this.parts.length) return this.fail(`${this.peer} began a message before it finished the last`);
+        this.handle(frame);
+    }
+
+    private handle(text: string): void {
         let message: Record<string, unknown>;
         try {
-            const parsed: unknown = JSON.parse(data.toString());
+            const parsed: unknown = JSON.parse(text);
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
             message = parsed as Record<string, unknown>;
         } catch (err) {
@@ -325,8 +463,12 @@ function pemOf(raw: Buffer): string {
 
 function memberIdOfRaw(raw: Buffer | undefined): string | null {
     if (!raw?.length) return null;
+    return memberIdOfPem(pemOf(raw));
+}
+
+function memberIdOfPem(pem: string): string | null {
     try {
-        return memberIdOf(pemOf(raw));
+        return memberIdOf(pem);
     } catch {
         return null; // quiet: a certificate that doesn't parse names no member, and the caller refuses the link
     }
@@ -340,8 +482,74 @@ function isCursor(value: unknown): value is ChangeCursor | null {
     return typeof log === "string" && Number.isSafeInteger(after);
 }
 
-function refuse(socket: Duplex, status: number, reason: string): void {
-    socket.end(`HTTP/1.1 ${status} ${status === 403 ? "Forbidden" : status === 401 ? "Unauthorized" : "Service Unavailable"}\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(reason)}\r\n\r\n${reason}`);
+function refuse(socket: Duplex, reason: string): void {
+    socket.end(`HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(reason)}\r\n\r\n${reason}`);
+}
+
+/** a link message's JSON object, or null for anything else */
+function parseMessage(data: RawData): Record<string, unknown> | null {
+    try {
+        const parsed: unknown = JSON.parse(data.toString());
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+    } catch {
+        return null; // quiet: what isn't JSON isn't a link message, and the caller closes the socket for it
+    }
+}
+
+function decodeBase64(value: unknown, bytes: number): Buffer | null {
+    if (typeof value !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
+    const decoded = Buffer.from(value, "base64");
+    return decoded.length === bytes ? decoded : null;
+}
+
+/** closes a socket that never became a link, and lets go of it if the other end doesn't answer the close */
+function closeUnlinked(ws: WebSocket, code: number, reason: string, graceMs: number): void {
+    ws.close(code, Buffer.from(reason).subarray(0, 120).toString());
+    const hard = setTimeout(() => ws.terminate(), graceMs);
+    hard.unref?.();
+    ws.once("close", () => clearTimeout(hard));
+}
+
+/**
+ * Says each refused computer once, and no more than a few lines an hour;
+ * past that, one line counts the rest. A stranger with a new key for every
+ * try grows neither memory nor the log.
+ */
+class RefusalLog {
+    private readonly said = new Set<string>();
+    private windowStart: number;
+    private lines = 0;
+    private unsaid = 0;
+
+    constructor(private readonly now: () => number) {
+        this.windowStart = now();
+    }
+
+    refused(who: string, line: () => string): void {
+        const now = this.now();
+        if (now - this.windowStart >= HOUR_MS) {
+            this.flush();
+            this.windowStart = now;
+            this.lines = 0;
+        }
+        if (this.said.has(who)) return;
+        if (this.lines >= REFUSAL_LINES_PER_HOUR) {
+            this.unsaid++;
+            return;
+        }
+        this.lines++;
+        this.said.add(who);
+        // the oldest is forgotten first: it may be said once more
+        if (this.said.size > REFUSALS_REMEMBERED) this.said.delete(this.said.values().next().value!);
+        logger.warn(`${line()} (it is refused again without a word)`);
+    }
+
+    /** the one line for what wasn't said */
+    flush(): void {
+        if (!this.unsaid) return;
+        logger.warn(`[network] refused ${this.unsaid} more link(s) in the last hour, past what the log says one by one`);
+        this.unsaid = 0;
+    }
 }
 
 /** This computer's links to the other members, and the sync over them. */
@@ -351,10 +559,13 @@ export class NetworkLinks {
     private readonly now: () => number;
     private readonly random: () => number;
     private readonly peers = new Map<string, Peer>();
-    private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_LINK_PAYLOAD, perMessageDeflate: false });
+    private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME, perMessageDeflate: false });
     private readonly listeners = new Set<() => void>();
-    /** computers refused a link, so the log says it once each; bounded by who tries */
-    private readonly refusedOnce = new Set<string>();
+    private readonly limits: LinkLimits;
+    private readonly refusals: RefusalLog;
+    /** sockets on /network that haven't proven themselves, by address */
+    private readonly unproven = new Map<string, Set<WebSocket | Duplex>>();
+    private unprovenCount = 0;
     private readonly cleanups: (() => void)[] = [];
     private started = false;
     private stopped = false;
@@ -369,6 +580,8 @@ export class NetworkLinks {
         this.timing = { ...DEFAULT_LINK_TIMING, ...options.timing };
         this.now = options.now ?? Date.now;
         this.random = options.random ?? Math.random;
+        this.limits = { ...DEFAULT_LINK_LIMITS, ...options.limits };
+        this.refusals = new RefusalLog(this.now);
     }
 
     /** Begins dialing the members this computer dials, and syncing over every link. */
@@ -406,7 +619,11 @@ export class NetworkLinks {
                 peer.link.close(1001, "This computer's Paperboard stopped");
             }
         }
+        for (const sockets of this.unproven.values()) {
+            for (const socket of sockets) socket instanceof WebSocket ? socket.terminate() : socket.destroy();
+        }
         this.wss.close();
+        this.refusals.flush();
         await Promise.all(saves);
     }
 
@@ -433,24 +650,83 @@ export class NetworkLinks {
     // ─── Accepting ───────────────────────────────────────────────────────────
 
     /**
-     * An upgrade to /network on the daemon's TLS listener. The peer is who
-     * its client certificate's key says; it is let in only as a member.
+     * An upgrade to /network on the daemon's TLS listener. Whoever dialed
+     * is told a nonce and has proofTimeoutMs to prove, by the format at the
+     * top of this file, that it holds a member's key; until then nothing
+     * it sends is read but its proof.
      */
     accept(req: http.IncomingMessage, socket: Duplex, head: Buffer): void {
-        if (this.stopped || !this.started) return refuse(socket, 503, "This computer isn't linking right now");
-        const secure = socket as tls.TLSSocket;
-        if (!secure.encrypted || typeof secure.getPeerCertificate !== "function") return refuse(socket, 403, "Links are made over TLS only");
-        const id = memberIdOfRaw(secure.getPeerCertificate(true)?.raw);
-        if (!id) return refuse(socket, 401, "A link needs this computer's daemon certificate");
-        if (id === this.self || !this.options.roster.member(id)) {
-            // said once per computer: one that counts this one as a member keeps asking
-            if (!this.refusedOnce.has(id)) {
-                this.refusedOnce.add(id);
-                logger.warn(`[network] refused a link from ${id} at ${secure.remoteAddress ?? "an unknown address"}: not a member of this network (it is refused again without a word)`);
-            }
-            return refuse(socket, 403, "This computer isn't one of this network's members");
+        if (this.stopped || !this.started) return refuse(socket, "This computer isn't linking right now");
+        const address = ((socket as Socket).remoteAddress ?? "unknown").replace(/^::ffff:/, "");
+        const fromAddress = this.unproven.get(address)?.size ?? 0;
+        if (this.unprovenCount >= this.limits.unprovenTotal || fromAddress >= this.limits.unprovenPerAddress) {
+            this.refusals.refused(`busy:${address}`, () => `[network] refused a link from ${address}: ${fromAddress >= this.limits.unprovenPerAddress ? `${fromAddress} links from there are` : `${this.unprovenCount} links are`} still to prove themselves`);
+            return refuse(socket, "Too many links are being made to this computer right now");
         }
-        this.wss.handleUpgrade(req, socket, head, (ws) => this.adopt(ws, id, id));
+        // counted from here until the socket proves itself or closes, whatever the upgrade does
+        let current: WebSocket | Duplex = socket;
+        const sockets = this.unproven.get(address) ?? new Set();
+        this.unproven.set(address, sockets);
+        sockets.add(current);
+        this.unprovenCount++;
+        let released = false;
+        const release = () => {
+            if (released) return;
+            released = true;
+            sockets.delete(current);
+            if (!sockets.size && this.unproven.get(address) === sockets) this.unproven.delete(address);
+            this.unprovenCount--;
+        };
+        socket.once("close", release);
+        this.wss.handleUpgrade(req, socket, head, (ws) => {
+            sockets.delete(current);
+            current = ws;
+            sockets.add(ws);
+            this.challenge(ws, address, release);
+        });
+    }
+
+    /** the proof exchange on an accepted socket: a link when the dialer proves it is a member, closed otherwise */
+    private challenge(ws: WebSocket, address: string, release: () => void): void {
+        const nonce = crypto.randomBytes(NONCE_BYTES);
+        let done = false;
+        const finish = () => {
+            done = true;
+            clearTimeout(deadline);
+            ws.off("message", onMessage);
+            release();
+        };
+        const fail = (code: number, why: string) => {
+            if (done) return;
+            finish();
+            closeUnlinked(ws, code, why, this.timing.connectTimeoutMs);
+        };
+        const deadline = setTimeout(() => fail(LINK_CLOSE.unproven, `Didn't prove itself within ${this.timing.proofTimeoutMs} ms`), this.timing.proofTimeoutMs);
+        deadline.unref?.();
+        const onMessage = (data: RawData) => {
+            if (done) return;
+            const message = parseMessage(data);
+            if (message?.t !== "proof") return fail(LINK_CLOSE.unproven, "Sent something other than a proof before proving itself");
+            const { cert, dialed } = message;
+            const sig = decodeBase64(message.sig, 64);
+            const id = typeof cert === "string" && cert.length <= MAX_PROOF_CERT ? memberIdOfPem(cert) : null;
+            if (!id || !sig) return fail(LINK_CLOSE.unproven, "Its proof is damaged");
+            if (dialed !== this.self) return fail(LINK_CLOSE.unproven, "Its proof is for another computer");
+            const verified = crypto.verify("sha256", linkProofBytes(nonce, id, this.self), { key: cert as string, dsaEncoding: "ieee-p1363" }, sig);
+            if (!verified) return fail(LINK_CLOSE.unproven, "Its proof doesn't verify on this link");
+            if (id === this.self || !this.options.roster.member(id)) {
+                this.refusals.refused(id, () => `[network] refused a link from ${id} at ${address}: not a member of this network`);
+                return fail(LINK_CLOSE.notMember, "This computer isn't one of this network's members");
+            }
+            finish();
+            ws.send(JSON.stringify({ t: "welcome" }));
+            this.adopt(ws, id, id, () => []);
+        };
+        // a part of a longer message is something other than a proof too: a proof is one frame
+        ws.on("message", onMessage);
+        ws.on("error", () => fail(LINK_CLOSE.protocol, "Its socket failed")); // quiet: an unproven socket's failure is nobody's link failing
+        ws.once("close", finish);
+        ws.send(JSON.stringify({ t: "hello", v: 1, nonce: nonce.toString("base64") }));
     }
 
     // ─── Dialing ─────────────────────────────────────────────────────────────
@@ -559,13 +835,13 @@ export class NetworkLinks {
             if (peer.link) return null;
             if (this.stopped || !this.peers.has(peer.id)) return { why: "this computer stopped linking to it", refused: false };
             try {
-                const ws = await this.connect(peer, host, port, cert);
+                const { ws, take } = await this.connect(peer, host, port, cert);
                 if (this.stopped || !this.peers.has(peer.id)) {
                     ws.terminate();
                     return { why: "this computer stopped linking to it", refused: false };
                 }
-                this.adopt(ws, peer.id, this.self);
-                return null;
+                if (this.adopt(ws, peer.id, this.self, take)) return null;
+                last = { why: `${bracket(host)}:${port}: the link closed as it opened`, refused: false };
             } catch (err) {
                 last = { why: `${bracket(host)}:${port}: ${errorMessage(err)}`, refused: err instanceof RefusedError };
             }
@@ -573,54 +849,102 @@ export class NetworkLinks {
         return last;
     }
 
-    /** one TLS WebSocket to one address, the peer's key checked before anything is sent */
-    private connect(peer: Peer, host: string, port: number, cert: string): Promise<WebSocket> {
+    /**
+     * One TLS WebSocket to one address: the peer's key is checked before
+     * anything is sent, then this computer proves itself (the format at the
+     * top of this file). What the peer sends after its welcome, before the
+     * link listens, is handed over in order.
+     */
+    private connect(peer: Peer, host: string, port: number, cert: string): Promise<{ ws: WebSocket; take: () => RawData[] }> {
         const { identity } = this.options;
         return new Promise((resolve, reject) => {
             const ws = new WebSocket(`wss://${bracket(host)}:${port}${LINK_PATH}`, {
-                cert: identity.cert,
-                key: identity.key,
                 // the member's own certificate is the only one trusted; its key is what is checked
                 ca: [cert],
                 servername: TLS_SERVER_NAME,
                 checkServerIdentity: (_host: string, presented: { raw?: Buffer }) =>
                     memberIdOfRaw(presented.raw) === peer.id ? undefined : new Error("another computer answered there"),
                 handshakeTimeout: this.timing.connectTimeoutMs,
-                maxPayload: MAX_LINK_PAYLOAD,
+                maxPayload: MAX_FRAME,
                 perMessageDeflate: false,
             } as ConstructorParameters<typeof WebSocket>[2]);
             peer.socket = ws;
+            const early: RawData[] = [];
+            let phase: "hello" | "welcome" | "linked" = "hello";
             let settled = false;
             const settle = (err: Error | null) => {
                 if (settled) return;
                 settled = true;
+                clearTimeout(deadline);
                 if (peer.socket === ws) peer.socket = null;
                 if (err) {
                     ws.terminate();
                     reject(err);
-                } else resolve(ws);
+                } else {
+                    resolve({
+                        ws,
+                        take: () => {
+                            ws.off("message", onMessage);
+                            return early.splice(0);
+                        },
+                    });
+                }
             };
-            ws.once("open", () => settle(null));
-            ws.once("unexpected-response", (_req, res) => {
-                const why = res.statusCode === 403 ? "this computer isn't one of its members" : res.statusCode === 401 ? "it wanted this computer's certificate" : res.statusMessage || "no reason given";
-                const message = `refused the link (${res.statusCode}): ${why}`;
-                // a peer still starting (503) is dialed again soon, like any failure
-                settle(res.statusCode === 403 || res.statusCode === 401 ? new RefusedError(message) : new Error(message));
+            // the upgrade, the hello and the welcome, all within one connect timeout
+            const deadline = setTimeout(() => settle(new Error(`didn't link within ${this.timing.connectTimeoutMs} ms`)), this.timing.connectTimeoutMs);
+            deadline.unref?.();
+            const onMessage = (data: RawData) => {
+                // after the welcome, kept for the link until it takes them
+                if (phase === "linked") {
+                    early.push(data);
+                    return;
+                }
+                const message = parseMessage(data);
+                if (phase === "hello" && message?.t === "hello" && message.v === 1) {
+                    const nonce = decodeBase64(message.nonce, NONCE_BYTES);
+                    if (!nonce) return settle(new Error("it sent a damaged hello"));
+                    phase = "welcome";
+                    ws.send(JSON.stringify(linkProof(identity, nonce, peer.id)));
+                    return;
+                }
+                if (phase === "welcome" && message?.t === "welcome") {
+                    phase = "linked";
+                    return settle(null);
+                }
+                settle(new Error("it sent something that isn't a link message"));
+            };
+            ws.on("message", onMessage);
+            ws.once("unexpected-response", (_req, res) => settle(new Error(`refused the link (${res.statusCode}): ${res.statusMessage || "no reason given"}`)));
+            ws.on("error", (err) => settle(err)); // the link listens for its own once it has one
+            ws.once("close", (code, reason) => {
+                const why = reason.length ? reason.toString() : "no reason given";
+                if (code === LINK_CLOSE.notMember) settle(new RefusedError(`refused the link (${code}): this computer isn't one of its members`));
+                else settle(new Error(`closed before it linked (${code}: ${why})`));
             });
-            ws.once("error", (err) => settle(err));
-            ws.once("close", (code, reason) => settle(new Error(`closed before it opened (${code}${reason.length ? `: ${reason}` : ""})`)));
         });
     }
 
     // ─── A link ──────────────────────────────────────────────────────────────
 
-    /** a socket that opened, either way: kept as the peer's link unless a better one is up */
-    private adopt(ws: WebSocket, id: string, dialer: string): void {
+    /**
+     * A proven socket, either way: kept as the peer's link unless a better
+     * one is up. `take` hands over what came before the link listened.
+     * True when the peer has a link after it.
+     */
+    private adopt(ws: WebSocket, id: string, dialer: string, take: () => RawData[]): boolean {
+        // a member the roster has and the links haven't taken in yet (its change is on its way)
+        if (!this.peers.has(id) && !this.stopped && this.options.roster.member(id)) this.reconcile();
         const peer = this.peers.get(id);
         if (!peer || this.stopped) {
-            ws.close(peer ? 1001 : LINK_CLOSE.notMember, peer ? "This computer's Paperboard stopped" : "Not a member of this network");
-            return;
+            closeUnlinked(ws, peer ? 1001 : LINK_CLOSE.notMember, peer ? "This computer's Paperboard stopped" : "Not a member of this network", this.timing.connectTimeoutMs);
+            return false;
         }
+        // a socket that closed between its welcome and now
+        if (ws.readyState !== WebSocket.OPEN) {
+            ws.terminate();
+            return !!peer.link;
+        }
+        const early = take();
         const link = new Link(ws, id, dialer, this.now(), this.timing, {
             request: (op, params) => this.answer(op, params),
             notice: () => void this.pull(peer),
@@ -633,7 +957,7 @@ export class NetworkLinks {
             const loser = keepCurrent ? link : current;
             if (keepCurrent) {
                 loser.close(LINK_CLOSE.duplicate, "Another link to this computer is kept");
-                return;
+                return true;
             }
             // first, so the old link's close isn't taken for the peer going; its pull fails, and the new link's (queued behind it) takes over
             peer.link = link;
@@ -646,8 +970,10 @@ export class NetworkLinks {
         peer.lastDialError = null;
         this.clearTimers(peer);
         void this.saveSeen(peer);
+        link.begin(early);
         void this.pull(peer);
         this.changed();
+        return true;
     }
 
     private linkClosed(peer: Peer, link: Link, code: number, reason: string): void {
@@ -758,7 +1084,7 @@ export class NetworkLinks {
                 },
             });
         }
-        return { self: this.self, listening: this.options.listening, held: store.heldCount, peers };
+        return { self: this.self, listening: this.options.listening, held: store.heldCount, unproven: this.unprovenCount, peers };
     }
 
     private reachOf(id: string, peer: Peer | undefined, hasAddress: boolean): Reach {

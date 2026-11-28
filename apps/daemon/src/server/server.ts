@@ -2,7 +2,7 @@
 // WebSocket listeners), how it ends (daemonLifecycle), and the port retry
 // that reclaims a port from this computer's own stale daemon.
 import * as http from "http";
-import type * as tls from "tls";
+import * as https from "https";
 import * as path from "path";
 import * as crypto from "crypto";
 import { WebSocketServer } from "ws";
@@ -37,7 +37,6 @@ import { Roster } from "../network/roster";
 import { NETWORK_DIR, RosterRecords } from "../network/rosterStore";
 import { LINK_PATH, NetworkLinks } from "../network/links";
 import { importPairedComputers } from "../network/importPairedComputers";
-import { closeTlsListener, createTlsListener, type TlsListener } from "./tlsListener";
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
@@ -60,8 +59,7 @@ export interface ServerOptions {
 }
 
 export interface ServerInstance {
-    /** the listener: its "close" is the daemon's servers having closed */
-    server: http.Server | tls.Server;
+    server: http.Server | https.Server;
     wss: WebSocketServer;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
@@ -223,8 +221,9 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
             } catch { res.destroy(); }
         }
     };
-    const tlsListener = tlsIdentity ? createTlsListener(tlsIdentity, onRequest) : null;
-    const server: http.Server | tls.Server = tlsListener?.server ?? http.createServer(onRequest);
+    const server = tlsIdentity
+        ? https.createServer({ key: tlsIdentity.key, cert: tlsIdentity.cert }, onRequest)
+        : http.createServer(onRequest);
     const localServer = tlsIdentity ? http.createServer(onRequest) : null;
     // An upload that waits for a go-ahead (Expect: 100-continue) and
     // declares more than the upload cap is refused before its body
@@ -244,16 +243,16 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
     };
 
     const wss = new WebSocketServer({ noServer: true });
-    for (const listener of [tlsListener?.http ?? (server as http.Server), localServer]) {
+    for (const listener of [server, localServer]) {
         if (!listener) continue;
         listener.on("checkContinue", onCheckContinue);
         listener.on("upgrade", (req, socket, head) => {
-            // A link proves who it is with its daemon certificate, which a
-            // browser can't present, so the Host check that guards browsers
-            // isn't its gate: membership is (network/links.ts). Only the TLS
-            // listener reads a certificate.
+            // A link proves it is a member's daemon with a signature by that
+            // daemon's key (network/links.ts), which no browser holds, so the
+            // Host check that guards browsers isn't its gate. Links are made
+            // only over TLS: the dialer pins this computer's key.
             if ((req.url ?? "").split("?")[0] === LINK_PATH) {
-                if (listener === tlsListener?.http) config.network.accept(req, socket, head);
+                if (tlsIdentity && listener === server) config.network.accept(req, socket, head);
                 else socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
                 return;
             }
@@ -272,13 +271,7 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
         });
     }
     setupWebSocketServer(wss, engine, auth, { roster: config.roster, staticToken });
-    return { server, tlsListener, localServer, wss };
-}
-
-/** closes the listener, as an https server's close would when it is the TLS one */
-function closeListener(server: http.Server | tls.Server, tlsListener: TlsListener | null, callback?: (err?: Error) => void): void {
-    if (tlsListener) closeTlsListener(tlsListener, callback);
-    else server.close(callback);
+    return { server, localServer, wss };
 }
 
 interface DaemonParts {
@@ -286,8 +279,7 @@ interface DaemonParts {
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
     panelServices: PanelServicesManager;
-    server: http.Server | tls.Server;
-    tlsListener: TlsListener | null;
+    server: http.Server | https.Server;
     localServer: http.Server | null;
     wss: WebSocketServer;
     removeHandshake: () => void;
@@ -304,7 +296,7 @@ interface DaemonParts {
 //   services and workloads are killed, unless a signal already chose to
 //   leave the workloads running.
 function daemonLifecycle(parts: DaemonParts) {
-    const { config, engine, auth, panelServices, server, tlsListener, localServer, wss, removeHandshake } = parts;
+    const { config, engine, auth, panelServices, server, localServer, wss, removeHandshake } = parts;
     let advertisement: AdvertisementHandle | null = null;
     let leavingWorkloads = false;
     let stopped = false;
@@ -365,7 +357,7 @@ function daemonLifecycle(parts: DaemonParts) {
             for (const client of wss.clients) client.close(1001, "Paperboard Server stopped");
             wss.close();
             localServer?.close();
-            closeListener(server, tlsListener, () => {
+            server.close(() => {
                 if (!config.noAuth && !config.headless) {
                     process.exit(0);
                 }
@@ -417,11 +409,11 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
         const engine = new PaperCraneEngine(undefined, panelServices);
         const auth = new PaperCraneAuth(noAuth, undefined, undefined);
         if (staticToken && !noAuth) auth.injectToken(staticToken, "host");
-        const { server, tlsListener, localServer, wss } = createListeners(config, engine, auth);
+        const { server, localServer, wss } = createListeners(config, engine, auth);
         const handshakeFile = craneHandshakePath();
         const startId = crypto.randomUUID();
         const lifecycle = daemonLifecycle({
-            config, engine, auth, panelServices, server, tlsListener, localServer, wss,
+            config, engine, auth, panelServices, server, localServer, wss,
             removeHandshake: () => removeCraneHandshake(handshakeFile, startId),
         });
 
@@ -431,7 +423,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 for (const client of wss.clients) client.terminate();
                 wss.close();
                 localServer?.close();
-                closeListener(server, tlsListener);
+                server.close();
             } catch (closeErr) { logger.warn("[Paperboard Server] the servers that failed to listen did not close:", closeErr); }
             engine.releaseAllClients();
             try { auth.dispose(); }
