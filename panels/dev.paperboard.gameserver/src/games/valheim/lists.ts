@@ -4,6 +4,7 @@ import { SerialQueue } from "@mileniumhq/paperapi";
 import { writeFileAtomic } from "@mileniumhq/paperapi/fs";
 import { unlessMissing } from "../../service/failures";
 import type { ValheimPlayer } from "./log";
+import { entryIs } from "./ids";
 
 /**
  * Valheim's three lists in its save folder, one entry a line, `//` lines
@@ -25,12 +26,6 @@ export const isList = (value: unknown): value is ValheimList => typeof value ===
 export function listEntry(value: unknown): string {
     if (typeof value !== "string" || !value.trim() || /[\r\n\0]/.test(value) || value.trim().startsWith("//") || value.length > 80) throw new Error("A list entry is one player's id or name");
     return value.trim();
-}
-
-/** Whether a list entry is this player: the server matches the id, a bare Steam id for a Steam account, and a banned name. */
-export function entryIs(entry: string, player: { name?: string; id?: string | null }, list: ValheimList): boolean {
-    if (player.id && (entry === player.id || (player.id.startsWith("Steam_") && entry === player.id.slice("Steam_".length)))) return true;
-    return list === "banned" && !!player.name && entry === player.name;
 }
 
 /** A player Paperboard has seen join, kept beside the server's lists. */
@@ -61,7 +56,7 @@ export class ValheimLists {
             const file = this.file(list);
             const text = await unlessMissing(fs.readFile(file, "utf8"), null);
             const lines = text === null ? [LISTS[list].comment] : text.split(/\r?\n/).filter((line) => line.trim());
-            const kept = lines.filter((line) => line.trim().startsWith("//") || !line.trim() || !entryIs(line.trim(), player, list));
+            const kept = lines.filter((line) => line.trim().startsWith("//") || !line.trim() || !entryIs(line.trim(), player, list === "banned"));
             if (on) {
                 const entry = player.id ?? (list === "banned" ? player.name : undefined);
                 if (!entry) throw new Error("Valheim lists admins and permitted players by their platform id, which this player's connection never named");

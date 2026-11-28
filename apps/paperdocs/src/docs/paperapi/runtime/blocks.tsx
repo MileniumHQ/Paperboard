@@ -271,7 +271,7 @@ interface BlockContext {
         {
             id: "nightly-restart",
             name: "Restart a game server every night",
-            description: "Every day at 04:00, restarts the server you pick",
+            description: "Every day at 04:00, restarts your first game server. Pick another on its block",
             icon: "restart_alt",
             // offered once a server exists; the Server input starts as the first one
             needs: "server",

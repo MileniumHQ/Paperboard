@@ -1,7 +1,8 @@
-// Moves one file between a panel's storage on a computer's daemon and the
-// disk of the machine running the shell. The daemon's /panel-files route
-// owns the path check; this module owns the local side: the dialog result
-// and a save that never leaves a half-written file at the chosen path.
+// Moves one file between a panel's storage (or, for an export onComputer,
+// any file) on a computer's daemon and the disk of the machine running the shell.
+// The daemon's /panel-files route owns the path check; this module owns the
+// local side: the dialog result and a save that never leaves a half-written
+// file at the chosen path.
 // No Electron imports: Electron main and the browser-mode host share it,
 // each passing the daemon endpoint lookup (panelFileEndpoint.ts).
 import * as fs from "fs";
@@ -45,7 +46,14 @@ export interface PanelFileTransferDeps {
     endpoint: (computerId: string) => DaemonEndpoint;
 }
 
+/** An import only ever writes into the panel's storage. */
+function refuseOnComputer(req: PanelFileTransferRequest): void {
+    if (req.onComputer) throw new PanelFileTransferError("invalid-request", "Only an export can name a file anywhere on the computer");
+}
+
 function filePath(req: PanelFileTransferRequest): string {
+    // an absolute path rides in the query: its spelling is the computer's, and a URL path would normalize it
+    if (req.onComputer) return `/panel-files/${encodeURIComponent(req.panelId)}?path=${encodeURIComponent(req.path)}`;
     const segments = req.path.replace(/^[/\\]+/, "").split("/").map(encodeURIComponent);
     return `/panel-files/${encodeURIComponent(req.panelId)}/${segments.join("/")}`;
 }
@@ -144,6 +152,7 @@ async function writePanelFile(
     body: Readable,
     size: number,
 ): Promise<void> {
+    refuseOnComputer(req);
     // the daemon answers a file over its cap before any byte is sent: a
     // refusal that arrives while the body is still going out is lost to a
     // connection reset on Windows, leaving only "ECONNRESET" for the reason
@@ -319,6 +328,7 @@ export async function runPanelExport(args: unknown, deps: PanelFileTransferDeps)
 export async function runPanelImport(args: unknown, deps: PanelFileTransferDeps): Promise<PanelFileTransferResult> {
     try {
         const req = parsePanelFileTransferRequest(args);
+        refuseOnComputer(req);
         const endpoint = deps.endpoint(req.computerId);
         if (req.selection === "file") {
             const source = await deps.pickOpenPath({ filters: req.filters });

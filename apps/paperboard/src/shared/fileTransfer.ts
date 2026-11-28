@@ -1,6 +1,7 @@
 // The save and open dialogs a panel asks the shell for. The shell fills in
 // computerId and panelId from the frame that asked; the panel only names a
-// path in its own file storage and how the dialog should look. Electron
+// path (in its own file storage, or for an export onComputer, anywhere on
+// that computer) and how the dialog should look. Electron
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
@@ -17,8 +18,10 @@ export interface ImportedPanelFile {
 export interface PanelFileTransferRequest {
     computerId: string;
     panelId: string;
-    /** a path in the panel's own file storage on that computer */
+    /** a path in the panel's own file storage on that computer, or, with onComputer, an absolute path anywhere on it */
     path: string;
+    /** export only: path names a file anywhere on the computer, not in the panel's storage */
+    onComputer: boolean;
     /** import only */
     selection: PanelImportSelection;
     /** save only: the file name the dialog starts with */
@@ -44,6 +47,14 @@ export class PanelFileTransferError extends Error {
 }
 
 export const PANEL_FILE_PATH_MAX = 1024;
+
+/**
+ * Whether a path is absolute on any computer's system, which can differ
+ * from this one's: "/home/x", "C:\\x", "\\\\server\\share".
+ */
+function isAbsoluteAnywhere(p: string): boolean {
+    return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
+}
 
 /** A name from the user's disk that may become one path segment in a panel's storage. */
 export function isImportableName(name: string): boolean {
@@ -89,12 +100,15 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
     const path = field(args, "path");
     const suggestedName = field(args, "suggestedName");
     const selection = field(args, "selection") ?? "file";
+    const onComputer = field(args, "onComputer") ?? false;
     // which computers exist is the connection pool's answer, not a pattern's
     if (typeof computerId !== "string" || !computerId || computerId.length > 128) invalid("Invalid computer id");
     if (!isPanelId(panelId)) invalid("Invalid panel id");
     if (typeof path !== "string" || !path.trim() || path.length > PANEL_FILE_PATH_MAX || path.includes("\0")) {
         invalid(`path must be a file path in the panel's storage, at most ${PANEL_FILE_PATH_MAX} characters`);
     }
+    if (typeof onComputer !== "boolean") invalid("onComputer must be true or false");
+    if (onComputer && !isAbsoluteAnywhere(path as string)) invalid("A file anywhere on the computer is named by its absolute path");
     if (selection !== "file" && selection !== "files" && selection !== "folder") invalid("selection must be file, files or folder");
     if (
         suggestedName !== undefined &&
@@ -106,6 +120,7 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
         computerId,
         panelId,
         path,
+        onComputer,
         selection,
         ...(suggestedName !== undefined ? { suggestedName: suggestedName as string } : {}),
         filters: parseFilters(field(args, "filters")),

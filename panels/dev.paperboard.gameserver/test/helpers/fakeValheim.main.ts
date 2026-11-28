@@ -69,7 +69,8 @@ if (fresh) {
         say("Loading: Done. Total seconds sinze ZNet start: 1.2, Genloc duration: 400 ms");
     }, 400);
 }
-if (arg("-crossplay") !== undefined) {
+// a switch, which can be the last argument
+if (args.includes("-crossplay")) {
     setTimeout(() => {
         say(`Session "${arg("-name")}" registered with join code 150661`);
         say(`Session "${arg("-name")}" with join code 150661 and IP 203.0.113.7:${port} is active with 0 player(s)`);

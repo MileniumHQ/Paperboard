@@ -1,24 +1,24 @@
 import { createMemo, Show } from "solid-js";
-import { createRead, PaperAvatar, PaperError, PaperText } from "@mileniumhq/paperui";
+import { createPolling, createRead, PaperAvatar, PaperError, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { factorio } from "./index";
-import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
+import { createUptime, METRICS_MS, overviewStats } from "../../components/overviewStats";
 
 export default function FactorioOverview() {
     const { calls, gameSettings, serverStatus } = useServer();
-    // the world and its mods change as the server starts and stops; evolution only while it runs
+    // one reader: the world and its mods change as the server starts and stops, and evolution is asked again while it runs
     const status = createRead(() => calls.factorioStatus(), { source: serverStatus, message: errorMessage });
-    const metrics = createMetrics(() => calls.factorioStatus());
+    createPolling(() => (serverStatus() === "online" ? status.reload() : undefined), METRICS_MS);
     const uptime = createUptime();
     const name = () => String(gameSettings().name ?? "");
-    const world = () => metrics.value()?.world ?? status.value()?.world ?? null;
+    const world = () => status.value()?.world ?? null;
     const evolution = createMemo(() => {
-        const value = metrics.value()?.evolution;
+        const value = status.value()?.evolution;
         return value === null || value === undefined ? "…" : `${(value * 100).toFixed(1)}%`;
     });
-    const failure = () => metrics.error() || (status.error() ?? "");
+    const failure = () => status.error() ?? "";
 
     return (
         <ServerOverview
@@ -38,7 +38,7 @@ export default function FactorioOverview() {
                     <PaperError
                         title="Couldn't read the server's status"
                         error={err()}
-                        action={{ label: "Try again", disabled: metrics.loading() || status.loading(), onClick: () => void Promise.all([metrics.reload(), status.reload()]) }}
+                        action={{ label: "Try again", disabled: status.loading(), onClick: () => void status.reload() }}
                     />
                 )}
             </Show>

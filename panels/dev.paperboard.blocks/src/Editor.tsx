@@ -117,7 +117,8 @@ export default function Editor(props: {
             showNextRun(block, !block.isEnabled() ? null : !enabled ? SCHEDULE_OFF : at === undefined ? null : nextRunText(at, now));
         }
     }
-    createEffect(on([() => props.projects.state().nextRuns[props.projectId], () => props.project().enabled, flows.loaded, clock], () => showNextRuns()));
+    // the store reconciles the times in place, so each hat's is tracked, not the project's object of them
+    createEffect(on([() => ({ ...props.projects.state().nextRuns[props.projectId] }), () => props.project().enabled, flows.loaded, clock], () => showNextRuns()));
 
     function showErrors(next: PanelState): void {
         if (!workspace) return;

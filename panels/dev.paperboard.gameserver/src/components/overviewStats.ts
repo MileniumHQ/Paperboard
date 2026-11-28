@@ -42,7 +42,8 @@ export function createUptime(): () => number {
     };
 }
 
-const METRICS_MS = 5_000;
+/** how often a running server's own figures are asked for */
+export const METRICS_MS = 5_000;
 
 /**
  * A running server's own figures, asked of the game's call every few seconds

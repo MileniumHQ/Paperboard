@@ -1,7 +1,8 @@
 // A clock a test turns by hand. `advance` moves time on and runs each timer
 // as its time comes, letting the promises it starts settle; `sleep` moves
 // time on without running any, as a computer that slept: its timers come due
-// together when it wakes.
+// together when it wakes; `setBack` turns the wall clock back while the timers
+// go on counting, as an NTP fix of a clock that ran ahead.
 import type { Clock } from "../../src/lib/scheduler";
 
 /** Lets every promise that is ready run, and the ones they start. */
@@ -46,6 +47,11 @@ export function testClock(start: Date | number) {
         /** Moves time on by `ms` without running a timer: the computer slept. */
         sleep(ms: number): void {
             now += ms;
+        },
+        /** Turns the wall clock back by `ms`; a timer still fires as long after it was set. */
+        setBack(ms: number): void {
+            now -= ms;
+            for (const timer of timers.values()) timer.at -= ms;
         },
         pending: () => timers.size,
     };

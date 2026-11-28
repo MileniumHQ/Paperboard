@@ -8,6 +8,7 @@ import { loadServerOptions } from "./options";
 import { oomKillCount } from "./memory";
 import { TRIGGER_IDS } from "./contract";
 import { report } from "../games/serviceKit";
+import { portMoveText } from "../core/portNames";
 import { afterCrash, cancelStopRequest, classifyExit, markStarting, markStopRequested, updateBeforeStart } from "./automation";
 
 export function cancelReadiness(ctx: Server): void {
@@ -219,7 +220,7 @@ async function launchServer(ctx: Server, carry: GameServerState["serverEntries"]
                 },
                 ...moves.map((move) => ({
                     type: "warn" as const,
-                    content: `[Server] Port ${move.from} was taken, so this run of ${move.label} uses ${move.to}.`,
+                    content: `[Server] ${portMoveText(move, true)}.`,
                 })),
             ].slice(-MAX_BUFFERED_ENTRIES),
         });

@@ -62,6 +62,14 @@
     text-decoration: none;
 }
 
+/* an action entry is a button that looks like any other entry */
+.action {
+    width: 100%;
+    background: none;
+    font: inherit;
+    text-align: start;
+}
+
 .PaperMenuItem,
 .PaperMenuItem * {
     transition:

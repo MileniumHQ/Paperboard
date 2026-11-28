@@ -7,7 +7,7 @@ process.env.TZ = "America/New_York";
 import { describe, expect, test } from "bun:test";
 import { BUILTIN } from "../src/lib/names";
 import { cleanTime, nextRun, scheduleOf } from "../src/lib/schedule";
-import { CATCH_UP_DELAY_MS, SCHEDULES_FILE } from "../src/lib/scheduler";
+import { CATCH_UP_DELAY_MS, MAX_SLEEP_MS, SCHEDULES_FILE } from "../src/lib/scheduler";
 import { WAIT, flows, say, setup, type Draft } from "./helpers/runtime";
 import { testClock } from "./helpers/clock";
 
@@ -112,6 +112,53 @@ describe("the service's schedules", () => {
         expect(runs(back, id)).toBe(2);
     });
 
+    test("a schedule that missed nothing runs on time in the service's first minute", async () => {
+        const s = await serviceAt("2026-06-10T03:59:30");
+        const id = await s.make("Nightly", flows(everyDay("04:00", say("ran"))));
+        expect(nextOf(s, id).map(at)).toEqual(["2026-06-10 04:00 EDT"]);
+        await s.time.to(local("2026-06-10T04:00:01"));
+        expect(runs(s, id)).toBe(1);
+        // and one restored from the file, with its next run still to come
+        const after = await serviceAt("2026-06-11T03:59:30", s.files);
+        await after.time.to(local("2026-06-11T04:00:01"));
+        expect(runs(after, id)).toBe(1);
+    });
+
+    test("a clock set back doesn't hold the schedules back by as long", async () => {
+        const s = await serviceAt("2026-06-10T12:00:00");
+        const id = await s.make("Hourly", flows(every(1, "HOURS", say("ran"))));
+        await s.time.advance(HOUR + 1000);
+        expect(runs(s, id)).toBe(1);
+        // the clock ran three hours ahead, and is put right
+        s.time.setBack(3 * HOUR);
+        // the scheduler looks at the clock within half a minute, and counts the hour from then
+        await s.time.advance(MAX_SLEEP_MS);
+        expect(nextOf(s, id)[0]! - s.time.now()).toBeLessThanOrEqual(HOUR);
+        await s.time.advance(HOUR);
+        expect(runs(s, id)).toBe(2);
+        // the file has no anchor ahead of the clock either
+        const anchors = (s.files.get(SCHEDULES_FILE) as { schedules: Record<string, Record<string, { anchor: number }>> }).schedules[id]!;
+        expect(Object.values(anchors).every((a) => a.anchor <= s.time.now())).toBe(true);
+    });
+
+    test("a clock set back while a missed run waits for the catch-up minute still runs it a minute in", async () => {
+        const s = await serviceAt("2026-06-10T03:50:00");
+        const id = await s.make("Nightly", flows(everyDay("04:00", say("ran"))));
+        const back = await serviceAt("2026-06-13T09:00:00", s.files);
+        back.time.setBack(3 * HOUR);
+        await back.time.advance(MAX_SLEEP_MS + CATCH_UP_DELAY_MS);
+        expect(runs(back, id)).toBe(1);
+    });
+
+    test("a schedule made after the clock is set back behind the service's start runs on time, with no catch-up minute", async () => {
+        const s = await serviceAt("2026-06-10T12:00:00");
+        // the clock was three hours ahead when the service started, and is put right
+        s.time.setBack(3 * HOUR);
+        const id = await s.make("Often", flows(every(10, "SECONDS", say("ran"))));
+        await s.time.advance(10_000 + 1000);
+        expect(runs(s, id)).toBe(1);
+    });
+
     test("after the computer sleeps through many runs, it runs once when it wakes, then counts from then", async () => {
         const s = await serviceAt("2026-06-10T12:00:00");
         const id = await s.make("Poll", flows(every(10, "MINUTES", say("ran"))));
@@ -162,6 +209,18 @@ describe("the service's schedules", () => {
         expect((s.files.get(SCHEDULES_FILE) as { schedules: object }).schedules).toEqual({});
         await s.time.to(local("2026-06-11T12:00:00"));
         expect(runs(s, id)).toBe(0);
+    });
+
+    test("the file lets go of a gone project's schedule, though a copy's hat has its id", async () => {
+        const s = await serviceAt("2026-06-10T03:50:00");
+        const id = await s.make("Nightly", flows(everyDay("04:00", say("ran"))));
+        const file = structuredClone(s.files.get(SCHEDULES_FILE)) as { schedules: Record<string, unknown> };
+        // a copy made with the same block ids, gone while the service was away
+        file.schedules["p-gone-copy"] = file.schedules[id];
+        s.files.set(SCHEDULES_FILE, file);
+        const after = await serviceAt("2026-06-10T03:55:00", s.files);
+        await after.time.advance(0);
+        expect(Object.keys((after.files.get(SCHEDULES_FILE) as { schedules: object }).schedules)).toEqual([id]);
     });
 
     test("a run still going when the next is due skips that one, and says so", async () => {

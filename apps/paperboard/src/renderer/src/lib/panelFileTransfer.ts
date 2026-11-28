@@ -24,6 +24,7 @@ export interface PanelFileTransferMessage {
     suggestedName?: unknown;
     filters?: unknown;
     selection?: unknown;
+    onComputer?: unknown;
 }
 
 /** routing fields only; null for anything that is not a dialog request */
@@ -41,6 +42,7 @@ export function parseFileTransferMessage(data: unknown): PanelFileTransferMessag
         suggestedName: message.suggestedName,
         filters: message.filters,
         selection: message.selection,
+        onComputer: message.onComputer,
     };
 }
 
@@ -63,6 +65,7 @@ export async function runPanelFileTransfer(
         suggestedName: message.suggestedName,
         filters: message.filters,
         selection: message.selection,
+        onComputer: message.onComputer,
     };
     try {
         if (!isBrowserShell()) {

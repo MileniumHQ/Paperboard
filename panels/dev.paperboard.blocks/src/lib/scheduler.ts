@@ -5,9 +5,10 @@
 // before its flow starts, so a restart never runs it twice. A run missed while
 // the service was away, or the computer slept, runs once when it is back (a
 // minute after the service starts, so the panels it drives are up too) and the
-// schedule goes on from then: never a run for every one it missed. A schedule
-// turned off, edited, or in a project turned off or deleted lets go of its
-// anchor; switched on again, it starts from then.
+// schedule goes on from then: never a run for every one it missed. A clock set
+// back starts the schedules ahead of it from then, so none waits out the time
+// it was set back by. A schedule turned off, edited, or in a project turned off
+// or deleted lets go of its anchor; switched on again, it starts from then.
 import { errorMessage, isRecord } from "@mileniumhq/paperapi";
 import { HeldQueue } from "./heldQueue";
 import type { ProjectStorage } from "./projects";
@@ -47,6 +48,8 @@ interface Armed {
     signature: string;
     /** when it last ran, or was switched on */
     anchor: number;
+    /** a run it missed while the service was away waits until then, so the panels it drives are up */
+    notBefore?: number;
 }
 
 type Anchors = Record<string, Record<string, { signature: string; anchor: number }>>;
@@ -95,13 +98,14 @@ export class Scheduler {
     private readonly going = new Set<string>();
     // what each schedule that can't run last said, so an edit elsewhere doesn't say it again
     private refused = new Map<string, string>();
-    private notBefore = 0;
+    // when the service read the anchors: a schedule whose next run was before then missed it
+    private openedAt = 0;
 
     constructor(private readonly deps: SchedulerDeps) {}
 
     /** Reads when each schedule last ran. A file that can't be read is said, and the schedules start from now. */
     async open(): Promise<void> {
-        this.notBefore = this.deps.clock.now() + CATCH_UP_DELAY_MS;
+        this.openedAt = this.deps.clock.now();
         try {
             this.stored = readAnchors(await this.deps.storage.get(SCHEDULES_FILE));
             this.unread = null;
@@ -135,19 +139,19 @@ export class Scheduler {
                 const signature = JSON.stringify(schedule);
                 const armed = this.armed.get(key);
                 if (armed && armed.signature === signature) {
-                    // the same schedule stays the same one, so a run being noted as this runs still starts.
-                    // A clock set back leaves no anchor ahead of now
-                    if (armed.anchor > now) {
-                        armed.anchor = now;
-                        changed = true;
-                    }
+                    // the same schedule stays the same one, so a run being noted as this runs still starts
                     wanted.set(key, armed);
                     continue;
                 }
                 const stored = armed ? undefined : this.stored[project]?.[hat.id];
-                const anchor = stored && stored.signature === signature ? Math.min(stored.anchor, now) : now;
+                const kept = stored && stored.signature === signature;
+                const anchor = kept ? Math.min(stored.anchor, now) : now;
                 if (anchor !== stored?.anchor) changed = true;
-                wanted.set(key, { project, hat: hat.id, schedule, signature, anchor });
+                const next: Armed = { project, hat: hat.id, schedule, signature, anchor };
+                // only a schedule read from the file can have missed a run while the service was away;
+                // a new or edited one counts from now, even on a clock set back behind the start
+                if (kept && nextRun(schedule, anchor) <= this.openedAt) next.notBefore = this.openedAt + CATCH_UP_DELAY_MS;
+                wanted.set(key, next);
             }
         }
         if (this.unread) {
@@ -159,8 +163,9 @@ export class Scheduler {
         }
         if ([...this.armed.keys()].some((key) => !wanted.has(key))) changed = true;
         // anchors read for schedules that are gone are written away
-        const leftovers = Object.values(this.stored).some((hats) => Object.keys(hats).some((hat) => ![...wanted.values()].some((a) => a.hat === hat)));
+        const leftovers = Object.entries(this.stored).some(([project, hats]) => Object.keys(hats).some((hat) => !wanted.has(keyOf(project, hat))));
         this.armed = wanted;
+        if (this.clamp(now)) changed = true;
         this.refused = refused;
         this.stored = {};
         if (changed || leftovers) this.write().catch((err: unknown) => this.writeFailed(err));
@@ -194,12 +199,34 @@ export class Scheduler {
         return nextRun(a.schedule, a.anchor);
     }
 
+    /** When it runs: its next run, or once the service has been up a minute for one it missed. */
+    private whenOf(a: Armed): number {
+        return Math.max(this.nextOf(a), a.notBefore ?? -Infinity);
+    }
+
+    /**
+     * A clock set back leaves no anchor ahead of now, and no run it missed waiting longer than
+     * the catch-up delay: otherwise each would wait out the time the clock went back by. Whether
+     * an anchor moved, so the file needs writing.
+     */
+    private clamp(now: number): boolean {
+        let moved = false;
+        for (const a of this.armed.values()) {
+            if (a.anchor > now) {
+                a.anchor = now;
+                moved = true;
+            }
+            if (a.notBefore !== undefined && a.notBefore > now + CATCH_UP_DELAY_MS) a.notBefore = now + CATCH_UP_DELAY_MS;
+        }
+        return moved;
+    }
+
     private reschedule(): void {
         this.stop();
         const next: Record<string, Record<string, number>> = {};
         let soonest = Infinity;
         for (const a of this.armed.values()) {
-            const at = Math.max(this.nextOf(a), this.notBefore);
+            const at = this.whenOf(a);
             (next[a.project] ??= {})[a.hat] = at;
             soonest = Math.min(soonest, at);
         }
@@ -212,14 +239,19 @@ export class Scheduler {
     private async tick(): Promise<void> {
         this.timer = null;
         const now = this.deps.clock.now();
-        const due = now < this.notBefore ? [] : [...this.armed.values()].filter((a) => this.nextOf(a) <= now);
+        const moved = this.clamp(now);
+        const due = [...this.armed.values()].filter((a) => this.whenOf(a) <= now);
         for (const a of due) {
             const next = this.nextOf(a);
             // on time, the next run is counted from this one's; one missed, from now: it runs once, not once per run missed
             a.anchor = nextRun(a.schedule, next) <= now ? now : next;
+            delete a.notBefore;
         }
         this.reschedule();
-        if (!due.length) return;
+        if (!due.length) {
+            if (moved) this.write().catch((err: unknown) => this.writeFailed(err));
+            return;
+        }
         // noted before the flows start, so a restart from here on never runs them again
         let unwritten: string | null = null;
         try {

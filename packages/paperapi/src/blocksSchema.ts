@@ -516,7 +516,9 @@ function assertTemplateInputs(inputs: unknown, what: string): void {
     if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) throw new Error(`${what} inputs must be an object of values`);
     for (const [key, value] of Object.entries(inputs)) {
         if (!ID.test(key)) throw new Error(`${what} input "${key}" must be named with lowercase letters, digits and dashes`);
-        if (!["string", "number", "boolean"].includes(typeof value)) throw new Error(`${what} input "${key}" must start as text, a number or true/false`);
+        if (!["string", "number", "boolean"].includes(typeof value) || (typeof value === "number" && !Number.isFinite(value))) {
+            throw new Error(`${what} input "${key}" must start as text, a number or true/false`);
+        }
     }
 }
 

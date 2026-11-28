@@ -6,6 +6,7 @@ import PlayerAvatar from "../../components/PlayerAvatar";
 import PlayerPicturesFailure from "../../components/PlayerPicturesFailure";
 import { createSteamPictures } from "../../lib/steamAvatars";
 import { useServer } from "../../lib/server";
+import { entryIs, isPlatformId } from "./ids";
 
 interface Player extends RosterPlayer {
     /** the platform id ("Steam_7656…"); null for a name only the ban list holds */
@@ -14,10 +15,6 @@ interface Player extends RosterPlayer {
     permitted: boolean;
 }
 
-/** Whether a list entry is this player, as the server matches it: the id, a Steam account's bare number, or a banned name. */
-const entryIs = (entry: string, player: { name: string; id: string | null }, byName: boolean) =>
-    (player.id !== null && (entry === player.id || (player.id.startsWith("Steam_") && entry === player.id.slice(6)))) || (byName && entry === player.name);
-const isPlatformId = (entry: string) => /^[A-Za-z]{2,16}_[A-Za-z0-9-]+$/.test(entry);
 const asPlatformId = (entry: string) => (/^\d{17}$/.test(entry) ? `Steam_${entry}` : isPlatformId(entry) ? entry : null);
 
 export default function ValheimPlayers() {

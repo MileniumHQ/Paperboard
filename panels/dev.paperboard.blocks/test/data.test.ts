@@ -1,8 +1,9 @@
 // Data: what a project's flows keep by key. It is the real store over files
-// in memory: writes in order, counts that never lose a run, limits, a
-// restart, a backup restored, and a deleted project's Data going with it.
+// in memory: writes in order, counts that never lose a run, limits (measured
+// as the daemon writes the file), a restart, a backup restored, and a deleted
+// project's Data going with it.
 import { describe, expect, test } from "bun:test";
-import { DataStore, MAX_DATA_KEY, projectDataPath } from "../src/lib/data";
+import { DataStore, MAX_DATA_BYTES, MAX_DATA_KEY, MAX_DATA_KEYS, projectDataPath } from "../src/lib/data";
 import { BUILTIN } from "../src/lib/names";
 import type { ProjectStorage } from "../src/lib/projects";
 import { flows, onRun, setup, text, until, type Draft } from "./helpers/runtime";
@@ -84,6 +85,66 @@ describe("a project's Data", () => {
         await expect(data.set(P, "big", "x".repeat(600 * 1024))).rejects.toThrow("at most 512 KB");
         await expect(data.change(P, "name", 1).then(() => data.set(P, "name", "alice")).then(() => data.change(P, "name", 1))).rejects.toThrow('"name" holds the string "alice", not a number');
         expect(await data.keys(P)).toEqual(["kept", "name"]);
+    });
+
+    test("a count is held to the limits too", async () => {
+        const data = new DataStore(memoryStorage());
+        for (let i = 0; i < MAX_DATA_KEYS; i++) await data.change(P, `player ${i}`, 1);
+        await expect(data.change(P, "one more", 1)).rejects.toThrow(`at most ${MAX_DATA_KEYS} keys`);
+        expect(await data.has(P, "one more")).toBe(false);
+        // a key already kept still counts
+        expect(await data.change(P, "player 0", 1)).toBe(2);
+        await expect(data.change(P, "x".repeat(MAX_DATA_KEY + 1), 1)).rejects.toThrow(`at most ${MAX_DATA_KEY} characters`);
+    });
+
+    test("the size is the file as the daemon writes it, so a value let in is never refused at the write", async () => {
+        // the daemon refuses a panel's file past 1 MiB of pretty-printed UTF-8
+        const base = memoryStorage();
+        const daemonLike: ProjectStorage = {
+            get: base.get,
+            set: async (value, path) => {
+                if (new TextEncoder().encode(JSON.stringify(value, null, 2)).length > 1024 * 1024) throw new Error("exceeds the 1 MiB payload cap");
+                await base.set(value, path);
+            },
+        };
+        const data = new DataStore(daemonLike);
+        // about 300 KB as compact JSON, and over a MiB as the file is written
+        await expect(data.set(P, "numbers", Array.from({ length: 150_000 }, () => 0))).rejects.toThrow(`at most ${MAX_DATA_BYTES / 1024} KB`);
+        // text of two-byte letters is twice its length
+        await expect(data.set(P, "text", "é".repeat(300 * 1024))).rejects.toThrow(`at most ${MAX_DATA_BYTES / 1024} KB`);
+        expect(await data.keys(P)).toEqual([]);
+        // and the project goes on writing
+        await data.set(P, "numbers", Array.from({ length: 1000 }, () => 0));
+        expect(await data.change(P, "runs", 1)).toBe(1);
+        expect(base.files.get(projectDataPath(P))).toMatchObject({ values: { runs: 1 } });
+    });
+
+    test("a restore with a write held and a read queued ahead of it reads the backup's Data", async () => {
+        const storage = memoryStorage();
+        const data = new DataStore(storage);
+        await data.set(P, "runs", 1);
+        const backup = structuredClone(storage.files.get(projectDataPath(P)));
+        await data.set(P, "runs", 5);
+
+        await data.pause();
+        // a write held for this project, behind a first read of another
+        const held = data.set(P, "runs", 6);
+        const other = data.get("p-other", "runs");
+        await new Promise((resolve) => setImmediate(resolve));
+        storage.files.set(projectDataPath(P), backup);
+        await data.resume(true);
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const stuck = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("the read after the restore never answered")), 2000)));
+        try {
+            expect(await Promise.race([data.get(P, "runs"), stuck])).toBe(1);
+        } finally {
+            clearTimeout(timer);
+        }
+        await Promise.all([held, other]);
+        expect(storage.files.get(projectDataPath(P))).toEqual({ version: 1, values: { runs: 1 } });
+        expect(await data.change(P, "runs", 1)).toBe(2);
+        expect(storage.files.get(projectDataPath(P))).toEqual({ version: 1, values: { runs: 2 } });
     });
 
     test("a write that fails fails the block that made it, and the next write carries it", async () => {

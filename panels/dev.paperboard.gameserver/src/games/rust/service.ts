@@ -376,7 +376,6 @@ export function rustService(ctx: Server): GameService {
             const rconPort = ctx.runPort("rust-rcon", Number(saved.rconPort ?? DEFAULT_RCON_PORT));
             connect(rconPort, password);
             local.started = false;
-            players.stop();
 
             const args = [
                 "-batchmode", "-nographics", "-logfile", "-",

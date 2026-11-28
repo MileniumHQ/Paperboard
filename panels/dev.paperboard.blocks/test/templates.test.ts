@@ -26,7 +26,7 @@ const TEMPLATES: BlockTemplateDefinition[] = [
     {
         id: "nightly-restart",
         name: "Restart a server every night",
-        description: "Every day at 04:00, restarts the server you pick",
+        description: "Every day at 04:00, restarts your first game server. Pick another on its block",
         icon: "restart_alt",
         needs: "server",
         when: { everyDay: "04:00" },

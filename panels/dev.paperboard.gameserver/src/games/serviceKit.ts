@@ -87,7 +87,8 @@ const PLAYER_POLL_MS = 5_000;
  * remote console request), asked every few seconds while it runs: joins and
  * leaves are the difference from the last answer. A tick waits while a
  * request is still out, and an answer a newer request or a stop replaced is
- * dropped, so a slow answer never rewinds the list or repeats a join.
+ * dropped, so a slow answer never rewinds the list or repeats a join. The
+ * list ends with the run: nobody is online on a stopped server.
  */
 export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
     game: string;
@@ -141,18 +142,20 @@ export function playerPoller<P extends { name: string }>(ctx: Server, spec: {
         if (state.timer) clearInterval(state.timer);
         Object.assign(state, { timer: null, online: [], baseline: false, error: "", latest: state.latest + 1, asking: false });
     }
+    ctx.onRunEnd(stop);
     return {
         /** who answered online last */
         online: (): readonly P[] => state.online,
         poll,
-        /** `baseline`: the first answer is who was already there (a reattach), not who joined */
+        /**
+         * `baseline`: the first answer is who was already there (a reattach), not who joined.
+         * A start's readiness probe calls it after an await, so a stop may have landed first:
+         * a server that is not starting or online gets no timer.
+         */
         start(baseline = false) {
-            if (state.timer) return;
+            if (state.timer || (ctx.state.serverStatus !== "starting" && ctx.state.serverStatus !== "online")) return;
             state.baseline = baseline;
-            state.timer = setInterval(() => {
-                if (ctx.state.serverStatus === "offline") stop();
-                else if (!state.asking) void poll();
-            }, PLAYER_POLL_MS);
+            state.timer = setInterval(() => { if (!state.asking) void poll(); }, PLAYER_POLL_MS);
             void poll();
         },
         stop,
