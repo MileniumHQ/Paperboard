@@ -8,7 +8,8 @@ import {
     type ParentProps,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { PaperText, textStyle, type PaperTextProps } from "../PaperText";
+import { PaperText, type PaperTextProps } from "../PaperText";
+import { textStyle } from "../PaperText/style";
 import type { PaperColor, PaperTextPreset } from "../../types";
 import { cx } from "../../utils/cx";
 
