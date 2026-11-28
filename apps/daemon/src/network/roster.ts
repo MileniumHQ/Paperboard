@@ -5,16 +5,17 @@
 // daemon's own; "local" is how the app and panels name it.
 //
 // What every computer may know of a member is kept in a RosterStore
-// (rosterStore.ts). The pairing token this computer holds for a member and
-// the ids an older Paperboard gave members are this computer's alone
+// (rosterStore.ts: records in the network's record store). The pairing token
+// this computer holds for a member, the ids an older Paperboard gave members
+// and the order this computer lists them in are this computer's alone
 // (rosterPrivate.ts).
 import * as os from "os";
 import * as path from "path";
-import { logger } from "../core/logger";
 import { getDetailedOsInfo } from "../system/osInfo";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { RosterDial, RosterFacts, RosterMember, RosterView } from "@mileniumhq/paperapi/protocol";
-import { readDial, readFacts, RosterFile, ROSTER_FILE, type RosterStore } from "./rosterStore";
+import type { TlsIdentity } from "../security/tlsIdentity";
+import { NETWORK_DIR, readDial, readFacts, RosterRecords, type RosterStore } from "./rosterStore";
 import { RosterPrivate, ROSTER_PRIVATE_FILE } from "./rosterPrivate";
 import { memberIdOf } from "./memberId";
 
@@ -78,50 +79,48 @@ export class Roster {
         readonly self: string,
         private readonly store: RosterStore,
         private readonly secrets: RosterPrivate,
-        members: RosterMember[],
     ) {
-        for (const member of members) this.members.set(member.id, member);
+        for (const member of store.members()) this.members.set(member.id, member);
         this.unwatch = store.watch((id, member) => {
             if (member) this.members.set(id, member);
             else this.members.delete(id);
-            this.revision++;
-            for (const listener of this.listeners) listener();
+            this.changed();
         });
     }
 
     /**
      * The roster in `dir` (the daemon's local/ folder), with this computer
-     * in it as the member `cert` names. A computer whose daemon got a new key
-     * (its identity file was replaced) carries its name and place over to it.
+     * in it as the member `identity`'s key names. `store` is for tests; the
+     * daemon's is the record store in local/network/.
      */
-    static async open(dir: string, cert: string, store: RosterStore = new RosterFile(path.join(dir, ROSTER_FILE))): Promise<Roster> {
+    static async open(dir: string, identity: TlsIdentity, store?: RosterStore): Promise<Roster> {
         const secrets = new RosterPrivate(path.join(dir, ROSTER_PRIVATE_FILE));
-        const self = memberIdOf(cert);
-        const roster = new Roster(self, store, secrets, await store.readAll());
-        await roster.adoptSelf(cert);
+        const members = store ?? (await RosterRecords.open(path.join(dir, NETWORK_DIR), identity));
+        const roster = new Roster(memberIdOf(identity.cert), members, secrets);
+        try {
+            await roster.adoptSelf(identity.cert);
+        } catch (err) {
+            roster.close();
+            throw err;
+        }
         return roster;
     }
 
+    /**
+     * This computer is listed, first in a new list, under the certificate
+     * its daemon serves now. A token or place kept for a computer that isn't
+     * listed (a pairing a crash cut short, a record this computer can't read
+     * yet) is left as it is: it is never handed out, and it counts again if
+     * the computer comes back.
+     */
     private async adoptSelf(cert: string): Promise<void> {
-        const before = this.secrets.get().self;
-        const former = before && before !== this.self ? this.members.get(before) : undefined;
-        const mine = this.members.get(this.self);
-        if (!mine || mine.cert !== cert || former) {
-            const lowest = Math.min(0, ...[...this.members.values()].map((m) => m.order));
-            const name = mine?.name ?? former?.name;
-            await this.store.write({
-                id: this.self,
-                ...(name ? { name } : {}),
-                cert,
-                facts: mine?.facts ?? { arch: os.arch() },
-                order: mine?.order ?? former?.order ?? lowest - 1,
-            });
-            if (former) {
-                logger.warn(`[roster] this computer's daemon has a new key; it keeps the name and place it had as ${former.id}`);
-                await this.store.remove(former.id);
-            }
+        if (!this.secrets.get().order.includes(this.self)) {
+            await this.secrets.update((state) => ({ ...state, order: [this.self, ...state.order] }));
         }
-        if (before !== this.self) await this.secrets.update((state) => ({ ...state, self: this.self }));
+        const mine = this.members.get(this.self);
+        if (!mine || mine.cert !== cert) {
+            await this.store.write({ ...mine, id: this.self, cert, facts: mine?.facts ?? { arch: os.arch() } });
+        }
     }
 
     /** records what this computer is now: an OS upgrade shows without anyone asking */
@@ -132,9 +131,11 @@ export class Roster {
         await this.store.write({ ...mine, facts: checkFacts(facts) });
     }
 
-    /** the members in the person's order */
+    /** the members in this computer's order; one it has no place for yet comes after, by id */
     list(): RosterMember[] {
-        return [...this.members.values()].sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
+        const place = new Map(this.secrets.get().order.map((id, at) => [id, at]));
+        const rank = (id: string) => place.get(id) ?? Number.MAX_SAFE_INTEGER;
+        return [...this.members.values()].sort((a, b) => rank(a.id) - rank(b.id) || (a.id < b.id ? -1 : 1));
     }
 
     member(id: string): RosterMember | undefined {
@@ -154,10 +155,17 @@ export class Roster {
         return Object.hasOwn(tokens, id) ? tokens[id] : undefined;
     }
 
-    /** everything this computer's own app needs: never handed to anyone else */
+    /** everything this computer's own app needs: never handed to anyone else; a token only for a listed computer */
     view(): RosterView {
         const { tokens, aliases } = this.secrets.get();
-        return { revision: this.revision, self: this.self, members: this.list(), aliases: { ...aliases }, tokens: { ...tokens } };
+        const listed = (id: string) => this.members.has(id);
+        return {
+            revision: this.revision,
+            self: this.self,
+            members: this.list(),
+            aliases: { ...aliases },
+            tokens: Object.fromEntries(Object.entries(tokens).filter(([id]) => listed(id))),
+        };
     }
 
     onChange(listener: () => void): () => void {
@@ -165,10 +173,16 @@ export class Roster {
         return () => this.listeners.delete(listener);
     }
 
+    private changed(): void {
+        this.revision++;
+        for (const listener of this.listeners) listener();
+    }
+
     /**
-     * A computer was paired: it is added, or, paired before (the same key),
-     * given the new token and address and kept where it was, under its own
-     * name unless a new one was typed. Resolves with its member id.
+     * A computer was paired: it is added at the end, or, paired before (the
+     * same key), given the new token and address and kept where it was,
+     * under its own name unless a new one was typed. Resolves with its
+     * member id.
      */
     async pair(paired: PairedMember): Promise<string> {
         const id = memberIdOf(paired.cert);
@@ -180,15 +194,12 @@ export class Roster {
         const before = this.members.get(id);
         const kept = name ?? before?.name;
         // the token first: a computer listed is never one this computer can't sign in to
-        await this.secrets.update((state) => ({ ...state, tokens: { ...state.tokens, [id]: paired.token } }));
-        await this.store.write({
-            id,
-            ...(kept ? { name: kept } : {}),
-            dial,
-            cert: paired.cert,
-            facts,
-            order: before?.order ?? Math.max(0, ...[...this.members.values()].map((m) => m.order)) + 1,
-        });
+        await this.secrets.update((state) => ({
+            ...state,
+            tokens: { ...state.tokens, [id]: paired.token },
+            order: state.order.includes(id) ? state.order : [...state.order, id],
+        }));
+        await this.store.write({ id, ...(kept ? { name: kept } : {}), dial, cert: paired.cert, facts });
         return id;
     }
 
@@ -201,27 +212,25 @@ export class Roster {
             ...(change.dial !== undefined ? { dial: checkDial(change.dial) } : {}),
             ...(change.facts !== undefined ? { facts: checkFacts(change.facts) } : {}),
         };
-        if (JSON.stringify(next) === JSON.stringify(member)) return;
         await this.store.write(next);
     }
 
     /**
-     * The person's order. The ids must be exactly the members: a list that
-     * drops or invents one is refused, so a stale window can never lose a
-     * computer.
+     * The person's order on this computer. The ids must be exactly the
+     * members: a list that drops or invents one is refused, so a stale
+     * window can never lose a computer.
      */
     async reorder(ids: string[]): Promise<void> {
         const unique = new Set(ids);
         if (unique.size !== ids.length || ids.length !== this.members.size || ids.some((id) => !this.members.has(id))) {
             throw new Error("The computer list changed while you were reordering it. Try again.");
         }
-        for (const [order, id] of ids.entries()) {
-            const member = this.members.get(id)!;
-            if (member.order !== order) await this.store.write({ ...member, order });
-        }
+        if (this.list().every((member, at) => member.id === ids[at])) return;
+        await this.secrets.update((state) => ({ ...state, order: [...ids] }));
+        this.changed();
     }
 
-    /** forgets a member and the token this computer held for it */
+    /** forgets a member, the token this computer held for it and its place */
     async remove(id: string): Promise<void> {
         if (id === this.self) throw new Error("This computer can't be forgotten.");
         this.requireMember(id);
@@ -229,7 +238,7 @@ export class Roster {
         try {
             await this.secrets.update((state) => {
                 const { [id]: _gone, ...tokens } = state.tokens;
-                return { ...state, tokens };
+                return { ...state, tokens, order: state.order.filter((other) => other !== id) };
             });
         } catch (err) {
             throw new Error(`The computer was forgotten, but its pairing token couldn't be deleted from ${ROSTER_PRIVATE_FILE}: ${errorMessage(err)}`, { cause: err });
@@ -237,9 +246,19 @@ export class Roster {
     }
 
     // TODO(remove after v0.6): only importPairedComputers.ts adds members this way
-    /** members an older Paperboard paired, with their tokens and the ids it gave them, saved before they are listed */
-    async adoptImported(members: RosterMember[], tokens: Record<string, string>, aliases: Record<string, string>): Promise<void> {
-        await this.secrets.update((state) => ({ ...state, tokens: { ...state.tokens, ...tokens }, aliases: { ...state.aliases, ...aliases } }));
+    /**
+     * Members an older Paperboard paired, in `order` (this computer among
+     * them), with their tokens and the ids it gave them, saved before they
+     * are listed. Saving the same again changes nothing.
+     */
+    async adoptImported(members: RosterMember[], order: string[], tokens: Record<string, string>, aliases: Record<string, string>): Promise<void> {
+        await this.secrets.update((state) => ({
+            ...state,
+            tokens: { ...state.tokens, ...tokens },
+            aliases: { ...state.aliases, ...aliases },
+            order: [...order, ...state.order.filter((id) => !order.includes(id))],
+        }));
+        this.changed();
         for (const member of members) await this.store.write(member);
     }
 
@@ -251,6 +270,7 @@ export class Roster {
 
     close(): void {
         this.unwatch();
+        this.store.close();
         this.listeners.clear();
     }
 }

@@ -143,7 +143,7 @@ export async function startPaperCraneServer(
     // is in the roster, whether or not other computers can reach it yet
     const localDir = ensurePrivateDir(getLocalDir());
     const identity = loadOrCreateTlsIdentity(localDir);
-    const roster = await Roster.open(localDir, identity.cert);
+    const roster = await Roster.open(localDir, identity);
     try {
         // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
         await importPairedComputers(localDir, roster);

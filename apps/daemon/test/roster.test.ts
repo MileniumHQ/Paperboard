@@ -5,9 +5,11 @@ import type { RosterMember } from "@mileniumhq/paperapi/protocol";
 import { importPairedComputers } from "../src/network/importPairedComputers";
 import { Roster } from "../src/network/roster";
 import { memberIdOf } from "../src/network/memberId";
-import { RosterFile, ROSTER_FILE, type RosterStore } from "../src/network/rosterStore";
+import { NETWORK_DIR, RosterRecords, type RosterStore } from "../src/network/rosterStore";
 import { ROSTER_PRIVATE_FILE } from "../src/network/rosterPrivate";
-import { createTlsIdentity } from "../src/security/tlsIdentity";
+import { ROSTER_SPACE } from "../src/network/record";
+import { RecordStore } from "../src/network/store";
+import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
 import { dataDir } from "testkit/fs";
 import { startDaemon, stopDaemon } from "testkit/inproc";
 import { TEST_TIMEOUT_MS } from "testkit/wait";
@@ -25,12 +27,23 @@ const localDir = () => {
 	fs.mkdirSync(dir, { recursive: true });
 	return dir;
 };
-const open = async (dir: string, cert: string, store?: RosterStore) => {
-	const roster = await Roster.open(dir, cert, store);
+const open = async (dir: string, identity: TlsIdentity, store?: RosterStore) => {
+	const roster = await Roster.open(dir, identity, store);
 	rosters.push(roster);
 	return roster;
 };
+/** a roster over its own record store, with the store at hand to look into */
+const openWithRecords = async (dir: string, identity: TlsIdentity) => {
+	const members = await RosterRecords.open(path.join(dir, NETWORK_DIR), identity);
+	return { roster: await open(dir, identity, members), records: members.records };
+};
 const readJson = (file: string) => JSON.parse(fs.readFileSync(file, "utf8"));
+/** every file under a folder, with its bytes */
+const filesUnder = (dir: string) =>
+	fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile()).sort().map((f) => [f, fs.readFileSync(path.join(dir, f), "utf8")] as const);
+/** the roster's records as the store holds them: each member's value by its id */
+const rosterRecords = (records: RecordStore) =>
+	Object.fromEntries(records.list(ROSTER_SPACE).map((r) => [r.id, r.state === "value" ? r.value : r.state]));
 
 // what 0.4's desktop app wrote: This Computer first, renamed, then two
 // paired computers (one at its .local name and its last IP), a third paired
@@ -65,7 +78,7 @@ describe("the roster", () => {
 		expect(memberIdOf(far.cert)).toBe(id);
 		expect(memberIdOf(createTlsIdentity().cert)).not.toBe(id);
 
-		const roster = await open(dir, self.cert);
+		const roster = await open(dir, self);
 		expect(roster.self).toBe(memberIdOf(self.cert));
 		expect(await roster.pair({ cert: far.cert, token: "pc_one", name: "Far", dial: { host: "10.0.0.2", port: 45464 }, facts: { os: "linux" } })).toBe(id);
 		await roster.update(id, { dial: { host: "far.local", address: "10.0.0.3", port: 45465 } });
@@ -73,7 +86,7 @@ describe("the roster", () => {
 		expect(await roster.pair({ cert: far.cert, token: "pc_two", dial: { host: "10.0.0.4", port: 45464 }, facts: { os: "linux" } })).toBe(id);
 		roster.close();
 
-		const reopened = await open(dir, self.cert);
+		const reopened = await open(dir, self);
 		expect(reopened.self).toBe(memberIdOf(self.cert));
 		expect(reopened.list().map((m) => [m.id, m.name, m.dial])).toEqual([
 			[reopened.self, undefined, undefined],
@@ -83,57 +96,115 @@ describe("the roster", () => {
 		await expect(reopened.pair({ cert: self.cert, token: "pc_me", dial: { host: "127.0.0.1", port: 45464 }, facts: {} })).rejects.toThrow("this computer's own Paperboard server");
 	});
 
-	// Inventory: Security — the roster as stored holds no pairing token: it can be shared with every computer as it is.
-	test("nothing private is in the stored roster: tokens and old ids are in this computer's own owner-only file", async () => {
-		const dir = localDir();
-		const roster = await open(dir, createTlsIdentity().cert);
-		const far = createTlsIdentity();
-		await roster.pair({ cert: far.cert, token: "pc_secret_token", name: "Far", dial: { host: "10.0.0.2", port: 45464 }, facts: {} });
-		const stored = fs.readFileSync(path.join(dir, ROSTER_FILE), "utf8");
-		expect(stored).not.toContain("pc_secret_token");
-		expect(Object.keys(readJson(path.join(dir, ROSTER_FILE)).members[memberIdOf(far.cert)]).sort()).toEqual(["cert", "dial", "facts", "id", "name", "order"]);
-		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).tokens).toEqual({ [memberIdOf(far.cert)]: "pc_secret_token" });
-		if (process.platform !== "win32") {
-			expect(fs.statSync(path.join(dir, ROSTER_PRIVATE_FILE)).mode & 0o777).toBe(0o600);
-		}
-		// forgotten, its token goes with it
-		await roster.remove(memberIdOf(far.cert));
-		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).tokens).toEqual({});
+	// Inventory: Data loss — a new computer makes its first network key and lists itself exactly once, whatever start a crash cuts short.
+	test("a new computer makes one key epoch and its own record, once, and a crash between the two only writes the record", async () => {
+		const self = createTlsIdentity();
+		const fresh = localDir();
+		const first = await openWithRecords(fresh, self);
+		expect(first.records.networkKeys()).toMatchObject({ keys: [{ epoch: 0 }], problems: [] });
+		expect(Object.keys(rosterRecords(first.records))).toEqual([first.roster.self]);
+		const written = (await first.records.changes(null, 1000)).records.length;
+		first.roster.close();
+		// starting again writes nothing: no second epoch, no second version of this computer
+		const again = await openWithRecords(fresh, self);
+		expect((await again.records.changes(null, 1000)).records.length).toBe(written);
+		expect(again.roster.list().map((m) => m.id)).toEqual([again.roster.self]);
+
+		// the crash: the key was saved, this computer's record never was
+		const crashed = localDir();
+		const store = RecordStore.open({ dir: path.join(crashed, NETWORK_DIR), identity: self, membership: { certFor: (id) => (id === memberIdOf(self.cert) ? self.cert : null), admits: () => true } });
+		const epoch = await store.createEpoch([self.cert]);
+		const after = await openWithRecords(crashed, self);
+		expect(after.records.networkKeys().keys).toEqual([epoch]);
+		expect(after.roster.list().map((m) => [m.id, m.cert])).toEqual([[after.roster.self, self.cert]]);
+		expect(after.records.versions(ROSTER_SPACE, after.roster.self)).toHaveLength(1);
 	});
 
-	test("a reorder must name every computer; a damaged member is left out with the file's bytes kept, the rest still load", async () => {
+	// Inventory: Data loss — the computer list is the records: names, addresses and certificates come back from them after a restart.
+	test("the list survives a restart from its records alone; the order and tokens are this computer's own file", async () => {
 		const dir = localDir();
 		const self = createTlsIdentity();
-		const roster = await open(dir, self.cert);
+		const far = createTlsIdentity();
+		const { roster } = await openWithRecords(dir, self);
+		const farId = await roster.pair({ cert: far.cert, token: "pc_far", name: "Far", dial: { host: "10.0.0.2", port: 45464 }, facts: { os: "linux" } });
+		await roster.update(roster.self, { name: "Desk" });
+		await roster.reorder([farId, roster.self]);
+		roster.close();
+
+		// the private file names no computer and no address
+		const own = readJson(path.join(dir, ROSTER_PRIVATE_FILE));
+		expect(own).toEqual({ tokens: { [farId]: "pc_far" }, aliases: {}, order: [farId, memberIdOf(self.cert)] });
+		const reopened = await openWithRecords(dir, self);
+		expect(reopened.roster.list().map((m) => [m.id, m.name, m.dial, m.cert])).toEqual([
+			[farId, "Far", { host: "10.0.0.2", port: 45464 }, far.cert],
+			[reopened.roster.self, "Desk", undefined, self.cert],
+		]);
+		expect(rosterRecords(reopened.records)).toEqual({
+			[farId]: { name: "Far", dial: { host: "10.0.0.2", port: 45464 }, cert: far.cert, facts: { os: "linux" } },
+			[reopened.roster.self]: { name: "Desk", cert: self.cert, facts: expect.any(Object) },
+		});
+	});
+
+	// Inventory: Security — the roster as stored holds no pairing token and no order: it can be shared with every computer as it is.
+	test("nothing private is in a roster record: tokens are in this computer's own owner-only file", async () => {
+		const dir = localDir();
+		const { roster, records } = await openWithRecords(dir, createTlsIdentity());
+		const far = createTlsIdentity();
+		const farId = await roster.pair({ cert: far.cert, token: "pc_secret_token", name: "Far", dial: { host: "10.0.0.2", port: 45464 }, facts: {} });
+		for (const [, bytes] of filesUnder(path.join(dir, NETWORK_DIR))) expect(bytes).not.toContain("pc_secret_token");
+		expect(Object.keys(rosterRecords(records)[farId] as object).sort()).toEqual(["cert", "dial", "facts", "name"]);
+		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).tokens).toEqual({ [farId]: "pc_secret_token" });
+		if (process.platform !== "win32") {
+			expect(fs.statSync(path.join(dir, ROSTER_PRIVATE_FILE)).mode & 0o777).toBe(0o600);
+			expect(fs.statSync(path.join(dir, NETWORK_DIR)).mode & 0o777).toBe(0o700);
+		}
+		// forgotten, its token goes with it, and its record is a delete
+		await roster.remove(farId);
+		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).tokens).toEqual({});
+		expect(records.get(ROSTER_SPACE, farId)).toBeNull();
+		expect(records.versions(ROSTER_SPACE, farId)[0]).toMatchObject({ state: "deleted" });
+	});
+
+	test("a reorder must name every computer and writes no record; a damaged member record is left out and kept, the rest still load", async () => {
+		const dir = localDir();
+		const self = createTlsIdentity();
+		const { roster, records } = await openWithRecords(dir, self);
 		const [a, b] = [createTlsIdentity(), createTlsIdentity()];
 		const idA = await roster.pair({ cert: a.cert, token: "pc_a", name: "A", dial: { host: "10.0.0.2", port: 1 }, facts: {} });
 		const idB = await roster.pair({ cert: b.cert, token: "pc_b", name: "B", dial: { host: "10.0.0.3", port: 1 }, facts: {} });
 		await expect(roster.reorder([idB, roster.self])).rejects.toThrow("changed while you were reordering");
+		const before = (await records.changes(null, 1000)).records.length;
 		await roster.reorder([idB, roster.self, idA]);
 		expect(roster.list().map((m) => m.id)).toEqual([idB, roster.self, idA]);
+		expect((await records.changes(null, 1000)).records.length).toBe(before);
 		roster.close();
 
-		const file = path.join(dir, ROSTER_FILE);
-		const doc = readJson(file);
-		doc.members[idA].dial = { host: "", port: "nope" };
-		fs.writeFileSync(file, JSON.stringify(doc));
-		const damaged = fs.readFileSync(file, "utf8");
-		const reopened = await open(dir, self.cert);
-		expect(reopened.list().map((m) => m.id)).toEqual([idB, reopened.self]);
-		const [copy] = fs.readdirSync(dir).filter((f) => f.startsWith(`${ROSTER_FILE}.corrupt-`));
-		expect(fs.readFileSync(path.join(dir, copy!), "utf8")).toBe(damaged);
+		// a record that holds another computer's certificate under A's id
+		const store = RecordStore.open({ dir: path.join(dir, NETWORK_DIR), identity: self, membership: { certFor: () => self.cert, admits: () => true } });
+		const damaged = await store.put(ROSTER_SPACE, idA, { name: "A", cert: b.cert, facts: {} });
+		const reopened = await openWithRecords(dir, self);
+		expect(reopened.roster.list().map((m) => m.id)).toEqual([idB, reopened.roster.self]);
+		expect(reopened.records.versions(ROSTER_SPACE, idA)[0]).toMatchObject({ version: damaged.version, state: "value" });
+		// what the roster won't write, it never lets out of this computer either
+		await expect(reopened.roster.pair({ cert: a.cert, token: "pc_a", dial: { host: "10.0.0.2", port: 1 }, facts: { os: "x".repeat(300) } })).rejects.toThrow("OS details are damaged");
 	});
 
-	test("a daemon given a new key keeps this computer's name and place under its new id", async () => {
+	test("a daemon given a new key is a new computer: its list starts over, and the old one is kept aside untouched", async () => {
 		const dir = localDir();
-		const before = await open(dir, createTlsIdentity().cert);
+		const before = await open(dir, createTlsIdentity());
 		const far = createTlsIdentity();
 		const farId = await before.pair({ cert: far.cert, token: "pc_far", name: "Far", dial: { host: "10.0.0.2", port: 1 }, facts: {} });
 		await before.update(before.self, { name: "Workstation" });
-		await before.reorder([farId, before.self]);
 		before.close();
-		const after = await open(dir, createTlsIdentity().cert);
-		expect(after.list().map((m) => [m.id, m.name])).toEqual([[farId, "Far"], [after.self, "Workstation"]]);
+		const old = filesUnder(path.join(dir, NETWORK_DIR));
+
+		const after = await open(dir, createTlsIdentity());
+		expect(after.list().map((m) => [m.id, m.name])).toEqual([[after.self, undefined]]);
+		// a token kept for a computer that isn't listed is never handed out
+		expect(after.view().tokens).toEqual({});
+		expect(after.token(farId)).toBe("pc_far");
+		const [aside] = fs.readdirSync(dir).filter((f) => f.startsWith(`${NETWORK_DIR}.replaced-`));
+		expect(filesUnder(path.join(dir, aside!))).toEqual(old);
 	});
 });
 
@@ -146,7 +217,8 @@ describe("importing 0.4's paired_computers.json", () => {
 		const old = path.join(dir, "paired_computers.json");
 		fs.writeFileSync(old, JSON.stringify(shippedFile(c), null, 2), { mode: 0o600 });
 		const bytes = fs.readFileSync(old, "utf8");
-		const roster = await open(dir, createTlsIdentity().cert);
+		const self = createTlsIdentity();
+		const { roster, records } = await openWithRecords(dir, self);
 		await importPairedComputers(dir, roster);
 
 		const [rack, laptop, twin] = [memberIdOf(c.rack), memberIdOf(c.laptop), memberIdOf(c.twin)];
@@ -172,12 +244,22 @@ describe("importing 0.4's paired_computers.json", () => {
 		expect(fs.existsSync(old)).toBe(false);
 		const [kept] = fs.readdirSync(dir).filter((f) => f.startsWith("paired_computers.json.corrupt-"));
 		expect(fs.readFileSync(path.join(dir, kept!), "utf8")).toBe(bytes);
-		// the selection is the app's: the roster has none
-		expect(fs.readFileSync(path.join(dir, ROSTER_FILE), "utf8")).not.toContain("activeId");
+		// Inventory: Data loss — what 0.4 paired lands in the record store, one record per computer, and nothing else does.
+		expect(rosterRecords(records)).toEqual({
+			[roster.self]: { name: "Workstation", cert: self.cert, facts: expect.any(Object) },
+			[rack]: { name: "Rack", dial: { host: "rack.local", address: "192.168.1.20", port: 45464 }, cert: c.rack, facts: roster.member(rack)!.facts },
+			[laptop]: { name: "Laptop", dial: { host: "fe80::1", port: 50000 }, cert: c.laptop, facts: { os: "darwin", arch: "arm64" } },
+			[twin]: { name: "Twin", dial: { host: "10.0.0.7", port: 45464 }, cert: c.twin, facts: {} },
+		});
+		// the selection is the app's, the tokens and the order this computer's own
+		for (const [, stored] of filesUnder(path.join(dir, NETWORK_DIR))) {
+			for (const secret of ["activeId", "pc_rack", "pc_laptop", "pc_twin_first"]) expect(stored).not.toContain(secret);
+		}
+		expect(readJson(path.join(dir, ROSTER_PRIVATE_FILE)).order).toEqual([roster.self, rack, laptop, twin]);
 		roster.close();
 
 		// across a restart, the same ids and the same aliases
-		const reopened = await open(dir, roster.member(roster.self)!.cert);
+		const reopened = await open(dir, self);
 		expect(reopened.list().map((m) => m.id)).toEqual([reopened.self, rack, laptop, twin]);
 		expect(reopened.resolve("remote-1731000000001-def456")).toBe(laptop);
 	});
@@ -188,14 +270,14 @@ describe("importing 0.4's paired_computers.json", () => {
 		const file = shippedFile(c);
 		file.computers = file.computers.slice(0, 3);
 		fs.writeFileSync(path.join(dir, "paired_computers.json"), JSON.stringify(file));
-		const roster = await open(dir, createTlsIdentity().cert);
+		const roster = await open(dir, createTlsIdentity());
 		await importPairedComputers(dir, roster);
 		expect(fs.readdirSync(dir).filter((f) => f.startsWith("paired_computers.json"))).toEqual([]);
 		expect(roster.list()).toHaveLength(3);
 
 		const broken = localDir();
 		fs.writeFileSync(path.join(broken, "paired_computers.json"), "{\"computers\": [");
-		const empty = await open(broken, createTlsIdentity().cert);
+		const empty = await open(broken, createTlsIdentity());
 		await importPairedComputers(broken, empty);
 		expect(empty.list().map((m) => m.id)).toEqual([empty.self]);
 		const [kept] = fs.readdirSync(broken).filter((f) => f.startsWith("paired_computers.json.corrupt-"));
@@ -212,20 +294,22 @@ describe("importing 0.4's paired_computers.json", () => {
 		const self = createTlsIdentity();
 
 		// the disk fills after the first computer is saved
-		const file = new RosterFile(path.join(dir, ROSTER_FILE));
+		const records = await RosterRecords.open(path.join(dir, NETWORK_DIR), self);
 		let writes = 0;
 		const failing: RosterStore = {
-			readAll: () => file.readAll(),
-			write: (member: RosterMember) => (++writes > 2 ? Promise.reject(new Error("ENOSPC: no space left on device")) : file.write(member)),
-			remove: (id) => file.remove(id),
-			watch: (listener) => file.watch(listener),
+			members: () => records.members(),
+			write: (member: RosterMember) => (++writes > 2 ? Promise.reject(new Error("ENOSPC: no space left on device")) : records.write(member)),
+			remove: (id) => records.remove(id),
+			watch: (listener) => records.watch(listener),
+			close: () => records.close(),
 		};
-		const first = await open(dir, self.cert, failing);
+		const first = await open(dir, self, failing);
 		await expect(importPairedComputers(dir, first)).rejects.toThrow("no space left");
 		expect(fs.readFileSync(old, "utf8")).toBe(bytes);
+		expect(records.members()).toHaveLength(2);
 		first.close();
 
-		const second = await open(dir, self.cert);
+		const second = await open(dir, self);
 		await importPairedComputers(dir, second);
 		expect(second.list().map((m) => m.name)).toEqual(["Workstation", "Rack", "Laptop", "Twin"]);
 		expect(second.token(memberIdOf(c.laptop))).toBe("pc_laptop");

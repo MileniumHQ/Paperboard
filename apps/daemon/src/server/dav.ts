@@ -28,7 +28,6 @@ const BLOCKED_FILE_NAMES = new Set([
     "crane.json",
     "authorized_tokens.json",
     "paired_computers.json",
-    "network_roster.json",
     "network_roster_private.json",
     "machine-id.json",
     "vault-recovery",

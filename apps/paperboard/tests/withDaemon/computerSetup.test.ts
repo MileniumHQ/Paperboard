@@ -93,9 +93,8 @@ describe("setting a computer up over SSH", () => {
 		const paired = pool.listComputers().find((c) => c.id === (result as { paired: { id: string } }).paired.id)!;
 		await waitFor("the paired computer to connect", () => pool.listComputers().find((c) => c.id === paired.id)?.status.connected);
 		// the roster names it by its key, and pins the certificate its server named
-		const stored = JSON.parse(fs.readFileSync(path.join(process.env.PAPERBOARD_DIR!, "local", "network_roster.json"), "utf8")) as { members: Record<string, { cert: string }> };
 		expect(paired.id).toBe(memberIdOf(readTlsCert(path.join(box.data, "local"))!));
-		expect(certFingerprint(stored.members[paired.id]!.cert)).toBe(certFingerprint(readTlsCert(path.join(box.data, "local"))!));
+		expect(certFingerprint(pool.getComputer(paired.id)!.cert!)).toBe(certFingerprint(readTlsCert(path.join(box.data, "local"))!));
 		for (const dir of [process.env.PAPERBOARD_DIR!, sshDir, box.home, box.data]) {
 			for (const file of listTree(dir)) {
 				const full = path.join(dir, file);

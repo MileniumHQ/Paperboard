@@ -1,7 +1,10 @@
 // The daemon's TLS identity: one ECDSA P-256 key and a self-signed
 // certificate, created on first start and kept for the life of the install.
-// Clients pin this exact certificate when they pair (trust on first use), so
-// replacing it means every paired computer has to pair again. That is why an
+// Clients pin this exact certificate when they pair (trust on first use), and
+// its key is who this computer is in the network (network/memberId.ts): its
+// records are signed and its network keys unwrapped with it. Replacing it
+// makes a new computer, whose computer list starts over and which every
+// paired computer has to pair with again. That is why an
 // unreadable identity file is a startup failure, never a reason to mint a
 // new one over it.
 import * as crypto from "crypto";

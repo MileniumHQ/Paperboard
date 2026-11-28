@@ -126,12 +126,11 @@ export interface RosterMember {
     /** its daemon's certificate, pinned when it was paired */
     cert: string;
     facts: RosterFacts;
-    /** its place in the person's order; lower comes first */
-    order: number;
 }
 
 /**
- * The roster as this computer's own app sees it: the members in order, which
+ * The roster as this computer's own app sees it: the members in the order
+ * the person put them in here (an order no other computer shares), which
  * one is this computer, the ids an older app gave them, and the pairing
  * tokens this computer holds for them (step two of the network replaces
  * these with mutual TLS).

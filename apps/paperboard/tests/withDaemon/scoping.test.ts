@@ -9,6 +9,7 @@ import { PaperCraneAuth } from "daemon/security/auth";
 import { CredentialStore } from "daemon/security/credentials";
 import { Roster } from "daemon/network/roster";
 import { memberIdOf } from "daemon/network/memberId";
+import { RecordStoreCorruptError } from "daemon/network/store";
 import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { getPaperboardDir } from "daemon/core/paths";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
@@ -136,40 +137,49 @@ describe("config storage layout", () => {
 describe("unreadable state is quarantined", () => {
 	const corruptCopies = (dir: string, name: string) => fs.readdirSync(dir).filter((f) => f.startsWith(`${name}.corrupt-`));
 
-	test("token store, vault and computer list: missing is default, corrupt is set aside with its bytes, unreadable throws", async () => {
+	test("token store, vault and computer list: missing is default, corrupt is set aside with its bytes (the list's records stop it opening instead), unreadable throws", async () => {
 		const local = path.join(dataDir(), "local");
 		const tokens = path.join(local, "authorized_tokens.json");
 		const vault = path.join(local, "secrets.json");
-		const roster = path.join(local, "network_roster.json");
 		const rosterPrivate = path.join(local, "network_roster_private.json");
-		const { cert } = createTlsIdentity();
+		const identity = createTlsIdentity();
 		// a roster that was never written holds this computer alone
 		const members = async () => {
-			const opened = await Roster.open(local, cert);
+			const opened = await Roster.open(local, identity);
 			opened.close();
 			return opened.list().map((m) => m.id);
 		};
-		const self = memberIdOf(cert);
+		const self = memberIdOf(identity.cert);
 
 		expect(new PaperCraneAuth(false, local).getAuthorizedClients()).toEqual([]);
 		expect(await members()).toEqual([self]);
 
-		for (const file of [tokens, vault, roster, rosterPrivate]) fs.writeFileSync(file, "{broken");
+		for (const file of [tokens, vault, rosterPrivate]) fs.writeFileSync(file, "{broken");
 		expect(new PaperCraneAuth(false, local).getAuthorizedClients()).toEqual([]);
 		new CredentialStore(path.dirname(local));
 		expect(await members()).toEqual([self]);
-		for (const name of ["authorized_tokens.json", "secrets.json", "network_roster.json", "network_roster_private.json"]) {
+		for (const name of ["authorized_tokens.json", "secrets.json", "network_roster_private.json"]) {
 			const [copy] = corruptCopies(local, name);
 			expect(fs.readFileSync(path.join(local, copy!), "utf8")).toBe("{broken");
 		}
 
+		// the list's records are never read as empty: that would lose what only
+		// this computer had, so a damaged file stops the list opening, untouched
+		const meta = path.join(local, "network", "meta.json");
+		fs.writeFileSync(meta, "{broken");
+		await expect(members()).rejects.toThrow(RecordStoreCorruptError);
+		expect(fs.readFileSync(meta, "utf8")).toBe("{broken");
+		fs.rmSync(meta);
+
 		// a path that exists but cannot be read as a file
-		for (const file of [tokens, vault, roster, rosterPrivate]) {
+		for (const file of [tokens, vault, rosterPrivate, meta]) {
 			fs.rmSync(file, { force: true });
 			fs.mkdirSync(file);
 		}
 		expect(() => new PaperCraneAuth(false, local)).toThrow();
 		expect(() => new CredentialStore(path.dirname(local))).toThrow();
+		await expect(members()).rejects.toThrow();
+		fs.rmSync(rosterPrivate, { recursive: true });
 		await expect(members()).rejects.toThrow();
 	});
 

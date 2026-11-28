@@ -1,10 +1,12 @@
 // What this computer alone keeps about the roster, never carried to another
 // computer: the pairing token it holds for each member (until daemons sign in
 // to each other with their own keys), the ids an older Paperboard on this
-// computer gave its members, and which member was this computer last time.
+// computer gave its members, and the order its rail lists them in (each
+// computer puts itself first, so the order is a view, not shared truth).
 import { readStateFileSync, writeJsonAtomic } from "../core/storage";
 import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import { isSafeId } from "@mileniumhq/paperapi/protocol";
+import { isMemberId } from "./memberId";
 
 export const ROSTER_PRIVATE_FILE = "network_roster_private.json";
 
@@ -13,8 +15,8 @@ export interface RosterPrivateState {
     tokens: Record<string, string>;
     /** an id an older Paperboard gave a computer → its member id; kept for good */
     aliases: Record<string, string>;
-    /** the member id this computer had the last time the roster opened */
-    self: string | null;
+    /** member ids in the person's order on this computer; a member missing from it comes after */
+    order: string[];
 }
 
 function textRecord(value: unknown, keyOk: (key: string) => boolean, file: string, field: string): Record<string, string> {
@@ -41,12 +43,12 @@ export class RosterPrivate {
     constructor(private readonly file: string) {
         const raw = readStateFileSync<Record<string, unknown>>(file, {}, ROSTER_PRIVATE_FILE);
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${file} isn't this computer's pairing record`);
-        const self = raw.self;
-        if (self !== undefined && self !== null && typeof self !== "string") throw new Error(`${file} has a damaged "self"`);
+        const order = raw.order ?? [];
+        if (!Array.isArray(order) || order.some((id) => !isMemberId(id)) || new Set(order).size !== order.length) throw new Error(`${file} has a damaged "order"`);
         this.state = {
             tokens: textRecord(raw.tokens, isSafeId, file, "tokens"),
             aliases: textRecord(raw.aliases, isSafeId, file, "aliases"),
-            self: self ?? null,
+            order,
         };
     }
 
@@ -57,7 +59,7 @@ export class RosterPrivate {
     /** saves what `change` makes of the state; memory follows only once the file does */
     update(change: (state: RosterPrivateState) => RosterPrivateState): Promise<void> {
         return this.writes.run(async () => {
-            const next = change({ tokens: { ...this.state.tokens }, aliases: { ...this.state.aliases }, self: this.state.self });
+            const next = change({ tokens: { ...this.state.tokens }, aliases: { ...this.state.aliases }, order: [...this.state.order] });
             await writeJsonAtomic(this.file, next, { mode: 0o600 });
             this.state = next;
         });

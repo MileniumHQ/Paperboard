@@ -410,7 +410,7 @@ async function tunnelHost(remotes: unknown[]) {
 	const dir = dataDir();
 	const localDir = path.join(dir, "local");
 	fs.writeFileSync(path.join(localDir, "paired_computers.json"), JSON.stringify({ computers: remotes }));
-	const roster = await Roster.open(localDir, createTlsIdentity().cert);
+	const roster = await Roster.open(localDir, createTlsIdentity());
 	await importPairedComputers(localDir, roster);
 	const engine = new PaperCraneEngine(dir);
 	const auth = new PaperCraneAuth(false, path.join(dir, "local"));

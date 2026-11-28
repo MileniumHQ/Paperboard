@@ -102,9 +102,15 @@ describe("the computer list", () => {
         expect(reopened.listComputers().map((c) => [c.id, c.name])).toEqual([[LAPTOP, "Laptop"], ["local", "Desk"], [RACK, "Game Box"]]);
         expect(reopened.getActiveId()).toBe(RACK);
         expect(reopened.getComputer(RACK)?.token).toBe("pc_rack_secret");
-        const stored = fs.readFileSync(path.join(local(), "network_roster.json"), "utf8");
-        expect(stored).not.toContain("secret");
-        expect(stored).not.toContain(RACK);
+        // the records every computer may be given hold no token and no id 0.4 gave
+        const network = path.join(local(), "network");
+        const stored = fs.readdirSync(network, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(network, f)).isFile());
+        expect(stored.length).toBeGreaterThan(0);
+        for (const file of stored) {
+            const bytes = fs.readFileSync(path.join(network, file), "utf8");
+            expect(bytes).not.toContain("secret");
+            expect(bytes).not.toContain(RACK);
+        }
     });
 
     test("a computer forgotten without telling it is gone across a restart, and the selection goes back to this computer", async () => {

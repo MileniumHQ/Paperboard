@@ -4,9 +4,11 @@
 // once every install has started a release that has it.
 //
 // The old file is read and never changed until everything in it is saved
-// in the roster: an import that fails halfway leaves it as it was, the
-// daemon doesn't start, and the next start imports it again. Saving a member
-// twice is harmless, so a retry after a partial import ends the same way.
+// in the roster (the members as records, the tokens, old ids and order in
+// this computer's own file): an import that fails halfway leaves it as it
+// was, the daemon doesn't start, and the next start imports it again.
+// Saving a member twice saves nothing new, so a retry after a partial import
+// ends the same way.
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "../core/logger";
@@ -55,16 +57,17 @@ export async function importPairedComputers(dir: string, roster: Roster): Promis
     if (!fs.existsSync(file)) return;
     const listed: unknown[] = Array.isArray(raw?.computers) ? raw.computers : [];
     const members = new Map<string, RosterMember>();
+    // the rail's order, this computer where 0.4 listed it
+    const order: string[] = [];
     const tokens: Record<string, string> = {};
     const aliases: Record<string, string> = {};
     const left: unknown[] = [];
-    let selfOrder: number | null = null;
     let selfName: string | undefined;
 
-    for (const [order, entry] of listed.entries()) {
+    for (const entry of listed) {
         const old = (entry && typeof entry === "object" && !Array.isArray(entry) ? entry : {}) as OldComputer;
         if (old.id === LOCAL_COMPUTER_ID || old.isLocal === true) {
-            selfOrder ??= order;
+            if (!order.includes(roster.self)) order.push(roster.self);
             if (typeof old.name === "string" && old.name.trim() && old.name !== OLD_DEFAULT_NAME) selfName ??= old.name.trim();
             continue;
         }
@@ -88,15 +91,16 @@ export async function importPairedComputers(dir: string, roster: Roster): Promis
             dial,
             cert: old.cert as string,
             facts: facts ?? {},
-            order,
         });
+        order.push(id);
         if (typeof old.token === "string" && old.token) tokens[id] = old.token;
     }
 
     const self = roster.member(roster.self)!;
     const adopted = [...members.values()];
-    adopted.push({ ...self, ...(selfName ? { name: selfName } : {}), order: selfOrder ?? listed.length });
-    await roster.adoptImported(adopted, tokens, aliases);
+    if (selfName) adopted.push({ ...self, name: selfName });
+    if (!order.includes(roster.self)) order.push(roster.self);
+    await roster.adoptImported(adopted, order, tokens, aliases);
 
     if (left.length) {
         // what couldn't be imported keeps its bytes, the way a damaged state file does
