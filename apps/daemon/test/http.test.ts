@@ -81,6 +81,10 @@ describe("WebDAV", () => {
 			"/dav/files/test.dav/secrets.json",
 			"/dav/files/test.dav/./secrets.json",
 			"/dav/files/test.dav/%73ecrets.json",
+			"/dav/files/test.dav/network_roster.json",
+			"/dav/files/test.dav/Network_Roster_Private.json",
+			"/dav/files/test.dav/network_roster_private.json.corrupt-1",
+			"/dav/files/test.dav/paired_computers.json.corrupt-1",
 		];
 		for (const p of hidden) {
 			for (const method of ["GET", "HEAD", "PUT", "DELETE", "PROPFIND", "MKCOL"]) {

@@ -7,6 +7,7 @@ import { ComputerSetupJob, type ComputerSetupDeps } from "../../src/main/compute
 import { openSsh } from "../../src/main/computerSetup/ssh";
 import { readTlsCert } from "daemon/security/tlsIdentity";
 import { certFingerprint } from "daemon/security/pinnedTls";
+import { memberIdOf } from "daemon/network/roster";
 import type { ComputerSetupState } from "../../src/shared/shellContract";
 import { craneBinary, startCrane, type CraneProcess } from "testkit/crane";
 import { dataDir, listTree, restoreEnv, tempDir } from "testkit/fs";
@@ -91,9 +92,10 @@ describe("setting a computer up over SSH", () => {
 		expect(states.at(-1)!.steps.map((s) => [s.id, s.status])).toEqual([["connect", "success"], ["signIn", "success"], ["check", "success"], ["install", "success"], ["pair", "success"]]);
 		const paired = pool.listComputers().find((c) => c.id === (result as { paired: { id: string } }).paired.id)!;
 		await waitFor("the paired computer to connect", () => pool.listComputers().find((c) => c.id === paired.id)?.status.connected);
-		const stored = JSON.parse(fs.readFileSync(path.join(process.env.PAPERBOARD_DIR!, "local", "paired_computers.json"), "utf8")) as { computers: Array<{ id: string; cert?: string }> };
-		const record = stored.computers.find((c) => c.id === paired.id)!;
-		expect(certFingerprint(record.cert!)).toBe(certFingerprint(readTlsCert(path.join(box.data, "local"))!));
+		// the roster names it by its key, and pins the certificate its server named
+		const stored = JSON.parse(fs.readFileSync(path.join(process.env.PAPERBOARD_DIR!, "local", "network_roster.json"), "utf8")) as { members: Record<string, { cert: string }> };
+		expect(paired.id).toBe(memberIdOf(readTlsCert(path.join(box.data, "local"))!));
+		expect(certFingerprint(stored.members[paired.id]!.cert)).toBe(certFingerprint(readTlsCert(path.join(box.data, "local"))!));
 		for (const dir of [process.env.PAPERBOARD_DIR!, sshDir, box.home, box.data]) {
 			for (const file of listTree(dir)) {
 				const full = path.join(dir, file);

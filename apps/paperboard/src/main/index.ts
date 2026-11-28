@@ -339,8 +339,8 @@ app.whenReady().then(async () => {
     powerMonitor.on("resume", () => connectionPool.wake());
     powerMonitor.on("unlock-screen", () => connectionPool.wake());
 
-    // every computer stays listed either way; the failure is this
-    // computer's OS details, which the rail and updates go without
+    // a list that couldn't be read is asked for again when the shell asks
+    // (computers-list), which says why it couldn't
     await connectionPool.init().then(
         () => log.info("[Main] ConnectionPool ready"),
         (err) => log.error("[Main]", errorMessage(err)),

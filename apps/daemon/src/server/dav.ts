@@ -15,18 +15,21 @@ import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 export const DAV_PREFIX = "/dav";
 // top-level dirs WebDAV never serves. sockets/: non-regular entries break
 // PROPFIND/GET. local/: this computer's own credentials and server state
-// (vault, paired tokens, TLS identity, paired computers, crane.json). The
+// (vault, paired tokens, TLS identity, the computer list, crane.json). The
 // whole directory is refused rather than a list of names inside it: a
 // name list missed tls_identity.json, the daemon's TLS private key.
 const BLOCKED_TOP_LEVEL = new Set(["sockets", "local"]);
 
-// credential/server-local files are never visible through WebDAV,
-// for any method (resolveDavPath is the single enforcement point)
+// credential/server-local files, and the copies a damaged one is set aside
+// as (<name>.corrupt-<ms>), are never visible through WebDAV, for any method
+// (resolveDavPath is the single enforcement point)
 const BLOCKED_FILE_NAMES = new Set([
     "secrets.json",
     "crane.json",
     "authorized_tokens.json",
     "paired_computers.json",
+    "network_roster.json",
+    "network_roster_private.json",
     "machine-id.json",
     "vault-recovery",
     "tls_identity.json",
@@ -44,7 +47,7 @@ export function davMaxUploadBytes(): number {
 
 function isBlockedFileName(name: string): boolean {
     const lower = name.toLowerCase();
-    return BLOCKED_FILE_NAMES.has(lower) || lower.startsWith("secrets.json.") || lower.startsWith("tls_identity.json.") || KEY_MATERIAL_RE.test(name);
+    return BLOCKED_FILE_NAMES.has(lower) || [...BLOCKED_FILE_NAMES].some((blocked) => lower.startsWith(`${blocked}.`)) || KEY_MATERIAL_RE.test(name);
 }
 
 function escXml(s: string): string {
