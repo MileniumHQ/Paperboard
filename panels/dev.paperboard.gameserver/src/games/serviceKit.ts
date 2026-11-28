@@ -63,7 +63,7 @@ export const hostSupportHere = (game: GameDefinition, options: GameOptions = { s
  */
 export function report(ctx: Server, what: string, err: unknown) {
     const message = errorMessage(err);
-    ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${message}` }) }));
+    ctx.console.say("error", `[Paperboard] ${what}: ${message}`);
     problemsApi.report(PANEL_ID, { key: `${ctx.id}:${what}`, title: `${ctx.name}: ${what}`, message });
 }
 /** The work `report` said failed (the same `what`) has worked since: its problem goes. */

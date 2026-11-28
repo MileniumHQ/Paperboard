@@ -29,7 +29,7 @@ import { readScheduleChoice } from "./backupSchedule";
 import { STEAM_FOLDER } from "./games/steam/steamcmd";
 import { SERVER_EVENTS, serverType, serversBlocks, type ServersBlocksHost } from "./service/serversBlocks";
 import { errorMessage, problemsApi } from "@mileniumhq/paperapi";
-import { appendCapped, type GameServerState } from "./service/types";
+import type { GameServerState } from "./service/types";
 import { SERVERS_CALLS, gameServerContract, type CallName, type ServerSummary } from "./service/contract";
 import { pictureCall } from "./service/pictures";
 import { steamAvatar } from "./service/steamAvatars";
@@ -266,7 +266,7 @@ async function initialize(server: Server): Promise<Server> {
         const crashed = wasRunning && !running;
         const restart = !running && (resume || (crashed && automation.restartAfterCrash));
         if (crashed) {
-            if (!resume) server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}` }) }));
+            if (!resume) server.console.say("warn", `[Server] The server stopped while Paperboard was not running.${restart ? " Starting it again." : ""}`);
             // the game takes back what that run set aside, as it would have at its exit
             await releaseServer(server, portMoves);
         }
@@ -274,10 +274,7 @@ async function initialize(server: Server): Promise<Server> {
         if (restart) void startServerInstance(server).catch((err) => console.error(`[gameserver] ${server.name} could not start again:`, err));
         return server;
     } catch (err) {
-        server.setState((prev) => ({
-            initFailure: errorMessage(err),
-            serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] The server could not be set up: ${errorMessage(err)}` }),
-        }));
+        server.console.say("error", `[Server] The server could not be set up: ${errorMessage(err)}`, { initFailure: errorMessage(err) });
         throw err;
     }
 }
@@ -616,7 +613,7 @@ export const gameServerService = definePanelService({
         for (const server of serversRunning(processes)) {
             if (server.state.serverStatus === "restarting")
                 throw new Error(`${server.name} is restarting; update once it's back online`);
-            server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping for an update..." }) }));
+            server.console.say("info", "[Server] Stopping for an update...");
             await stopServerInstance(server);
             await waitUntil(async () => !(await server.process.exists(server.game.primaryProcessId)), 90_000, `${server.name} to stop`);
         }

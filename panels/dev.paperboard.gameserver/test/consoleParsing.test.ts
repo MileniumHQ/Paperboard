@@ -30,13 +30,15 @@ describe("console parsing", () => {
     });
 });
 
-// A game's output is published in batches; what the service says of the run's
-// end must still come after the run's last lines.
-describe("a stopped server's console", () => {
-    test("shows the run's last output before Process stopped", () => {
+// A game's output is published in batches; what the service says (a backup's
+// stop, the run's end) must still come after the lines before it.
+describe("a server's console", () => {
+    test("shows the service's own lines after the output that came before them", () => {
         const server = testServer({ game: "valheim", directory: "servers/order" }, { serverStatus: "online" });
-        handleProcessData(server, "Saving world\nWorld saved\nShutting down");
+        handleProcessData(server, "Saving world\n");
+        server.console.say("info", "[Server] Stopping to restore a backup...");
+        handleProcessData(server, "World saved\nShutting down");
         handleProcessExit(server, 0);
-        expect(server.state.serverEntries.map((e) => e.content)).toEqual(["Saving world", "World saved", "Shutting down", "[Server] Process stopped."]);
+        expect(server.state.serverEntries.map((e) => e.content)).toEqual(["Saving world", "[Server] Stopping to restore a backup...", "World saved", "Shutting down", "[Server] Process stopped."]);
     });
 });

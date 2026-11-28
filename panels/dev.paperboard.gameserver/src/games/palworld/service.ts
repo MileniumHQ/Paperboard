@@ -2,7 +2,6 @@ import type { Server } from "../../service/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped } from "../../service/types";
 import { TRIGGER_IDS } from "../../service/contract";
 import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
@@ -327,7 +326,7 @@ export function palworldService(ctx: Server): GameService {
             const line = singleLine(message, "Message");
             await rest().announce(line);
             // Palworld does not log announcements; the console and chat show what went out
-            ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: `[Announcement] ${line}` }) }));
+            ctx.console.say("info", `[Announcement] ${line}`);
             pushChat(ctx, { event: "server", content: line, text: `<Server> ${line}` });
         },
         observeLine(raw) {

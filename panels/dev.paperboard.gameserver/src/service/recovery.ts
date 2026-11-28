@@ -5,7 +5,6 @@ import { recoverInterruptedInstall } from "../games/minecraft/softwareInstall";
 import { liveRecoveryDeps } from "./softwareInstallDeps";
 import { recoverInterruptedModpack } from "./modpacks";
 import { liveModpackRecoveryDeps } from "./modpackDeps";
-import { appendCapped } from "./types";
 
 type Recovered = { committed: unknown[]; rolledBack: unknown[]; discarded: unknown[] };
 
@@ -50,13 +49,7 @@ async function run(ctx: Server, steps: RecoverySteps): Promise<boolean> {
         } catch (err) {
             const reason = errorMessage(err);
             console.error(`[gameserver] interrupted ${what} could not be settled:`, reason);
-            ctx.setState({
-                recoveryBlock: `An interrupted ${what} could not be cleaned up: ${reason}`,
-                serverEntries: appendCapped(ctx.state.serverEntries, {
-                    type: "error",
-                    content: `[Server] An interrupted ${what} could not be cleaned up: ${reason}`,
-                }),
-            });
+            ctx.console.say("error", `[Server] An interrupted ${what} could not be cleaned up: ${reason}`, { recoveryBlock: `An interrupted ${what} could not be cleaned up: ${reason}` });
             return false;
         }
     }

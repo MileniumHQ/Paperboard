@@ -1,10 +1,10 @@
 // A server's console as its game's output fills it. Output comes in fast, so
 // it is gathered for a tenth of a second and published together: a chatty
 // server costs one state update per batch rather than one per line. What
-// the service says itself ("[Server] Process stopped.") flushes the batch
-// first, so it lands after the output that came before it.
+// the service says itself ("[Server] Process stopped.") goes through say,
+// which flushes the batch first, so it lands after the output before it.
 import type { Server } from "./server";
-import type { ConsoleLine } from "./types";
+import { appendCapped, type ConsoleLine, type GameServerState } from "./types";
 
 const CONSOLE_LINES = 1000;
 const PERCENT = /\d{1,3}(?:\.\d+)?%/g;
@@ -54,6 +54,12 @@ export class ServerConsole {
         if (!content) return;
         this.#pending = addConsoleLine(this.#pending, { type: error ? "error" : "info", content }).slice(-CONSOLE_LINES);
         this.#timer ??= setTimeout(() => this.flush(), 100);
+    }
+
+    /** a line the service says itself, with whatever else changes along with it */
+    say(type: ConsoleLine["type"], content: string, also: Partial<GameServerState> = {}): void {
+        this.flush();
+        this.server.setState((prev) => ({ ...also, serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
     }
 
     /** publishes the gathered output now */

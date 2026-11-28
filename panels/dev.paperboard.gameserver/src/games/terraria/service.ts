@@ -178,7 +178,7 @@ export function terrariaService(ctx: Server): GameService {
     async function modStore() {
         const saved = ctx.settings;
         if (softwareOf(saved) !== "tmodloader" || !saved.version) throw new Error("Mods need a tModLoader server");
-        return new ModStore({ root: await ctx.root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: /ERROR/.test(line) ? "error" : "info", content: `[SteamCMD] ${line}` }) })); } });
+        return new ModStore({ root: await ctx.root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.console.say(/ERROR/.test(line) ? "error" : "info", `[SteamCMD] ${line}`); } });
     }
     /** one mod change at a time per server; the result says whether a running server must restart */
     async function modChange<T>(work: (store: ModStore) => Promise<T>): Promise<{ result: T; restart: boolean }> {

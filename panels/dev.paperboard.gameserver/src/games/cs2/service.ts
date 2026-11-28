@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { errorCode } from "../../service/api";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped } from "../../service/types";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
@@ -129,7 +128,7 @@ export function cs2Service(ctx: Server): GameService {
         async joined(player) {
             if (!(await roster().bans()).some((ban) => ban.steamId === player.steamId)) return;
             await send(`kickid ${player.userId} Banned from this server`);
-            ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Paperboard] ${player.name} is banned and was put out as they joined.` }) }));
+            ctx.console.say("warn", `[Paperboard] ${player.name} is banned and was put out as they joined.`);
         },
     });
 

@@ -1,6 +1,6 @@
 import type { Server } from "./server";
 import { errorMessage } from "@mileniumhq/paperapi";
-import { appendCapped, type GameServerState } from "./types";
+import type { GameServerState } from "./types";
 
 /** What the server does on its own: restart after a crash, once a day at a set hour, and update itself. */
 export interface AutomationSettings {
@@ -103,7 +103,7 @@ function describeExitCode(code: number): string {
  */
 export function afterCrash(ctx: Server, exit: { whileStarting: boolean; exitCode: number | undefined; outOfMemory?: boolean }, start: (ctx: Server, carry: GameServerState["serverEntries"]) => Promise<void>, now = Date.now()): void {
     const code = exit.exitCode === undefined ? "" : ` (exit code ${describeExitCode(exit.exitCode)})`;
-    const say = (type: "error" | "warn" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+    const say = (type: "error" | "warn" | "info", content: string) => ctx.console.say(type, content);
     if (exit.outOfMemory) say("error", `[Server] The computer ran out of memory, so the system ended the server${exit.whileStarting ? " while it was starting" : ""}${code}. Give the server less memory or close other programs.`);
     else say("error", `[Server] The server crashed${exit.whileStarting ? " while starting" : ""}${code}. Logs has what it printed.`);
     if (exit.whileStarting) return;
@@ -160,7 +160,7 @@ export function scheduleDailyRestart(ctx: Server, restart: (ctx: Server) => Prom
     const hour = ctx.automation.settings?.dailyRestart;
     if (!hour) return;
     const due = msUntilHour(hour, now);
-    const say = (type: "error" | "info", content: string) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+    const say = (type: "error" | "info", content: string) => ctx.console.say(type, content);
     const at = (ms: number, work: () => Promise<void>) => {
         if (ms < 0) return;
         const timer = setTimeout(() => {
@@ -188,7 +188,7 @@ export function scheduleDailyRestart(ctx: Server, restart: (ctx: Server) => Prom
 }
 
 type Say = (type: "error" | "warn" | "info", content: string) => void;
-const consoleSay = (ctx: Server): Say => (type, content) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type, content }) }));
+const consoleSay = (ctx: Server): Say => (type, content) => ctx.console.say(type, content);
 
 /**
  * Before a start, installs a newer build when the game can update itself and
