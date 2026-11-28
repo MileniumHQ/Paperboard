@@ -208,6 +208,26 @@ describe("the agent's own tool servers", () => {
         expect(r.servers.status()[0]).toMatchObject({ phase: "running" });
     }, SLOW);
 
+    test("a request is answered once: a second click, or a new request while it saves, doesn't reach it", async () => {
+        const r = rig();
+        await r.servers.load();
+        const command = r.program();
+        await r.call("add_tool_server", { name: "whoami", command, reason: "It tells me who I am." });
+        const first = r.card("tool-server")!;
+        const allowed = r.tools.answer(first.id, true);
+        await expect(r.tools.answer(first.id, true)).rejects.toThrow("isn't waiting anymore");
+        // the agent asks for another while the first is saved
+        await r.call("add_tool_server", { name: "louder", command, args: ["--verbose"], reason: "A louder whoami." });
+        await allowed;
+        const statuses = (server: string) => r.posted.filter((e) => e.kind === "tool-server" && e.server === server).map((e) => (e as ToolServerEntry).status);
+        expect(statuses("whoami")).toEqual(["waiting", "allowed"]);
+        expect(statuses("louder")).toEqual(["waiting"]);
+        expect(r.servers.config.servers.map((s) => s.name)).toEqual(["whoami"]);
+        // and the newer one is still the one waiting
+        await r.tools.answer(r.posted.findLast((e) => e.kind === "tool-server" && e.server === "louder")!.id, false);
+        expect(statuses("louder")).toEqual(["waiting", "declined"]);
+    }, SLOW);
+
     test("a server that signs the user in gets a card in the chat, and the agent hears when it's up", async () => {
         let token = "nobody-has-this";
         const web = await mcpOverHttp({ bearer: () => token });

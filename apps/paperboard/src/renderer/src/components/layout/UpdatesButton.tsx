@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, type Component } from "solid-js";
-import { PaperButton, PaperList, PaperListItem, PaperListLabel, PaperLoader, PaperPopover, showError } from "@mileniumhq/paperui";
+import { PaperButton, PaperList, PaperListItem, PaperListLabel, PaperLoader, PaperPopover, formatBytes, showError } from "@mileniumhq/paperui";
 import {
     batchPercent,
     groupHolds,
@@ -12,7 +12,6 @@ import {
     type UpdateQueueState,
 } from "../../../../shared/updateQueue";
 import { updateWhere } from "../../hooks/useUpdateQueue";
-import { formatBytes } from "../../lib/formatBytes";
 
 // how long the finished check (or cross) stays before the button goes
 const FINISH_MS = 1800;

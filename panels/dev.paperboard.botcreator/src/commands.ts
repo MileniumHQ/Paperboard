@@ -17,25 +17,29 @@ import {
     type CommandMutationResult,
 } from "./types";
 import { publish, requireReadable, type BotEntry } from "./registry";
-import { readToken, saveBots } from "./persistence";
+import { changing, readToken, saveBots } from "./persistence";
 import { errorMessage } from "@mileniumhq/paperapi";
 
 /**
- * The one way a bot's commands change: saved, handed to the session, and
- * announced with the bot, so every window's Commands tab shows the list as
- * it now is.
+ * The one way a bot's commands change: `change` makes the new list from the
+ * saved one (throwing when it can't), then it's saved, handed to the session,
+ * and announced with the bot, so every window's Commands tab shows it.
  */
-async function setCommands(entry: BotEntry, commands: SlashCommandDefinition[]): Promise<void> {
-    const before = entry.stored;
-    entry.stored = { ...entry.stored, commands };
-    try {
-        await saveBots();
-    } catch (err) {
-        entry.stored = before;
-        throw err;
-    }
-    entry.session.commands = commands;
-    publish();
+function setCommands(entry: BotEntry, change: (commands: SlashCommandDefinition[]) => SlashCommandDefinition[]): Promise<SlashCommandDefinition[]> {
+    return changing.run(async () => {
+        const before = entry.stored.commands;
+        const commands = change(before);
+        entry.stored = { ...entry.stored, commands };
+        try {
+            await saveBots();
+        } catch (err) {
+            entry.stored = { ...entry.stored, commands: before };
+            throw err;
+        }
+        entry.session.commands = commands;
+        publish();
+        return commands;
+    });
 }
 
 // one Blocks event per command: registering is part of creating the
@@ -100,16 +104,16 @@ export async function createCommand(entry: BotEntry, input: any): Promise<Comman
     }
     const options = parseCommandOptions(input?.options);
 
-    const commands = entry.stored.commands;
-    if (commands.some((c) => c.scope === scope && c.name === name)) {
-        throw new Error(`A command named /${name} already exists in this scope.`);
-    }
-    if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
-        throw new Error(`Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`);
-    }
-
     const definition: SlashCommandDefinition = { id: randomUUID(), name, description, scope, options, userInstall };
-    await setCommands(entry, [...commands, definition]);
+    await setCommands(entry, (commands) => {
+        if (commands.some((c) => c.scope === scope && c.name === name)) {
+            throw new Error(`A command named /${name} already exists in this scope.`);
+        }
+        if (commands.filter((c) => c.scope === scope).length >= MAX_COMMANDS_PER_SCOPE) {
+            throw new Error(`Discord allows at most ${MAX_COMMANDS_PER_SCOPE} commands per scope.`);
+        }
+        return [...commands, definition];
+    });
     const triggerError = await registerCommandTrigger(entry, definition);
     const sync = await entry.session.syncCommands();
     return { command: definition, ...sync, triggerError };
@@ -120,13 +124,16 @@ export async function deleteCommand(entry: BotEntry, rawId: unknown): Promise<Co
     requireReadable();
     const id = typeof rawId === "string" ? rawId.trim() : "";
     if (!id) throw new Error("A command id is required.");
-    const target = entry.stored.commands.find((c) => c.id === id);
-    if (!target) throw new Error(`No command with id ${id} is stored.`);
-    const next = entry.stored.commands.filter((c) => c.id !== id);
+    let target!: SlashCommandDefinition;
+    const next = await setCommands(entry, (commands) => {
+        const found = commands.find((c) => c.id === id);
+        if (!found) throw new Error(`No command with id ${id} is stored.`);
+        target = found;
+        return commands.filter((c) => c !== found);
+    });
     // a scope with no commands left cannot be inferred from the list, so it
     // is explicitly cleared on Discord
     const emptied = !next.some((c) => c.scope === target.scope);
-    await setCommands(entry, next);
     const triggerError = await unregisterCommandTrigger(entry, target);
     if (!emptied || entry.session.connected()) {
         return { command: target, ...(await entry.session.syncCommands(emptied ? [target.scope] : [])), triggerError };

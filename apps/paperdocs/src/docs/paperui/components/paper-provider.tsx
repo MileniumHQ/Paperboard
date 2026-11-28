@@ -119,7 +119,7 @@ render(
             </PaperText>
             <PaperTextList ordered>
                 <li>An explicit <PaperCode>"light"</PaperCode> or <PaperCode>"dark"</PaperCode> in <PaperCode>theme</PaperCode>.</li>
-                <li>With no <PaperCode>theme</PaperCode> prop, the host's choice: Paperboard writes <PaperCode>data-paperui-theme</PaperCode> on the panel document's root element, so a panel always matches its window. The provider follows later changes.</li>
+                <li>With no <PaperCode>theme</PaperCode> prop, the host's choice: when Paperboard's theme is light or dark, it writes <PaperCode>data-paperui-theme</PaperCode> on the panel document's root element, so a panel matches its window. With the System theme it removes the attribute, and the next step applies. The provider follows later changes.</li>
                 <li>Otherwise the operating system's color scheme, kept up to date as it changes. An explicit <PaperCode>theme="system"</PaperCode> skips the host and goes straight here.</li>
             </PaperTextList>
             <PaperText preset="body" as="p">

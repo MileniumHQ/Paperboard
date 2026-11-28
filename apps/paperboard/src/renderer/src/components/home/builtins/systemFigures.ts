@@ -3,7 +3,7 @@
 // figure and a computer that can't measure it are different messages, and
 // neither is ever drawn as zero.
 import type { UsageReport } from "@mileniumhq/paperapi";
-import { formatBytes } from "../../../lib/formatBytes";
+import { formatBytes } from "@mileniumhq/paperui";
 import type { ComputerInfo } from "../../../lib/shell";
 import type { UsageState } from "./usageStore";
 

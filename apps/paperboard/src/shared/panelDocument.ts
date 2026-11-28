@@ -3,6 +3,7 @@
 // no-select baseline. Pure string work with no Node or Electron imports, so
 // every host (Electron, browser mode, Paperboard web's Worker) shares it.
 import { buildPanelCsp as fixedPanelCsp } from "daemon/panels/panelNet";
+import { frameLookAttributes, mobileAttribute, type FrameLook } from "@mileniumhq/paperapi/frameLook";
 
 // add the script nonce to any CSP — a daemon-built CSP gets the same
 // treatment as a locally-built one
@@ -29,7 +30,7 @@ export const remotePanelHtmlCsp = (servedCsp: string | null | undefined, nonce: 
             nonce,
         );
     }
-    // with the nonce: the credential and mobile scripts are inline
+    // with the nonce: the credential and look scripts are inline
     return buildPanelCsp(nonce);
 };
 
@@ -77,12 +78,13 @@ export function injectCraneBootstrap(html: string, payload: string): string {
     return insertAtHeadStart(html, `<script>window.__PAPERBOARD_CRANE=${payload};</script>`);
 }
 
-/** PaperUI's MOBILE_ATTRIBUTE */
-const MOBILE_ATTRIBUTE = "data-paper-mobile";
-
-// Mobile mode (PaperUI's paperMobile) is stamped on the document before any
-// of its own scripts or styles run, so a panel's first paint is already right.
-// The shell tells the frame again if it changes (PaperAPI's MOBILE_MODE_MESSAGE).
-export function injectMobileMode(html: string, mobile: boolean): string {
-    return insertAtHeadStart(html, `<script>document.documentElement.setAttribute("${MOBILE_ATTRIBUTE}","${mobile}");</script>`);
+// How the panel looks (PaperAPI's FrameLook) and mobile mode are stamped on
+// the document before any of its own scripts or styles run, so a panel's
+// first paint is already right. The shell tells the frame again when they
+// change. A look the host couldn't read is left to the shell's challenge.
+export function injectFrameLook(html: string, mobile: boolean, look: FrameLook | null): string {
+    const attributes = [mobileAttribute(mobile), ...(look ? frameLookAttributes(look) : [])];
+    const root = "document.documentElement";
+    const writes = attributes.map(([name, value]) => (value === null ? `${root}.removeAttribute(${JSON.stringify(name)});` : `${root}.setAttribute(${JSON.stringify(name)},${JSON.stringify(value)});`));
+    return insertAtHeadStart(html, `<script>${writes.join("")}</script>`);
 }

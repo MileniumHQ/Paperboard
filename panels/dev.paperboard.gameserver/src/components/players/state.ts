@@ -169,5 +169,3 @@ export function createPlayers() {
         deleteOpenData,
     };
 }
-
-export type PlayersState = ReturnType<typeof createPlayers>;

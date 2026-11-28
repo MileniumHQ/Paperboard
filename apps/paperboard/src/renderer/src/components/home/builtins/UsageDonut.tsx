@@ -1,9 +1,8 @@
-import { PaperButton, PaperChart, PaperChartLegend, PaperWidget, PaperWidgetMessage, PaperWidgetStat, type PaperChartSegment } from "@mileniumhq/paperui";
+import { PaperButton, PaperChart, PaperChartLegend, PaperWidget, PaperWidgetMessage, PaperWidgetStat, formatBytes, type PaperChartSegment } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { oneCellCaption, retryTile, widgetTitle } from "./systemFigures";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
-import { formatBytes } from "../../../lib/formatBytes";
 import { fitChart, formatPercent, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 

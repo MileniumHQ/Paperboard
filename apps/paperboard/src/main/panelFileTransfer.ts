@@ -20,11 +20,11 @@ import {
     isImportableName,
     parsePanelFileTransferRequest,
     PanelFileTransferError,
-    type FileTypeFilter,
     type ImportedPanelFile,
     type PanelFileTransferRequest,
     type PanelFileTransferResult,
 } from "../shared/fileTransfer";
+import type { FileTypeFilter } from "@mileniumhq/paperapi";
 
 // a daemon that sends or accepts nothing for this long has failed the transfer
 const TRANSFER_IDLE_MS = 60_000;

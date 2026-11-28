@@ -104,13 +104,20 @@ export default function App() {
     // what went wrong for the shell in front where no one was waiting on it;
     // each stands while it is true, and this window can put it away. Keyed
     // by session, kind and message, so a row keeps its identity while it stands.
-    const [putAway, setPutAway] = createStore<Record<string, true>>({});
-    const sessionErrors = () => {
-        const session = currentSession();
-        return Object.entries(service.value()?.sessionErrors[session] ?? {})
-            .map(([kind, message]) => [session, kind, message].join("\n"))
-            .filter((key) => !putAway[key]);
-    };
+    const [putAway, setPutAway] = createStore<Record<string, true | undefined>>({});
+    // every shell's, keyed: read entry by entry, so it changes whenever one does
+    const standing = createMemo(() =>
+        Object.entries(service.value()?.sessionErrors ?? {}).flatMap(([session, kinds]) =>
+            Object.entries(kinds).map(([kind, message]) => [session, kind, message].join("\n")),
+        ),
+    );
+    // one that stops standing is forgotten, so it shows again if it comes back
+    createEffect(
+        on(standing, (keys) => {
+            for (const key of Object.keys(putAway)) if (!keys.includes(key)) setPutAway(key, undefined);
+        }),
+    );
+    const sessionErrors = () => standing().filter((key) => key.startsWith(`${currentSession()}\n`) && !putAway[key]);
     const describeSessionError = (key: string) => {
         const [, kind, ...message] = key.split("\n");
         return { title: SESSION_ERROR_TITLES[kind as SessionErrorKind], message: message.join("\n") };

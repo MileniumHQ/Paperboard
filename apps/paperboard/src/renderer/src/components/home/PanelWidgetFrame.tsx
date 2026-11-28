@@ -2,7 +2,7 @@ import { PaperButton, PaperText, playHaptic } from "@mileniumhq/paperui";
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { HAPTIC_MESSAGE, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 import { panelUrl } from "../../lib/shell";
-import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
+import { FRAME_LOOK_MESSAGE, MOBILE_MODE_MESSAGE, frameLook, mobileMode, requireFrameState } from "../../lib/frameLook";
 import type { LoadQueue } from "../../lib/loadQueue";
 import styles from "./Home.module.css";
 
@@ -109,6 +109,8 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
 
     // mobile mode turning on or off reaches a widget already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null && attempt?.initialized) post({ type: MOBILE_MODE_MESSAGE, mobile }); }, { defer: true }));
+    // and so does a new theme, or animations or blur turned off
+    createEffect(on(frameLook, (look) => { if (look !== null && attempt?.initialized) post({ type: FRAME_LOOK_MESSAGE, look }); }, { defer: true }));
 
     // the shell owns size and visibility; the widget follows
     createEffect(on([() => props.size, () => props.visible, ready], ([size, visible, isReady]) => {
@@ -134,7 +136,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
                         type: "paperboard:initialize",
                         service: props.service,
                         computerName: props.computerName,
-                        mobile: requireMobileMode(),
+                        ...requireFrameState(),
                         widget: {
                             id: props.widgetId,
                             instanceId: props.instanceId,

@@ -1,21 +1,11 @@
 import { createSignal, onMount, Show, type JSX } from "solid-js";
-import {
-    PaperButton,
-    PaperCenteredInterface,
-    PaperEmptyState,
-    PaperError,
-    PaperModal,
-    PaperText,
-    PaperWizard,
-    PaperWizardStep,
-} from "@mileniumhq/paperui";
+import { PaperButton, PaperCenteredInterface, PaperEmptyState, PaperError, PaperModal, PaperText, PaperWizard, PaperWizardStep, formatBytes } from "@mileniumhq/paperui";
 import InstallStepView, { createWizardInstall } from "../../components/InstallStepView";
 import { UnsupportedHost } from "../../components/InstallNotices";
 import { useServer } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { createSteamInstall, type SteamInstallInfo } from "./installRows";
 import InstallLoaders from "../../components/InstallLoaders";
-import { formatSize } from "../../lib/addons/presentation";
 
 function InstallStep(props: { name: string }) {
     const { calls, installProgress } = useServer();
@@ -99,7 +89,7 @@ function InstallStep(props: { name: string }) {
                             fallback={<InstallLoaders items={[{ label: `Checking ${props.name}'s download size`, done: "", percent: () => 0, status: () => "indeterminate" }]} />}
                         >
                             {(bytes) => (
-                                <PaperEmptyState icon="download" title={`${props.name} isn't downloaded yet`} description={`Its server is ${formatSize(bytes())} from Steam.`}>
+                                <PaperEmptyState icon="download" title={`${props.name} isn't downloaded yet`} description={`Its server is ${formatBytes(bytes())} from Steam.`}>
                                     <PaperButton onClick={() => setAsking(true)}>Download</PaperButton>
                                 </PaperEmptyState>
                             )}
@@ -117,12 +107,12 @@ function InstallStep(props: { name: string }) {
                 footer={
                     <>
                         <PaperButton variant="text" onClick={() => setAsking(false)}>Cancel</PaperButton>
-                        <PaperButton onClick={download}>Download {formatSize(size() ?? 0)}</PaperButton>
+                        <PaperButton onClick={download}>Download {formatBytes(size() ?? 0)}</PaperButton>
                     </>
                 }
             >
                 <PaperText preset="body">
-                    {props.name}'s server is a {formatSize(size() ?? 0)} download from Steam. Setup goes on once it's here.
+                    {props.name}'s server is a {formatBytes(size() ?? 0)} download from Steam. Setup goes on once it's here.
                 </PaperText>
             </PaperModal>
         </Show>

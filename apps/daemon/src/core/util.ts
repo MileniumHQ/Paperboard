@@ -99,31 +99,6 @@ export function withTimeout<T>(
     ) as Promise<T>;
 }
 
-// bounded in-memory replay buffer, keeps the most recent output
-export class RingBuffer {
-    private buffer: string[] = [];
-    private currentSize = 0;
-
-    constructor(private maxSize: number = 256 * 1024) {}
-
-    push(str: string): void {
-        this.buffer.push(str);
-        this.currentSize += str.length;
-        while (this.currentSize > this.maxSize && this.buffer.length > 0) {
-            const removed = this.buffer.shift()!;
-            this.currentSize -= removed.length;
-        }
-    }
-
-    getAll(): string {
-        return this.buffer.join("");
-    }
-
-    get size(): number {
-        return this.currentSize;
-    }
-}
-
 import * as fs from "fs";
 
 // the shell a terminal runs when its creator named none

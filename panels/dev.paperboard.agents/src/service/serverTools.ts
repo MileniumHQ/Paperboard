@@ -101,8 +101,15 @@ const COMMON_KEYS = ["name", "reason"];
 /** what a program runs, to tell whether a change is one the user allows first */
 const runs = (s: ServerSpec) => (s.transport === "stdio" ? JSON.stringify([s.command, s.args, s.env]) : null);
 
+/** a program the agent asked to run, on its card in the chat */
+interface ProgramAsk {
+    entry: ToolServerEntry;
+    spec: ServerSpec;
+    timer: ReturnType<typeof setTimeout>;
+}
+
 export class ServerTools {
-    private pending: { entry: ToolServerEntry; spec: ServerSpec; timer: ReturnType<typeof setTimeout> } | null = null;
+    private pending: ProgramAsk | null = null;
     /** servers with a sign-in card out, told about when they come up */
     private awaiting = new Set<string>();
 
@@ -301,9 +308,11 @@ export class ServerTools {
         if (!p || p.entry.id !== id || p.entry.status !== "waiting") throw new Error("That request isn't waiting anymore.");
         if (typeof allow !== "boolean") throw new Error("allow it or not");
         clearTimeout(p.timer);
+        // answered: a second click, or a new request while it saves, doesn't reach it
+        this.pending = null;
         const name = p.spec.name;
         if (!allow) {
-            this.finish({ status: "declined" });
+            this.finish(p, { status: "declined" });
             this.deps.tell(`The user said no to running ${name} on their computer. Don't add it again unless they bring it up.`);
             return { status: "declined" };
         }
@@ -314,11 +323,11 @@ export class ServerTools {
             await this.servers.save(p.spec);
         } catch (e) {
             const error = errorMessage(e);
-            this.finish({ status: "failed", error });
+            this.finish(p, { status: "failed", error });
             this.deps.tell(`The user allowed ${name}, but it couldn't be saved: ${error}.`);
             throw new Error(`Not saved: ${error}`);
         }
-        this.finish({ status: "allowed" });
+        this.finish(p, { status: "allowed" });
         // the click is answered now; starting can take a while (a package to download), and the agent hears how it went
         void this.bringUp(name).then(
             (how) => this.deps.tell(`The user allowed ${name} to run on their computer, and it's ${p.entry.change ? "changed" : "added"}. ${how}`),
@@ -337,15 +346,13 @@ export class ServerTools {
         const p = this.pending;
         if (!p || p.entry.status !== "waiting") return;
         clearTimeout(p.timer);
-        this.finish({ status: "expired" });
+        this.finish(p, { status: "expired" });
     }
 
-    private finish(patch: Partial<ToolServerEntry>) {
-        const p = this.pending;
-        if (!p) return;
+    private finish(p: ProgramAsk, patch: Partial<ToolServerEntry>) {
         p.entry = { ...p.entry, ...patch };
         this.deps.post(p.entry);
-        this.pending = null;
+        if (this.pending === p) this.pending = null;
     }
 }
 

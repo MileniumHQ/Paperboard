@@ -29,7 +29,6 @@ export const TOOL_LIMITS = {
 
 /** a secret the vault holds for a server; the config only ever names it */
 const secretRef = shape.object({ secret: shape.text() });
-export type SecretRef = Infer<typeof secretRef>;
 
 const serverValue = shape.either(shape.text(), secretRef);
 export type ServerValue = Infer<typeof serverValue>;

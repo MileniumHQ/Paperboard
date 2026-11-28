@@ -5,7 +5,7 @@ import { recordUse, liveKeys, recordAway, withoutIdle, MAX_LIVE_IFRAMES, IDLE_UN
 import LoadingOverlay from "./LoadingOverlay";
 import styles from "./frame.module.css";
 import { panelUrl } from "../../lib/shell";
-import { MOBILE_MODE_MESSAGE, mobileMode, requireMobileMode } from "../../lib/mobileMode";
+import { FRAME_LOOK_MESSAGE, MOBILE_MODE_MESSAGE, frameLook, mobileMode, requireFrameState } from "../../lib/frameLook";
 import BackupLocationChooser from "../backups/BackupLocationChooser";
 import { unsavedPanels } from "../../lib/unsavedPanels";
 import { createFrameDocument, type ChooserRequest } from "./frameMessages";
@@ -116,13 +116,15 @@ const PanelFrame: Component<PanelFrameProps> = (props) => {
     createEffect(on(failure, (message) => { if (message) props.failed(); }, { defer: true }));
     // mobile mode turning on or off reaches a frame already challenged
     createEffect(on(mobileMode, (mobile) => { if (mobile !== null) frame?.contentWindow?.postMessage({ type: MOBILE_MODE_MESSAGE, generation, mobile }, "*"); }, { defer: true }));
+    // and so does a new theme, or animations or blur turned off
+    createEffect(on(frameLook, (look) => { if (look !== null) frame?.contentWindow?.postMessage({ type: FRAME_LOOK_MESSAGE, generation, look }, "*"); }, { defer: true }));
     // the phone layout's bar names the panel's pages, which then draw none of their own; a foldable opening into the wide layout gives them back
     createEffect(on(() => props.mobile, (pageBars) => { frame?.contentWindow?.postMessage({ type: PAGE_BARS_MESSAGE, generation, pageBars }, "*"); }, { defer: true }));
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId()}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
-            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, mobile: requireMobileMode(), pageBars: props.mobile }, "*"); }}
+            onLoad={() => { frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName, ...requireFrameState(), pageBars: props.mobile }, "*"); }}
             class={styles.frame} classList={{ [styles.panelFrame]: !props.mobile, [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
         <BackupLocationChooser computerId={computerId()} computerName={props.computerName} panelId={panelId()} panelName={props.heading.name} open={chooser() !== null} onDone={(result) => {
             const request = chooser();

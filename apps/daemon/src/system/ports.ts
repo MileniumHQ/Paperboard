@@ -16,22 +16,7 @@ import { readStateFileSync, writeJsonAtomic } from "../core/storage";
 import { SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import { ErrorCode } from "../core/protocol";
 import { RpcError, invalidParams } from "../rpc/errors";
-
-export type PortProtocol = "tcp" | "udp" | "tcp+udp";
-/** what happens when the port asked for is taken */
-export type PortPolicy = "refuse" | "next-free";
-
-export interface PortClaim {
-    panelId: string;
-    /** the panel's own name for the port, unique per panel */
-    name: string;
-    /** who holds it, for people: "Game Server (Java)" */
-    label: string;
-    protocol: PortProtocol;
-    port: number;
-    /** how many ports in a row the claim holds, from `port`; 1 for most */
-    count: number;
-}
+import type { PortClaim, PortPolicy, PortProtocol } from "@mileniumhq/paperapi";
 
 interface PortsFile {
     version: 1;

@@ -24,7 +24,8 @@ export function supervisorLaunch(
     return { command: binary, args: ["--data-dir", dataDir, "--supervise", id], env };
 }
 
-// Earlier builds ran each AppImage supervisor from a mount of its own, held
+// TODO(remove after v0.6): with mountHolderPid and its adoption-sweep caller.
+// Builds up to 0.3 ran each AppImage supervisor from a mount of its own, held
 // by a detached AppImage runtime that the supervisor stopped as it exited. A
 // supervisor from such a build that was killed outright left its mount
 // behind; the adoption sweep (engine.ts) stops it here. Only an AppImage

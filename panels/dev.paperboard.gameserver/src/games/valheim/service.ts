@@ -8,7 +8,7 @@ import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
-import { ConsoleBuffer, assertHost, exists, offlineBackup, pushChat, redact, report, serverSecret, unlessMissing } from "../serviceKit";
+import { assertHost, exists, offlineBackup, pushChat, redact, report, serverSecret, unlessMissing } from "../serviceKit";
 import { KEYS, MODIFIERS, options, valheim, VALHEIM_APP_ID, VALHEIM_CLIENT_APP_ID, VALHEIM_MAX_PLAYERS, VALHEIM_PASSWORD_MIN, type ValheimOption } from "./index";
 import { ValheimLog } from "./log";
 import { isList, listEntry, ValheimLists, type ValheimList } from "./lists";
@@ -106,7 +106,6 @@ export function valheimService(ctx: Server): GameService {
         /** world saves the server reported this run; the stop must add one for a backup to copy */
         saves: 0,
         secrets: [] as string[],
-        console: new ConsoleBuffer(isError),
     };
 
     // Layout: install/ is SteamCMD's folder and is left out of backups; save/ is
@@ -324,7 +323,7 @@ export function valheimService(ctx: Server): GameService {
             } else await fs.rm(await runFile(), { force: true });
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Valheim's current operation"); },
-        async dispose() { local.console.dispose(); },
+        async dispose() {},
         async prepareLaunch() {
             assertHost(valheim);
             const install = await installDir();
@@ -373,13 +372,12 @@ export function valheimService(ctx: Server): GameService {
         stopTimeoutMs: 120_000, stopEntry: "Stopping: Valheim saves its world as it quits",
         // Ctrl+C, as the server's manual says to stop it; it saves the world before it exits
         stop: () => ctx.process.kill(PROC, "SIGINT"),
-        flushConsole: () => local.console.flush(ctx),
         commandLine() { throw new Error("Valheim's server reads no console commands; manage admins and bans in Players"); },
         observeLine(raw) {
             const line = redact(raw.replace(/\r/g, ""), local.secrets);
             if (!line.trim()) return;
             try { readLine(line); } catch (err) { report(ctx, "Could not read a Valheim log line", err); }
-            local.console.push(ctx, line);
+            ctx.console.push(line, isError(line));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

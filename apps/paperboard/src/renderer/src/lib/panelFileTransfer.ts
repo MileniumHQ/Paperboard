@@ -6,10 +6,10 @@
 // by the host that runs the dialog (src/shared/fileTransfer.ts).
 import {
     isImportableName,
-    type FileTypeFilter,
     type ImportedPanelFile,
     type PanelFileTransferResult,
 } from "../../../shared/fileTransfer";
+import type { FileTypeFilter } from "@mileniumhq/paperapi";
 import { isBrowserShell, logToMain, shellIpc } from "./shell";
 import { errorMessage } from "@mileniumhq/paperapi";
 

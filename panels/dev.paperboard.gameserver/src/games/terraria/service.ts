@@ -7,7 +7,7 @@ import { initialServerState } from "../../service/initialState";
 import { appendCapped } from "../../service/types";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, redact, report,
+    assertHost, exclusive, exists, fileStamp, hostSupportHere, offlineBackup, pushChat, redact, report,
     serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate,
 } from "../serviceKit";
 import { terraria } from "./index";
@@ -29,6 +29,9 @@ import { TRIGGER_IDS } from "../../service/contract";
 const GAME = "terraria";
 const PROC = "terraria-server";
 const DEFAULT_PORT = 7777;
+/** A console line Terraria writes for a failure; its own start banner isn't one. */
+const isError = (line: string) => /error|exception/i.test(line) && !/^Error Logging Enabled\.?$/i.test(line);
+
 /** One server's part of the game: its process, console, settings files and players are its own. */
 export function terrariaService(ctx: Server): GameService {
     const local = {
@@ -44,7 +47,6 @@ export function terrariaService(ctx: Server): GameService {
         listed: [] as { name: string; address: string }[],
         store: null as PlayerStore | null,
         // "Error Logging Enabled." is a notice every start prints, not an error
-        console: new ConsoleBuffer((line) => /error|exception/i.test(line) && !/^Error Logging Enabled\.?$/i.test(line)),
     };
     const hostFor = (software: TerrariaSoftware) => hostSupportHere(terraria, { software, version: "" });
     const host = (software: TerrariaSoftware) => assertHost(terraria, { software, version: "" });
@@ -176,7 +178,7 @@ export function terrariaService(ctx: Server): GameService {
     async function modStore() {
         const saved = ctx.settings;
         if (softwareOf(saved) !== "tmodloader" || !saved.version) throw new Error("Mods need a tModLoader server");
-        return new ModStore({ root: await ctx.root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: /ERROR/.test(line) ? "error" : "info", content: `[SteamCMD] ${line}` }) })); } });
+        return new ModStore({ root: await ctx.root(), tmodloaderVersion: String(saved.version), onLine: line => { if (/Downloading|Update|ERROR/i.test(line)) ctx.console.say(/ERROR/.test(line) ? "error" : "info", `[SteamCMD] ${line}`); } });
     }
     /** one mod change at a time per server; the result says whether a running server must restart */
     async function modChange<T>(work: (store: ModStore) => Promise<T>): Promise<{ result: T; restart: boolean }> {
@@ -303,7 +305,7 @@ export function terrariaService(ctx: Server): GameService {
             }
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Terraria's current operation"); },
-        async dispose() { local.console.dispose(); },
+        async dispose() {},
         async prepareLaunch() {
             const saved = ctx.settings; const software = softwareOf(saved);
             host(software);
@@ -349,7 +351,6 @@ export function terrariaService(ctx: Server): GameService {
             await generate("").catch(err => report(ctx, "Could not take the join password out of serverconfig.txt", err));
             await ctx.process.write(PROC, "exit\n");
         },
-        flushConsole: () => local.console.flush(ctx),
         commandLine(command) { const line = singleLine(command, "Command").trim(); if (/^(password|exit-nosave)\b/i.test(line)) throw new Error("Use Options for the password and Stop for a saved shutdown"); return `${line}\n`; },
         sendChat: (message) => ctx.process.write(PROC, `say ${singleLine(message, "Message")}\n`),
         observePartialLine(line) {
@@ -368,7 +369,7 @@ export function terrariaService(ctx: Server): GameService {
             const shown = stripPrompt(line).trimEnd();
             const probe = /^(\S+) is connecting\.\.\.$/.exec(shown)?.[1];
             if (probe && local.probes.includes(probe)) { local.probes = local.probes.filter((p) => p !== probe); return; }
-            if (shown) local.console.push(ctx, shown);
+            if (shown) ctx.console.push(shown, isError(shown));
         },
         async assertFileAccess(file, write) {
             if (write && typeof file === "string" && file.startsWith(`${SAVE_DIR}/Mods/`) && local.modsBusy) throw new Error("Wait for the mod change to finish");

@@ -411,8 +411,7 @@ export class PanelInstaller {
         const cleanId = requirePanelId(panelId);
         return this.locked(cleanId, async () => {
             await this.services.stopService(cleanId);
-            // Resource identity comes from the ownership ledger. Legacy IDs
-            // require an explicit migration; a name is not proof of ownership.
+            // the panel's workloads by the ownership ledger: a name is not proof of ownership
             await this.workloads.stopPanelWorkloads(cleanId);
 
             const panelDir = path.join(this.panelsDir, cleanId);

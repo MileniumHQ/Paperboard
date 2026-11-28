@@ -32,7 +32,7 @@ import { problemsFor } from "../rpc/problems";
 import { clipProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { readDaemonStatus } from "../cli/localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFile";
-import { errorMessage } from "@mileniumhq/paperapi/errors";
+import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
@@ -347,7 +347,9 @@ function followParent(): void {
     const timer = setInterval(() => {
         try {
             process.kill(parent, 0);
-        } catch {
+        } catch (err) {
+            // quiet: EPERM is a parent that is there, only not ours to signal
+            if (errorCode(err) === "EPERM") return;
             clearInterval(timer);
             logger.info(`[Paperboard Server] the process that started the daemon (PID ${parent}) is gone; stopping`);
             process.emit("SIGTERM");

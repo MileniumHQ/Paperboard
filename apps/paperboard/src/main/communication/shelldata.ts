@@ -3,7 +3,7 @@
 // event.senderFrame.url is checked via shellGuard: panel:// origins get a
 // typed PANEL_IPC_REFUSED, never an answer.
 import { type IpcMain, type IpcMainInvokeEvent, type WebContents, BrowserWindow, app, dialog, nativeTheme, shell } from "electron";
-import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics, readAppSettings } from "../appSettings";
+import { syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup, currentGraphics, readAppSettings } from "../appSettings";
 import * as path from "path";
 import { logger } from "daemon/core/logger";
 import { getAppUpdateState } from "../appUpdateSession";
@@ -19,7 +19,7 @@ import { shellServer } from "./shellServer";
 import type { SendArgs } from "../../shared/shellContract";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
-import type { FileTypeFilter } from "../../shared/fileTransfer";
+import type { FileTypeFilter } from "@mileniumhq/paperapi";
 import { cancelGoogleSignIn, paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import { googleSignInPage, loopbackRedirectPage } from "../googleSignInPage";
 import { catchLoopbackRedirect, LoopbackRedirectFailure } from "../loopbackRedirect";
@@ -92,7 +92,6 @@ export async function applySavedAppSettings(): Promise<string | null> {
     const settings = readAppSettings();
     applyNativeTheme(settings);
     const loginItemError = applyRunOnStartup(settings);
-    await broadcastAppSettings();
     syncTitleBarOverlays();
     return loginItemError;
 }

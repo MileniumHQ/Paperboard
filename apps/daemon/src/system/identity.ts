@@ -6,6 +6,7 @@
 // function the tests drive with a machine's real files.
 import * as fs from "fs";
 import * as os from "os";
+import type { IdentityPart } from "@mileniumhq/paperapi";
 
 export interface SystemProbe {
     platform: NodeJS.Platform;
@@ -24,14 +25,6 @@ export interface SystemProbe {
     registry: Readonly<Record<string, Readonly<Record<string, string>>>>;
     /** macOS: whether it runs under a hypervisor (sysctl kern.hv_vmm_present) */
     macVirtual?: boolean;
-}
-
-/** One named layer of a computer's identity. */
-export interface IdentityPart {
-    /** stable lowercase id the shell keys its brand on */
-    id: string;
-    name: string;
-    version?: string;
 }
 
 export interface ComputerIdentity {

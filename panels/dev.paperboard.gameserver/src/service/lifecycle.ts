@@ -3,7 +3,7 @@ import { errorMessage } from "@mileniumhq/paperapi";
 import { assertRecoverySettled } from "./recoveryState";
 import { prepareGamePorts } from "./ports";
 import { livePortDeps } from "./portDeps";
-import { type GameServerState, appendCapped, MAX_BUFFERED_ENTRIES } from "./types";
+import { type GameServerState, MAX_BUFFERED_ENTRIES } from "./types";
 import { loadServerOptions } from "./options";
 import { oomKillCount } from "./memory";
 import { TRIGGER_IDS } from "./contract";
@@ -33,7 +33,7 @@ function monitorReadiness(ctx: Server): void {
     const fail = async (err: unknown) => {
         if (!active()) return;
         clearTimeout(expired); cancelReadiness(ctx);
-        ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: `Startup failed: ${errorMessage(err)}` }) });
+        ctx.console.say("error", `Startup failed: ${errorMessage(err)}`);
         markStopRequested(ctx);
         // nobody awaits this: a kill that fails is said, or the server would sit "starting" in silence
         await ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL").catch((killErr) => report(ctx, "The server that failed to start could not be ended", killErr));
@@ -72,8 +72,8 @@ function scheduleStopForceKill(
     cancelStopForceKill(ctx);
     const timer = setTimeout(() => {
         ctx.lifecycle.stopTimeout = null;
-        if (ctx.game.stopTimeoutMs) ctx.setState({ serverEntries: appendCapped(ctx.state.serverEntries, { type: "error", content: "[Server] Graceful stop timed out; force-killing. World save not confirmed." }) });
-        void Promise.resolve(ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL")).catch((err) => ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Force-kill failed: ${errorMessage(err)}` }) })));
+        if (ctx.game.stopTimeoutMs) ctx.console.say("error", "[Server] Graceful stop timed out; force-killing. World save not confirmed.");
+        void Promise.resolve(ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL")).catch((err) => ctx.console.say("error", `[Server] Force-kill failed: ${errorMessage(err)}`));
         const deadline = setTimeout(() => void confirmForceKill(ctx), confirmMs);
         deadline.unref?.();
         ctx.lifecycle.killDeadline = deadline;
@@ -100,7 +100,7 @@ async function confirmForceKill(ctx: Server): Promise<void> {
     }
     ctx.lifecycle.isRestarting = false;
     cancelStopRequest(ctx);
-    ctx.setState((prev) => ({ serverStatus: "online", serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Server] Could not confirm the force-kill: ${reason}.` }) }));
+    ctx.console.say("error", `[Server] Could not confirm the force-kill: ${reason}.`, { serverStatus: "online" });
 }
 
 // test seam: the force-kill is time-based, so tests drive it with short
@@ -121,12 +121,7 @@ export function releaseServer(ctx: Server, moves: GameServerState["portMoves"]):
     if (!afterStop) return undefined;
     return (ctx.lifecycle.released = afterStop(moves).catch((err) => {
         console.error("[gameserver] cleaning up after the server stopped failed:", err);
-        ctx.setState((prev) => ({
-            serverEntries: appendCapped(prev.serverEntries, {
-                type: "error",
-                content: `[Server] Could not clean up after the server stopped: ${errorMessage(err)}`,
-            }),
-        }));
+        ctx.console.say("error", `[Server] Could not clean up after the server stopped: ${errorMessage(err)}`);
     }));
 }
 
@@ -135,7 +130,7 @@ function readOomKills(ctx: Server): number | null {
     try {
         return oomKillCount();
     } catch (err) {
-        ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${errorMessage(err)}` }) }));
+        ctx.console.say("warn", `[Server] Could not read the system's memory events, so a crash from running out of memory is not told apart: ${errorMessage(err)}`);
         return null;
     }
 }
@@ -243,13 +238,7 @@ async function launchServer(ctx: Server, carry: GameServerState["serverEntries"]
         console.error("[Service:Lifecycle] Failed to start server:", err);
         // the launch may have got as far as preparing the server's files
         void releaseServer(ctx, ctx.state.portMoves);
-        ctx.setState({
-            serverStatus: "offline",
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "error",
-                content: `[Server] Failed to launch: ${errorMessage(err)}`,
-            }),
-        });
+        ctx.console.say("error", `[Server] Failed to launch: ${errorMessage(err)}`, { serverStatus: "offline" });
         throw err;
     }
 }
@@ -262,22 +251,10 @@ export async function stopServerInstance(
     if (curr === "starting") {
         markStopRequested(ctx);
         await ctx.process.kill(ctx.game.primaryProcessId, "SIGKILL");
-        ctx.setState({
-            serverStatus: "offline",
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "warn",
-                content: "[Server] Process killed by user.",
-            }),
-        });
+        ctx.console.say("warn", "[Server] Process killed by user.", { serverStatus: "offline" });
     } else if (curr === "online") {
         markStopRequested(ctx);
-        ctx.setState({
-            serverStatus: "stopping",
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "command",
-                content: ctx.game.stopEntry,
-            }),
-        });
+        ctx.console.say("command", ctx.game.stopEntry, { serverStatus: "stopping" });
         // the force-kill is pending before the stop is sent: a server can quit before its
         // stop is acknowledged, and its exit then has to find the force-kill to cancel it
         scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
@@ -293,19 +270,8 @@ export async function restartServerInstance(
     cancelReadiness(ctx);
     ctx.lifecycle.isRestarting = true;
     markStopRequested(ctx);
-    ctx.setState({
-        serverStatus: "restarting",
-        serverEntries: appendCapped(
-            appendCapped(ctx.state.serverEntries, {
-                type: "command",
-                content: ctx.game.stopEntry,
-            }),
-            {
-                type: "info",
-                content: "[Server] Stopping for restart...",
-            },
-        ),
-    });
+    ctx.console.say("command", ctx.game.stopEntry, { serverStatus: "restarting" });
+    ctx.console.say("info", "[Server] Stopping for restart...");
     // pending before the stop is sent, as in stopServerInstance
     scheduleStopForceKill(ctx, ctx.game.stopTimeoutMs);
     try { await ctx.game.stop(); }
@@ -331,16 +297,13 @@ export async function sendServerCommand(
     if (!trimmed) return;
 
     if (trimmed === "clear") {
+        // the output gathered before it goes with it
+        ctx.console.flush();
         ctx.setState({ serverEntries: [] });
         return;
     }
 
-    ctx.setState({
-        serverEntries: appendCapped(ctx.state.serverEntries, {
-            type: "command",
-            content: cmd,
-        }),
-    });
+    ctx.console.say("command", cmd);
 
     if (
         ctx.state.serverStatus === "online" ||
@@ -349,19 +312,13 @@ export async function sendServerCommand(
         if (control === "rcon") await game.sendCommand!(line);
         else await ctx.process.write(ctx.game.primaryProcessId, line);
     } else {
-        ctx.setState({
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "error",
-                content: "Cannot execute command: server is offline.",
-            }),
-        });
+        ctx.console.say("error", "Cannot execute command: server is offline.");
         // the console line above is for the player; the caller (an action,
         // a flow) must still see that nothing ran
         throw new Error("Cannot execute command: server is offline.");
     }
 }
 
-/** Log viewing is available even when a game has no command control. */
 export function handleProcessData(ctx: Server, chunk: string): void {
     ctx.lifecycle.lineBuffer += chunk;
     const lines = ctx.lifecycle.lineBuffer.split("\n");
@@ -383,8 +340,6 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
         ctx.lifecycle.lineBuffer = "";
     }
-    // the run's last lines go above what its exit says, and the next start's line
-    ctx.game.flushConsole?.();
     // the run's moves end with it as it goes offline; the game is told them
     const moves = ctx.state.portMoves;
 
@@ -392,16 +347,7 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.lifecycle.isRestarting = false;
         // startServerInstance only proceeds from "offline" and owns the
         // transition to "starting"
-        ctx.setState({
-            serverStatus: "offline",
-            onlinePlayers: [],
-            maxPlayers: null,
-            serverLevel: null,
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "info",
-                content: "[Server] Restarting instance...",
-            }),
-        });
+        ctx.console.say("info", "[Server] Restarting instance...", { serverStatus: "offline", onlinePlayers: [], maxPlayers: null, serverLevel: null });
         // the game takes back what the last start set aside before the next one sets it again
         // quiet: startServerInstance puts its own failure in the console
         const restart = () => void startServerInstance(ctx).catch(err => console.error("[gameserver] restart failed:", err));
@@ -411,16 +357,7 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
     } else {
         const exit = classifyExit(ctx, exitCode);
         const released = releaseServer(ctx, moves);
-        ctx.setState({
-            serverStatus: "offline",
-            onlinePlayers: [],
-            maxPlayers: null,
-            serverLevel: null,
-            serverEntries: appendCapped(ctx.state.serverEntries, {
-                type: "warn",
-                content: "[Server] Process stopped.",
-            }),
-        });
+        ctx.console.say("warn", "[Server] Process stopped.", { serverStatus: "offline", onlinePlayers: [], maxPlayers: null, serverLevel: null });
         ctx.trigger(TRIGGER_IDS.serverStopped, true);
         if (exit.kind === "crashed") {
             ctx.trigger(TRIGGER_IDS.serverCrashed, exitCode ?? null);

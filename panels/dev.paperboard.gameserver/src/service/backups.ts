@@ -17,7 +17,6 @@
 import { backupApi, errorMessage, type BackupContents, type BackupRecord, type RestoreEnded } from "@mileniumhq/paperapi";
 import type { Server, Settings } from "./server";
 import { PANEL_ID } from "./contract";
-import { appendCapped } from "./types";
 import { fireBackupEnded, serverOperation } from "./blocks";
 import { stopServerInstance } from "./lifecycle";
 import { markResume, report, resumeIfMarked, settle, stoppedAndReleased } from "../games/serviceKit";
@@ -117,7 +116,7 @@ export function backupHooks(host: BackupsHost) {
                 else if (await server.process.exists(server.game.primaryProcessId)) {
                     // the marker is what says it ran: it starts again at the end, or once a service that died meanwhile is back
                     await markResume(server);
-                    server.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "info", content: "[Server] Stopping to restore a backup..." }) }));
+                    server.console.say("info", "[Server] Stopping to restore a backup...");
                     await stopServerInstance(server);
                 }
                 // the run's cleanup (afterStop) is done before the files are swapped

@@ -5,11 +5,7 @@
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "@mileniumhq/paperapi/panelIdentity";
 import { errorMessage } from "@mileniumhq/paperapi/errors";
-
-export interface FileTypeFilter {
-    name: string;
-    extensions: string[];
-}
+import type { FileTypeFilter } from "@mileniumhq/paperapi";
 
 /** what an import asks the user to pick: one file (path is the file), several files, or a folder (path is the folder to copy them into) */
 export type PanelImportSelection = "file" | "files" | "folder";

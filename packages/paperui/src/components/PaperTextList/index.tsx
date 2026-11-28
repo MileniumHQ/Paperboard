@@ -8,10 +8,9 @@ import {
     type ParentProps,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { PaperText, type PaperTextProps, PRESETS } from "../PaperText";
+import { PaperText, type PaperTextProps } from "../PaperText";
+import { textStyle } from "../PaperText/style";
 import type { PaperColor, PaperTextPreset } from "../../types";
-import { getVarCss, resolveColor } from "../../utils/theme";
-import { mergeStyle } from "../../utils/style";
 import { cx } from "../../utils/cx";
 
 export interface PaperTextListProps
@@ -68,14 +67,7 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
         "style",
     ]);
 
-    const presetValues = () =>
-        local.preset ? PRESETS[local.preset] : undefined;
-    const effectiveSize = () => local.size ?? presetValues()?.size ?? 3;
-    const effectiveWeight = () => local.weight ?? presetValues()?.weight ?? 400;
     const spacingPreset = () => local.spacing ?? "normal";
-
-    const fontSizeVar = () => getVarCss(`text-size-${effectiveSize()}`);
-    const resolvedColor = () => resolveColor(local.color);
 
     const className = () =>
         cx(
@@ -88,40 +80,6 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
             local.truncate ? styles.truncate : "",
             local.class,
         );
-
-    const combinedStyle = () => {
-        const extra: JSX.CSSProperties = {};
-
-        if (local.breakWord) {
-            extra["word-break"] = "break-word";
-            extra["overflow-wrap"] = "break-word";
-        }
-
-        if (local.truncate) {
-            if (typeof local.truncate === "number" && local.truncate > 1) {
-                extra.display = "-webkit-box";
-                extra["-webkit-line-clamp"] = local.truncate;
-                extra["-webkit-box-orient"] = "vertical";
-                extra.overflow = "hidden";
-                extra["text-overflow"] = "ellipsis";
-            } else {
-                extra.overflow = "hidden";
-                extra["text-overflow"] = "ellipsis";
-                extra["white-space"] = "nowrap";
-            }
-        }
-
-        return mergeStyle(
-            {
-                "font-weight": effectiveWeight(),
-                "font-size": fontSizeVar(),
-                color: resolvedColor(),
-                ...(local.type ? { "list-style-type": local.type } : {}),
-                ...extra,
-            },
-            local.style,
-        );
-    };
 
     const contextValue = () => ({
         preset: local.preset,
@@ -148,7 +106,7 @@ export function PaperTextList(props: ParentProps<PaperTextListProps>) {
             data-preset={local.preset}
             class={className()}
             classList={local.classList}
-            style={combinedStyle()}
+            style={textStyle(local, 3, local.type ? { "list-style-type": local.type } : {})}
         >
             {items()}
         </Dynamic>

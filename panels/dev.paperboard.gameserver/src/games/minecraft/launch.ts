@@ -1,7 +1,7 @@
 import type { Server } from "../../service/server";
 import { minecraftSoftware } from "./index";
 import { packages as packageApi, system } from "../../service/api";
-import { PANEL_ID, appendCapped } from "../../service/types";
+import { PANEL_ID } from "../../service/types";
 import { heapFit } from "../../service/memory";
 import { SOFTWARE_NAMES } from "../../lib/software";
 import { isWindowsTarget } from "../../lib/platform";
@@ -66,7 +66,7 @@ export async function prepareLaunch(ctx: Server): Promise<PreparedLaunch> {
     // the heap is set aside whole as Java starts (-Xms = -Xmx)
     const fit = heapFit(ctx.state.ramAllocation, os.totalmem());
     if (fit && "refuse" in fit) throw new Error(fit.refuse);
-    if (fit) ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: fit.warn }) }));
+    if (fit) ctx.console.say("warn", fit.warn);
 
     // a Java port that was taken moves for this run only: server.properties keeps the chosen one
     const port = ctx.runPorts.get(JAVA_PORT_NAME);

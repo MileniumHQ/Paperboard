@@ -7,27 +7,7 @@ import os from "os";
 import path from "path";
 import { logger } from "../core/logger";
 import { errorCode } from "@mileniumhq/paperapi/errors";
-
-export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "other";
-
-export interface GpuInfo {
-    name: string;
-    vendor: GpuVendor;
-    /** dedicated memory, or system memory when unifiedMemory is true */
-    memoryTotalBytes?: number;
-    memoryFreeBytes?: number;
-    /** the GPU shares system RAM (Apple Silicon) */
-    unifiedMemory?: boolean;
-    driver?: string;
-    /** where the facts came from, e.g. "nvidia-smi", "sysfs" */
-    source: string;
-}
-
-export interface GpuReport {
-    gpus: GpuInfo[];
-    /** probes that failed; non-empty means the list may be incomplete */
-    errors: string[];
-}
+import type { GpuInfo, GpuReport, GpuVendor } from "@mileniumhq/paperapi";
 
 export type ExecFn = (command: string, args: string[], timeoutMs: number) => Promise<string>;
 

@@ -140,6 +140,32 @@ describe("tool-server config", () => {
         expect((await both.s.view()).configError).toBe('tools.json: "actions" isn\'t a setting');
     });
 
+    test("a server restarted while it's still starting starts again", async () => {
+        // the first initialize is held until the restart has begun
+        let initializes = 0;
+        let release!: () => void;
+        const held = new Promise<void>((ok) => (release = ok));
+        const base = await serve(async (req, res) => {
+            let body = "";
+            for await (const chunk of req) body += chunk;
+            const m = JSON.parse(body);
+            if (m.id === undefined) return void res.writeHead(202).end();
+            if (m.method === "initialize" && ++initializes === 1) await held;
+            const result = m.method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake" } } : { tools: [] };
+            res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: m.id, result }));
+        });
+        const { s } = servers();
+        await s.load();
+        await s.save({ name: "web", transport: "http", url: `${base}/mcp` });
+        void s.warm();
+        await poll(() => initializes === 1, "the first start to reach the server");
+        const restarted = s.restart("web");
+        release();
+        await restarted;
+        expect(initializes).toBe(2);
+        expect(s.status()[0]!.phase).toBe("running");
+    });
+
     test("over HTTP, a redirect is refused rather than followed with the headers", async () => {
         const reached: http.IncomingHttpHeaders[] = [];
         const elsewhere = await serve((req, res) => {
@@ -161,7 +187,7 @@ describe("tool-server config", () => {
 describe("signing in to a tool server", () => {
     /** an MCP server that wants a bearer token, and its own authorization server */
     async function oauthServer(o: { refuseRegistration?: boolean; secretOnly?: boolean } = {}) {
-        const st = { valid: "a1", issued: 0, registered: [] as string[], challenge: "", refreshes: 0, resource: "", asked: "", secretSeen: false, tokenDown: false };
+        const st = { valid: "a1", issued: 0, registered: [] as string[], challenge: "", refreshes: 0, resource: "", asked: "", secretSeen: false, tokenDown: false, trades: 0, hold: null as Promise<void> | null };
         let base = "";
         const json = (res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
             res.writeHead(status, { "Content-Type": "application/json", ...headers });
@@ -208,6 +234,8 @@ describe("signing in to a tool server", () => {
                 if (o.secretOnly && p.get("client_secret") !== "shh") return json(res, 401, { error: "invalid_client" });
                 st.secretSeen ||= p.get("client_secret") === "shh";
                 if (p.get("grant_type") === "authorization_code") {
+                    st.trades++;
+                    await st.hold;
                     const hash = (await import("node:crypto")).createHash("sha256").update(p.get("code_verifier")!).digest("base64url");
                     if (p.get("code") !== "the-code" || hash !== st.challenge || p.get("client_id") !== "paperboard-1") return json(res, 400, { error: "invalid_grant" });
                     st.issued++;
@@ -296,6 +324,24 @@ describe("signing in to a tool server", () => {
         const state = new URL(pending.url).searchParams.get("state");
         await expect(s.finishSignIn("web", `${pending.callback}?error=access_denied&state=${state}`)).rejects.toThrow(/refused: access_denied/);
         expect((await s.view()).signIns.web!.error).toMatch(/refused/);
+    });
+
+    test("a sign-in canceled or removed while its code is traded writes no tokens", async () => {
+        const { base, st } = await oauthServer();
+        const { s, vault } = servers();
+        await s.save({ name: "web", transport: "http", url: `${base}/mcp`, oauth: true });
+        for (const end of [() => s.cancelSignInFor("web"), () => s.remove("web")]) {
+            let release!: () => void;
+            st.hold = new Promise<void>((ok) => (release = ok));
+            const trades = st.trades;
+            const finished = s.finishSignIn("web", await browse((await s.signIn("web")).signIns.web!.url));
+            await poll(() => st.trades > trades, "the code to reach the sign-in server");
+            await end();
+            release();
+            const failure = await finished.catch((e: Error) => e.message);
+            expect(vault.has("mcp.web.oauth")).toBe(false);
+            expect(failure).toMatch(/ended while its code was traded/);
+        }
     });
 
     test("a sign-in caught on another device is handed over and finishes the same", async () => {

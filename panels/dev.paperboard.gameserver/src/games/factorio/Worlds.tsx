@@ -1,9 +1,8 @@
 import { createSignal, For } from "solid-js";
-import { PaperTable } from "@mileniumhq/paperui";
+import { PaperTable, formatBytes } from "@mileniumhq/paperui";
 import { PANEL_ID } from "../../service/contract";
 import { GameOptionItem } from "../../components/GameOptions";
 import WorldsPage from "../../components/WorldsPage";
-import { formatSize } from "../../lib/addons/presentation";
 import { useServer } from "../../lib/server";
 import { options } from "./index";
 import { SAVE_NAME } from "./settings";
@@ -24,13 +23,13 @@ export default function FactorioWorlds() {
             list={() => calls.factorioWorlds()}
             game={{
                 title: (world: FactorioWorld) => world.name,
-                summary: (world) => `${formatSize(world.bytes)} · Saved ${new Date(world.modified).toLocaleDateString()}`,
+                summary: (world) => `${formatBytes(world.bytes)} · Saved ${new Date(world.modified).toLocaleDateString()}`,
                 details: (world) => (
                     <PaperTable>
                         <tbody>
                             <tr>
                                 <th>File</th>
-                                <td>{world().name}.zip · {formatSize(world().bytes)}</td>
+                                <td>{world().name}.zip · {formatBytes(world().bytes)}</td>
                             </tr>
                             <tr>
                                 <th>Last saved</th>

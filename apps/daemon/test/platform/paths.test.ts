@@ -3,6 +3,7 @@ import { TEST_TIMEOUT_MS } from "testkit/wait";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PaperCraneEngine } from "../../src/engine/index";
+import { resolveDavPath } from "../../src/server/dav";
 import { dataDir, listTree, tempDir } from "testkit/fs";
 import { startDaemon, type InProcessDaemon } from "testkit/inproc";
 import type { Rpc } from "testkit/rpc";
@@ -85,6 +86,22 @@ describe("panel file, config and workspace paths stay inside the panel", () => {
 			expect(fs.readFileSync(path.join(dir, "files", "test.case", "note.txt"), "utf8")).toBe("case");
 			expect(await engine.readFile("note.txt", "test.case")).toBe("case");
 			expect(written.toLowerCase()).toBe(path.join(dir, "files", "test.case", "note.txt").toLowerCase());
+		});
+	}
+
+	if (process.platform === "win32") {
+		test("WebDAV refuses what Windows opens under another spelling: trailing dots and spaces, streams and short names", () => {
+			const root = tempDir("pb-dav-");
+			fs.mkdirSync(path.join(root, "local"));
+			fs.writeFileSync(path.join(root, "secrets.json"), "{}");
+			fs.writeFileSync(path.join(root, "notes.txt"), "notes");
+			// a volume that makes short names gives secrets.json one
+			const shortName = fs.existsSync(path.join(root, "SECRET~1.JSO")) ? ["/SECRET~1.JSO"] : [];
+			for (const rel of ["/local./x", "/local /x", "/local::$INDEX_ALLOCATION/x", "/secrets.json.", "/secrets.json::$DATA", ...shortName]) {
+				expect(resolveDavPath(root, rel)).toBeNull();
+			}
+			expect(resolveDavPath(root, "/notes.txt")).toBe(path.join(root, "notes.txt"));
+			expect(resolveDavPath(root, "/..notes.txt")).toBe(path.join(root, "..notes.txt"));
 		});
 	}
 });

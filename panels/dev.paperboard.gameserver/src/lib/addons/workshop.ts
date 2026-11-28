@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
+import { formatBytes } from "@mileniumhq/paperui";
 import type { ServerPage } from "../server";
-import { formatCount, formatSize } from "./presentation";
+import { formatCount } from "./presentation";
 import { discardUpload, listAdded, pickFiles } from "./upload";
 import type { WorkshopItem, WorkshopMeta, WorkshopPage } from "../../games/steam/modscan";
 import type { InstalledMod } from "../../games/terraria/modStore";
@@ -82,7 +83,7 @@ const workshopSource = (steam: ReturnType<typeof workshop>): AddonSource => ({
                 { label: "Subscribers", value: item.subscriptions === null ? "Unknown" : formatCount(item.subscriptions) },
                 { label: "Favorites", value: item.favorites === null ? "Unknown" : formatCount(item.favorites) },
                 { label: "Last Updated", value: formatDate(item.timeUpdated) },
-                { label: "Size", value: formatSize(item.fileSize) },
+                { label: "Size", value: formatBytes(item.fileSize) },
                 { label: "Tags", value: item.tags.length ? item.tags.join(", ") : "None" },
             ],
         };

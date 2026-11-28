@@ -71,7 +71,3 @@ export function parsePlayerStats(raw: unknown): PlayerStatSummaryData | null {
         distanceCm,
     };
 }
-
-export function playTimeSeconds(data: PlayerStatSummaryData): number {
-    return Math.floor(data.playTimeTicks / 20);
-}

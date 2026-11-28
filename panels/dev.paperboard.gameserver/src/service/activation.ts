@@ -147,11 +147,11 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
             await rollbackStaging(root, staging, journal, fs);
         } catch (rollbackErr) {
             throw new Error(
-                `Activating the install failed (${messageOf(err)}) and restoring the previous files also failed (${messageOf(rollbackErr)}). ` +
+                `Activating the install failed (${errorMessage(err)}) and restoring the previous files also failed (${errorMessage(rollbackErr)}). ` +
                     `They are kept in ${staging}/${PARKED_DIR}; the panel retries the restore when its service restarts.`,
             );
         }
-        throw new Error(`Activating the install failed; the previous files were restored: ${messageOf(err)}`);
+        throw new Error(`Activating the install failed; the previous files were restored: ${errorMessage(err)}`);
     }
 
     return {
@@ -161,9 +161,6 @@ export async function activateStagedInstall(request: ActivationRequest): Promise
     };
 }
 
-function messageOf(err: unknown): string {
-    return errorMessage(err);
-}
 
 /**
  * Puts the server folder back the way it was. Safe to repeat: a staged

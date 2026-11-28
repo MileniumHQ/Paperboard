@@ -73,10 +73,6 @@ function assertPaths(paths: readonly string[], what: string): void {
 const inDir = (dir: string, path: string) => nodePath.join(dir, ...path.split("/"));
 
 
-function messageOf(err: unknown): string {
-    return errorMessage(err);
-}
-
 function ancestors(path: string): string[] {
     const segments = path.split("/");
     return segments.slice(0, -1).map((_, i) => segments.slice(0, i + 1).join("/"));
@@ -144,11 +140,11 @@ export async function activatePack(request: PackActivationRequest): Promise<Pack
             await rollbackPack(root, staging, journal, fs);
         } catch (rollbackErr) {
             throw new Error(
-                `Placing the modpack failed (${messageOf(err)}) and restoring the previous files also failed (${messageOf(rollbackErr)}). ` +
+                `Placing the modpack failed (${errorMessage(err)}) and restoring the previous files also failed (${errorMessage(rollbackErr)}). ` +
                     `They are kept in ${staging}/${PARKED_DIR}; the panel retries the restore when its service restarts.`,
             );
         }
-        throw new Error(`Placing the modpack failed; the previous files were restored: ${messageOf(err)}`);
+        throw new Error(`Placing the modpack failed; the previous files were restored: ${errorMessage(err)}`);
     }
 
     return {

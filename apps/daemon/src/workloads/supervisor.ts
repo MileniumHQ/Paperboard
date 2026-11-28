@@ -52,15 +52,6 @@ export interface SupervisorSpawnConfig {
     mountHolderPid?: number;
 }
 
-export interface SupervisorMetadata {
-    id: string;
-    pid: number;
-    childPid: number;
-    isPty: boolean;
-    startedAt: string;
-    config: SupervisorSpawnConfig;
-}
-
 export { getPaperboardDir } from "../core/paths";
 import { ensurePrivateDir, getSocketsDir } from "../core/paths";
 import { errorMessage } from "@mileniumhq/paperapi/errors";

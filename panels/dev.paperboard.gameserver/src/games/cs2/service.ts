@@ -3,13 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { errorCode } from "../../service/api";
 import { initialServerState } from "../../service/initialState";
-import { appendCapped } from "../../service/types";
 import { validateOptions } from "../options";
 import { installedBuild, steamClientLibrary } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exists, linkFolder, pushChat, redact, report, serverSecret, settingPort, settled, singleLine, writePrivate,
+    assertHost, exists, linkFolder, pushChat, redact, report, serverSecret, settingPort, settled, singleLine, writePrivate,
 } from "../serviceKit";
 import { SOURCE_CALLS, type SourceMetrics } from "../source";
 import { cvarValue, mapName, optionValue } from "../source/config";
@@ -76,7 +75,6 @@ export function cs2Service(ctx: Server): GameService {
         /** the player rows of a `status` answer being printed; null outside one */
         status: null as string[] | null,
         secrets: [] as string[],
-        console: new ConsoleBuffer(isErrorLine),
     };
 
     // Layout: install/ is SteamCMD's folder, left out of backups; Paperboard's
@@ -130,7 +128,7 @@ export function cs2Service(ctx: Server): GameService {
         async joined(player) {
             if (!(await roster().bans()).some((ban) => ban.steamId === player.steamId)) return;
             await send(`kickid ${player.userId} Banned from this server`);
-            ctx.setState((prev) => ({ serverEntries: appendCapped(prev.serverEntries, { type: "warn", content: `[Paperboard] ${player.name} is banned and was put out as they joined.` }) }));
+            ctx.console.say("warn", `[Paperboard] ${player.name} is banned and was put out as they joined.`);
         },
     });
 
@@ -230,7 +228,6 @@ export function cs2Service(ctx: Server): GameService {
         async beforeRemove() { if (local.busy) throw new Error("Wait for Counter-Strike 2's current operation"); },
         async dispose() {
             players.dispose();
-            local.console.dispose();
         },
         async prepareLaunch() {
             assertHost(cs2);
@@ -290,7 +287,6 @@ export function cs2Service(ctx: Server): GameService {
         async saveWorld() { throw new Error("Counter-Strike 2 keeps no world to save"); },
         stopTimeoutMs: 30_000, stopEntry: "quit",
         stop: () => send("quit"),
-        flushConsole: () => local.console.flush(ctx),
         commandLine(command) {
             const line = singleLine(command, "Command").trim();
             if (/^(quit|exit|rcon_password|sv_setsteamaccount)\b/i.test(line)) throw new Error("Paperboard keeps the server's passwords and stops it; use Options and Stop");
@@ -318,7 +314,8 @@ export function cs2Service(ctx: Server): GameService {
                     if (event) players.observe(event);
                 }
             }
-            local.console.push(ctx, consoleLine(line));
+            const shown = consoleLine(line);
+            ctx.console.push(shown, isErrorLine(shown));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

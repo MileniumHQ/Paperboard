@@ -1,8 +1,7 @@
 // How full a backup location is, in words, for the chooser and settings.
 import type { Accessor } from "solid-js";
 import { backupLocationsApi, type BackupLocationUsage } from "@mileniumhq/paperapi";
-import { createRead, type Read } from "@mileniumhq/paperui";
-import { formatBytes } from "../../lib/formatBytes";
+import { createRead, formatBytes, type Read } from "@mileniumhq/paperui";
 
 /** A location's usage, read as it appears and again each time `round` changes. */
 export function createLocationUsage(locationId: string, computerId: string, round?: Accessor<number>): Read<BackupLocationUsage> {

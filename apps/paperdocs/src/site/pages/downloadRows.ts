@@ -47,6 +47,3 @@ export const DAEMON: DownloadRow[] = [
         files: [{ label: "x64", path: "crane/latest/crane-linux-x64.tar.gz" }, { label: "ARM64", path: "crane/latest/crane-linux-arm64.tar.gz" }],
     },
 ];
-
-/** Every release address the page links. */
-export const releaseUrls = (): string[] => [...APP, ...DAEMON].flatMap((row) => row.files.map((file) => releaseUrl(file.path)));

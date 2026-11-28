@@ -17,8 +17,9 @@ import {
     buildPanelCsp,
     remotePanelHtmlCsp,
 } from "./panelAssets";
-import { injectCraneBootstrap, injectCspNonce, injectMobileMode, injectUnselectable } from "../shared/panelDocument";
+import { injectCraneBootstrap, injectCspNonce, injectFrameLook, injectUnselectable } from "../shared/panelDocument";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
+import type { FrameLook } from "@mileniumhq/paperapi/frameLook";
 
 export { parsePanelHost } from "./panelAssets";
 
@@ -40,13 +41,14 @@ async function injectCraneCreds(html: string, comp: string, panelId: string): Pr
     return injectCraneBootstrap(html, buildCraneCredentialPayload(creds, comp, panelId, scoped));
 }
 
-// a panel document gets its credential, the phone layout flag and the CSP
-// nonce, in that order, from whichever machine served its bytes
-async function panelDocument(html: string, comp: string, panelId: string, nonce: string): Promise<string> {
+// a panel document gets its credential, how it looks and the CSP nonce, in
+// that order, from whichever machine served its bytes
+async function panelDocument(html: string, comp: string, panelId: string, nonce: string, look: FrameLook | null): Promise<string> {
     return injectCspNonce(
-        injectMobileMode(
+        injectFrameLook(
             injectUnselectable(await injectCraneCreds(html, comp, panelId)),
             launchOptionsFromArgv(process.argv).mobile,
+            look,
         ),
         nonce,
     );
@@ -65,10 +67,13 @@ async function readLocalFile(file: string): Promise<Buffer | null> {
 
 // Not found is a missing file; anything else (an unreadable file, a refused
 // credential, a computer that can't be reached) is a 500 or 502 that says why.
+// `look` is stamped on a panel document, and only read for one (main's
+// appSettings servedFrameLook); null leaves it to the shell's challenge
 export async function servePanelAsset(
     urlComp: string,
     panelId: string,
     pathname: string,
+    look: () => FrameLook | null,
 ): Promise<Response> {
     try {
         // deliberately no fallback to active computer
@@ -119,7 +124,7 @@ export async function servePanelAsset(
             if (fileExt === ".html") {
                 const nonce = panelCspNonce();
                 headers["Content-Security-Policy"] = buildPanelCsp(nonce);
-                return new Response(await panelDocument(buffer.toString("utf8"), comp, cleanPanelId, nonce), { headers });
+                return new Response(await panelDocument(buffer.toString("utf8"), comp, cleanPanelId, nonce, look()), { headers });
             }
             return new Response(new Uint8Array(buffer), { headers });
         }
@@ -155,7 +160,7 @@ export async function servePanelAsset(
             const served = headerValue(res.headers["content-security-policy"]) ?? null;
             const nonce = panelCspNonce();
             headers["Content-Security-Policy"] = remotePanelHtmlCsp(served, nonce);
-            return new Response(await panelDocument(new TextDecoder().decode(buffer), comp, cleanPanelId, nonce), { headers });
+            return new Response(await panelDocument(new TextDecoder().decode(buffer), comp, cleanPanelId, nonce, look()), { headers });
         }
         return new Response(buffer, { headers });
     } catch (err: any) {

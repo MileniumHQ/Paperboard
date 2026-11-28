@@ -76,9 +76,6 @@ function fsOf(deps: ModpackDeps): PackFs {
     return deps.fs ?? (nodeFs as unknown as PackFs);
 }
 
-function messageOf(err: unknown): string {
-    return errorMessage(err);
-}
 
 
 const inDir = (dir: string, path: string) => nodePath.join(dir, ...path.split("/"));
@@ -373,7 +370,7 @@ async function installPack(software: ServerSoftwareType, deps: ModpackDeps, fetc
                     warning = (await deps.installSoftware(software, index.mcVersion, index.loaderVersion, configPatch)).warning;
                 } catch (err) {
                     throw new Error(
-                        `Installing ${SOFTWARE[software].name} ${index.loaderVersion} for Minecraft ${index.mcVersion} failed: ${messageOf(err)}`,
+                        `Installing ${SOFTWARE[software].name} ${index.loaderVersion} for Minecraft ${index.mcVersion} failed: ${errorMessage(err)}`,
                     );
                 }
             }
@@ -381,13 +378,13 @@ async function installPack(software: ServerSoftwareType, deps: ModpackDeps, fetc
         } catch (err) {
             await activation.rollback();
             throw new Error(
-                `${messageOf(err)}. The previous mods were put back.`,
+                `${errorMessage(err)}. The previous mods were put back.`,
             );
         }
         try {
             await activation.commit();
         } catch (err) {
-            const cleanup = `${pack.title} is installed, but moving the replaced files to the trash failed (${messageOf(err)}). Paperboard retries when the panel service restarts.`;
+            const cleanup = `${pack.title} is installed, but moving the replaced files to the trash failed (${errorMessage(err)}). Paperboard retries when the panel service restarts.`;
             warning = warning ? `${warning} ${cleanup}` : cleanup;
             console.error("[Service:Modpacks] commit cleanup failed:", err);
         }
@@ -421,7 +418,7 @@ export async function removeModpack(deps: ModpackDeps): Promise<{ removed: numbe
     try {
         record = await readModpack(deps);
     } catch (err) {
-        console.warn("[Service:Modpacks] forgetting an unreadable modpack record:", messageOf(err));
+        console.warn("[Service:Modpacks] forgetting an unreadable modpack record:", errorMessage(err));
         await deps.writeConfig({ [MODPACK_RECORD_KEY]: null });
         return { removed: 0, forgotten: true };
     }
@@ -433,7 +430,7 @@ export async function removeModpack(deps: ModpackDeps): Promise<{ removed: numbe
         await deps.writeConfig({ [MODPACK_RECORD_KEY]: null, [MODPACK_STAGING_KEY]: staging });
     } catch (err) {
         await activation.rollback();
-        throw new Error(`Could not record the removal, so the modpack was put back: ${messageOf(err)}`);
+        throw new Error(`Could not record the removal, so the modpack was put back: ${errorMessage(err)}`);
     }
     await activation.commit();
     return { removed: record.files.length };

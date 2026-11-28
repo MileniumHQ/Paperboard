@@ -7,7 +7,7 @@ import { stopLeftoverInstaller } from "../../service/installerProcess";
 import { validateOptions } from "../options";
 import type { GameService } from "../serviceTypes";
 import {
-    ConsoleBuffer, assertHost, exclusive, exists, hostSupportHere, offlineBackup, playerPoller, pushChat, redact, report,
+    assertHost, exclusive, exists, hostSupportHere, offlineBackup, playerPoller, pushChat, redact, report,
     serverSecret, settingPort, settled, singleLine, unlessMissing, waitUntil, writePrivate,
 } from "../serviceKit";
 import { recoverRelease } from "../releaseSwap";
@@ -60,7 +60,6 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         /** saves the server confirmed this run */
         saves: 0,
         secrets: [] as string[],
-        console: new ConsoleBuffer(isError),
     };
 
     // Layout: install/ is the release and is left out of backups; data/ is the
@@ -397,7 +396,6 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
             players.stop();
             local.rcon?.close();
             local.rcon = null;
-            local.console.dispose();
         },
         async prepareLaunch() {
             // its tools run from install/ on the world: Worlds, uploads, installs and Files wait for them
@@ -429,7 +427,6 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         stopTimeoutMs: 120_000, stopEntry: "Stopping: Factorio saves the map as it quits",
         // Ctrl+C: the server saves its map, then quits
         stop: () => ctx.process.kill(PROC, "SIGINT"),
-        flushConsole: () => local.console.flush(ctx),
         commandLine(command) {
             if (/[\r\n\0]/.test(command)) throw new Error("A command must be a single line");
             if (/^\s*\/(?:quit|config\s+set\s+password)\b/i.test(command)) throw new Error("Paperboard stops the server and keeps its join password; use Stop and Options");
@@ -438,7 +435,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         async sendCommand(command) {
             // the answer comes back over the remote console, not through the server's own output
             const reply = await rcon().exec(command);
-            for (const line of reply.split(/\r?\n/)) if (line.trim()) local.console.push(ctx, redact(line, local.secrets));
+            for (const line of reply.split(/\r?\n/)) if (line.trim()) ctx.console.push(redact(line, local.secrets), isError(line));
         },
         async sendChat(message) {
             const text = singleLine(message, "Message");
@@ -460,7 +457,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
                 if (sender === "<server>") pushChat(ctx, { event: "server", content, text: `<Server> ${content}` });
                 else ctx.trigger(TRIGGER_IDS.chatMessage, pushChat(ctx, { sender, content, text: `<${sender}> ${content}` }));
             }
-            local.console.push(ctx, line);
+            ctx.console.push(line, isError(line));
         },
         async assertFileAccess(file, write) {
             if (typeof file !== "string") throw new Error("Choose a file");

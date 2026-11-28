@@ -181,5 +181,3 @@ export function createFileDocument(props: Pick<PaperFileBrowserProps, "read" | "
         reloadFromDisk,
     };
 }
-
-export type FileDocument = ReturnType<typeof createFileDocument>;

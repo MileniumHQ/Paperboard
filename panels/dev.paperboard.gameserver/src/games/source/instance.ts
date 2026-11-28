@@ -4,10 +4,10 @@
 import path from "node:path";
 import type { Server } from "../../service/server";
 import type { GameDefinition } from "../types";
-import { ConsoleBuffer, serverSecret, settled } from "../serviceKit";
+import { serverSecret, settled } from "../serviceKit";
 import type { SourceGameSpec } from "./index";
 import { optionValue } from "./config";
-import { isErrorLine, isSteamId, steamId as checkedSteamId } from "./log";
+import { isSteamId, steamId as checkedSteamId } from "./log";
 import type { SourceRcon } from "./rcon";
 import type { SourceRoster } from "./roster";
 import { SourcePlayers } from "./people";
@@ -26,7 +26,6 @@ export class SourceGame {
     loadedRoster: SourceRoster | null = null;
     /** the passwords the run under way started with, hidden from its console */
     secrets: string[] = [];
-    readonly console = new ConsoleBuffer(isErrorLine);
     /** SourceMod loaded with the running server */
     modsActive = false;
     modsBusy = false;

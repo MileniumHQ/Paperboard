@@ -14,6 +14,7 @@ import type { StoredServer } from "../servers";
 import { PANEL_ID } from "./contract";
 import type { GameServerState } from "./types";
 import { onlineSinceAfter, type historyWriter } from "./history";
+import { ServerConsole } from "./console";
 
 export type Settings = Record<string, unknown>;
 
@@ -84,6 +85,8 @@ export class Server {
     /** what setup subscribed to, ended on removal or a fresh setup */
     readonly unsubscribe: (() => void)[] = [];
 
+    /** its console as its game's output fills it */
+    readonly console = new ServerConsole(this);
     /** the server process's start, readiness, stop and console lines (lifecycle) */
     readonly lifecycle = {
         oomBaseline: null as number | null,
