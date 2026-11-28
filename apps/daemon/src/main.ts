@@ -101,9 +101,12 @@ async function main(): Promise<void> {
             const { uninstallService } = await import("./cli/serviceInstall");
             return finish(() => uninstallService(command.target));
         }
-        case "serve":
-            await startPaperCraneServer(command.options);
+        case "serve": {
+            const server = await startPaperCraneServer(command.options);
+            // a daemon that stopped on its own (its data folder moved away) said why; a service manager hears a failure
+            if (await server.ended) process.exit(EXIT.FAILURE);
             return;
+        }
     }
 }
 

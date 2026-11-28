@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getLogsDir } from "./paths";
+import { checkDataWrite, DataFolderMovedError } from "./folderClaim";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -32,6 +33,8 @@ export class PaperboardLogger {
     private consoleLevel: LogLevel;
     private mirrorConsole: boolean;
     private currentFile: string | null = null;
+    /** the log file's folder isn't this daemon's any more: nothing more is written there */
+    private detached = false;
 
     constructor(options: LoggerOptions = {}) {
         this.name = options.name || "paperboard";
@@ -95,12 +98,24 @@ export class PaperboardLogger {
     }
 
     private writeLine(line: string): void {
+        if (this.detached) return;
         const file = this.ensureLogFile();
         if (!file) return;
         try {
+            // a data folder moved away while the daemon runs gets none of its lines (core/folderClaim.ts)
+            checkDataWrite(file);
             this.rotateIfNeeded();
             fs.appendFileSync(file, line, "utf8");
-        } catch (err) { console.error("[logger] append failed:", err); } // quiet: the logger cannot report its own failure anywhere but the console
+        } catch (err) {
+            // quiet: the logger cannot report its own failure anywhere but the console
+            if (err instanceof DataFolderMovedError) {
+                // said once; the lines that follow go to the console alone
+                this.detached = true;
+                console.error(`[logger] ${err.message} Logging goes to the console only from here.`);
+                return;
+            }
+            console.error("[logger] append failed:", err);
+        }
     }
 
     private ensureLogFile(): string | null {

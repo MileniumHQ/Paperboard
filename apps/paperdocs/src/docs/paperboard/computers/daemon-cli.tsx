@@ -223,7 +223,7 @@ Arch         x64`}
                 </thead>
                 <tbody>
                     <tr><td><PaperCode>0</PaperCode></td><td>Success.</td></tr>
-                    <tr><td><PaperCode>1</PaperCode></td><td>The command ran and failed. The reason is printed.</td></tr>
+                    <tr><td><PaperCode>1</PaperCode></td><td>The command ran and failed. The reason is printed. A running daemon also exits 1 when its data folder is moved, deleted or replaced while it runs (see <PaperLink href="/docs/paperboard/data-directory/#moved-while-running">The data directory</PaperLink>).</td></tr>
                     <tr><td><PaperCode>2</PaperCode></td><td>The command line was wrong: an unknown option or command, a bad value, or <PaperCode>--headless</PaperCode> with <PaperCode>--start-pairing</PaperCode>. It prints the error and the usage. Nothing starts.</td></tr>
                     <tr><td><PaperCode>3</PaperCode></td><td><PaperCode>status</PaperCode> only: no daemon is running for the data directory.</td></tr>
                     <tr><td><PaperCode>130</PaperCode></td><td><PaperCode>pair</PaperCode> was cancelled with Ctrl+C.</td></tr>

@@ -121,6 +121,8 @@ export class PaperCraneConnection extends EventEmitter {
     // by the address, which an ssh tunnel to another computer shares
     private own = true;
     private embeddedServer: ServerInstance | null = null;
+    /** why the embedded daemon stopped on its own (its data folder moved away): it isn't started again on what is at the path now */
+    private embeddedStoppedWhy: Error | null = null;
     private isConnected: boolean = false;
     private localIdentityVerified = false;
     private requestIdCounter = 1;
@@ -296,8 +298,12 @@ export class PaperCraneConnection extends EventEmitter {
     private async startEmbeddedDaemon(): Promise<WebSocket> {
         try {
             // the one before has closed its record store before this one opens it
-            await this.embeddedServer?.stop();
+            const before = this.embeddedServer;
+            await before?.stop();
             this.embeddedServer = null;
+            // settled once it has stopped: one that stopped on its own says why, and stays stopped
+            this.embeddedStoppedWhy ??= before ? await before.ended : null;
+            if (this.embeddedStoppedWhy) throw this.embeddedStoppedWhy;
             const freshToken = "pc_" + crypto.randomBytes(24).toString("hex");
             this.embeddedServer = await startPaperCraneServer({
                 port: 0,

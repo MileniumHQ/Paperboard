@@ -17,9 +17,9 @@ import { PaperCraneTui } from "../cli/tui";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "../system/discovery";
 import { writeFileAtomicSync } from "../core/storage";
 import { getDisplayHost } from "../core/util";
-import { DEFAULT_LISTEN_PORT } from "../cli/cli";
+import { DEFAULT_LISTEN_PORT, EXIT } from "../cli/cli";
 import { getLocalDir, getPaperboardDir, ensurePrivateDir } from "../core/paths";
-import { claimDataFolder, FolderClaimedError, type FolderClaim } from "../core/folderClaim";
+import { claimDataFolder, FolderClaimedError, type DataFolderMovedError, type FolderClaim } from "../core/folderClaim";
 import {
     craneHandshakePath, removeCraneHandshake,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, isDaemonChallenge, daemonProof,
@@ -91,6 +91,12 @@ export interface ServerInstance {
      * daemon on the same data folder next waits for.
      */
     stop: () => Promise<void>;
+    /**
+     * Settles once the daemon has stopped, however it stopped: with the
+     * reason when it stopped on its own (its data folder was moved, deleted
+     * or replaced while it ran: core/folderClaim.ts), else null.
+     */
+    ended: Promise<DataFolderMovedError | null>;
 }
 
 // what every listen attempt of one start shares
@@ -126,12 +132,14 @@ function writeCraneJson(file: string, port: number, token: string | null, startI
     );
 }
 
-// One daemon per data directory. A second one would overwrite crane.json,
-// hiding the first from every local client, and delete it on exit. Only a
-// daemon that proves it holds this folder's token counts: a stale crane.json
-// whose port another program now answers on owns nothing. The folder claim
-// (core/folderClaim.ts) is what stops two that start at once; this is asked
-// once it is held, for a daemon of a Paperboard before it, which takes none.
+// TODO(remove after v0.6): a daemon of Paperboard 0.4 or before, which takes
+// no folder claim, still running on this folder while a newer one starts
+// (an update that left the old standalone daemon up). A daemon of this
+// version or later holds the claim, and is refused by it first; so this
+// catches nothing else. A second one would overwrite crane.json, hiding
+// the first from every local client, and delete it on exit. Only a daemon
+// that proves it holds this folder's token counts: a stale crane.json whose
+// port another program now answers on owns nothing.
 async function refuseRunningDaemon(): Promise<void> {
     let status: Awaited<ReturnType<typeof readDaemonStatus>>;
     try {
@@ -153,11 +161,13 @@ async function claimFolder(): Promise<FolderClaim> {
     try {
         return await claimDataFolder();
     } catch (err) {
-        if (!(err instanceof FolderClaimedError)) throw err;
+        // a server on this path but another folder: crane.json here isn't its (it moved with its folder)
+        if (!(err instanceof FolderClaimedError) || err.held !== "folder") throw err;
         const status = await readDaemonStatus().catch(() => null); // quiet: only names the daemon that holds the folder; the claim's own error is thrown either way
         if (!status?.running) throw err;
         throw new FolderClaimedError(
             `A Paperboard server daemon is already running for ${status.dataDir}${status.pid !== undefined ? ` (PID ${status.pid})` : ""}. Stop it first, or start this one with another --data-dir.`,
+            "folder",
         );
     }
 }
@@ -366,26 +376,40 @@ interface DaemonParts {
     removeHandshake: () => void;
 }
 
-// How a running daemon ends. Three ways, each with its own workload policy:
+// How a running daemon ends: one stop, however it begins, each way with its
+// own workload policy:
 // - stop() (the TUI, an embedding app): ends the workloads, stops panel
 //   services at once and closes the servers; an interactive daemon then exits.
 // - SIGTERM/SIGINT: ends the daemon, never the workloads it supervises: a
 //   service manager's stop or restart (an OS update, a crane update) must
 //   not take a game server down. The next daemon adopts them. Panel
-//   services get their grace to finish a write.
+//   services get their grace to finish a write. The process then exits.
+// - the data folder moved, deleted or replaced while the daemon runs
+//   (core/folderClaim.ts): as stop(), but nothing more is written at the
+//   data path, the tokens and the PID file included; a daemon run from the
+//   command line then exits with a failure (main.ts), and its clients are
+//   told why.
 // - any other process exit: children must never outlive the daemon, so
 //   services and workloads are killed, unless a signal already chose to
 //   leave the workloads running.
+// A signal that comes while the daemon is stopping waits for that same stop,
+// then the process exits: the data is closed before the process goes,
+// however many signals come.
 function daemonLifecycle(parts: DaemonParts) {
     const { config, engine, auth, panelServices, server, localServer, wss, removeHandshake } = parts;
     let advertisement: AdvertisementHandle | null = null;
+    let tui: PaperCraneTui | null = null;
     let leavingWorkloads = false;
     let stopped = false;
+    let lost: DataFolderMovedError | null = null;
+    let unwatchFolder: (() => void) | null = null;
+    let tellEnded!: (why: DataFolderMovedError | null) => void;
+    const ended = new Promise<DataFolderMovedError | null>((resolve) => (tellEnded = resolve));
 
     const onExit = () => {
         try {
             removeHandshake();
-            auth.flushTokenStore();
+            if (!lost) auth.flushTokenStore();
         } finally {
             panelServices.stopAll();
             if (leavingWorkloads) engine.releaseAllClients();
@@ -399,9 +423,8 @@ function daemonLifecycle(parts: DaemonParts) {
     // folder is free (core/folderClaim.ts). Whoever opens the folder again (an
     // embedded daemon started right after) waits for it, so two never write
     // one store.
-    let closing: Promise<void> | null = null;
     const closeData = (): Promise<void> =>
-        (closing ??= config.claim.releaseAfter(
+        config.claim.releaseAfter(
             config.network
                 .stop()
                 .catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err))
@@ -410,77 +433,101 @@ function daemonLifecycle(parts: DaemonParts) {
                     catch (err) { logger.error("[Paperboard Server] while stopping, closing the shared documents failed:", err); }
                     return config.roster.close().catch((err) => logger.error("[Paperboard Server] while stopping, saving the computer list's last changes failed:", err));
                 }),
-        ));
-    const onSignal = async () => {
-        removeHandshake();
-        leavingWorkloads = true;
-        engine.releaseAllClients();
-        try {
-            advertisement?.stop();
-        } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop:", err); }
-        await panelServices.stopAllServices();
-        await closeData();
-        removePidFile();
-        process.exit(0);
-    };
-    let ended: Promise<void> = Promise.resolve();
-    /**
-     * Stops the daemon. A daemon with a TUI ends its process once its data is
-     * closed, unless the stop is a start that failed (`exitAfter` false): that
-     * start rejects, and whoever started it says why.
-     */
-    const stop = (exitAfter = !config.noAuth && !config.headless): Promise<void> => {
-        if (stopped) return ended;
+        );
+
+    let ending: Promise<void> | null = null;
+    /** the stop (the top of this function); every later call answers the one already under way */
+    const end = (how: "stop" | "signal" | "lost", exitAfter: boolean): Promise<void> => {
+        if (ending) return ending;
         stopped = true;
-        let handshakeFailure: unknown;
-        try { removeHandshake(); }
-        catch (err) { handshakeFailure = err; }
-        process.off("exit", onExit);
-        process.off("SIGTERM", onSignal);
-        process.off("SIGINT", onSignal);
+        unwatchFolder?.();
+        if (how === "signal") leavingWorkloads = true;
         // every step runs whatever the one before did; each failure is named
         const step = (what: string, run: () => void) => {
             try { run(); }
             catch (err) { logger.error(`[Paperboard Server] while stopping, ${what} failed:`, err); }
         };
-        step("saving the paired tokens", () => auth.flushTokenStore());
+        let handshakeFailure: unknown;
+        try { removeHandshake(); }
+        catch (err) { handshakeFailure = err; }
+        step("giving the terminal back", () => tui?.release());
+        // a folder that isn't this daemon's any more gets nothing more written
+        if (!lost) step("saving the paired tokens", () => auth.flushTokenStore());
         step("closing the token store", () => auth.dispose());
-        // synchronous: an embedded daemon restarted right after
-        // never overlaps the services of this one
-        step("stopping panel services", () => panelServices.stopAll());
-        // the data folder is let go as every stop lets it go: it resolves once it is free
-        ended = closeData();
+        // synchronous, but for a signal's grace: an embedded daemon restarted
+        // right after never overlaps the services of this one
+        if (how !== "signal") step("stopping panel services", () => panelServices.stopAll());
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
             advertisement = null;
         });
-        void engine.disposeClients(3000).catch((err) => logger.error("[Paperboard Server] while stopping, ending the workloads failed:", err));
-        step("closing the servers", () => {
-            // ws 8 leaves connected sockets open on close(); a
-            // stopped daemon must not keep serving them
-            for (const client of wss.clients) client.close(1001, "Paperboard Server stopped");
-            wss.close();
-            localServer?.close();
-            server.close(() => {
-                // the process goes only once the record store is closed: a pull mid-write finishes it first
-                if (exitAfter) void ended.then(() => process.exit(0));
+        if (how === "signal") engine.releaseAllClients();
+        else void engine.disposeClients(3000).catch((err) => logger.error("[Paperboard Server] while stopping, ending the workloads failed:", err));
+        const closed = new Promise<void>((resolve) => {
+            step("closing the servers", () => {
+                // ws 8 leaves connected sockets open on close(); a
+                // stopped daemon must not keep serving them. A close reason is at most 123 bytes
+                const why = lost ? "The data folder was moved or replaced while Paperboard was running" : "Paperboard Server stopped";
+                for (const client of wss.clients) client.close(1001, why);
+                wss.close();
+                localServer?.close();
+                server.close(() => resolve());
             });
         });
+        ending = (async () => {
+            if (how === "signal") await panelServices.stopAllServices();
+            await closeData();
+            if (!lost) removePidFile();
+        })().finally(() => {
+            process.off("exit", onExit);
+            process.off("SIGTERM", onSignal);
+            process.off("SIGINT", onSignal);
+            tellEnded(lost);
+        });
+        // the process goes only once the record store is closed: a pull mid-write finishes it first
+        if (exitAfter) void Promise.all([ending, closed]).then(() => process.exit(lost ? EXIT.FAILURE : 0));
         if (handshakeFailure) throw handshakeFailure;
-        return ended;
+        return ending;
+    };
+    const onSignal = () => {
+        // a stop already under way is waited for, then the process exits as the signal asked
+        let stopping: Promise<void>;
+        try {
+            stopping = end("signal", false);
+        } catch (err) {
+            logger.error("[Paperboard Server] while stopping, removing crane.json failed:", err);
+            stopping = ending ?? Promise.resolve();
+        }
+        void stopping.then(() => process.exit(lost ? EXIT.FAILURE : 0));
     };
 
     return {
-        stop,
+        /**
+         * Stops the daemon. A daemon with a TUI ends its process once its data is
+         * closed, unless the stop is a start that failed (`exitAfter` false): that
+         * start rejects, and whoever started it says why.
+         */
+        stop: (exitAfter = !config.noAuth && !config.headless) => end("stop", exitAfter),
         stopped: () => stopped,
+        /** settles once the daemon has stopped: with why, when it stopped on its own (its data folder moved) */
+        ended,
         // from here on the process's own end follows the policy above
         arm() {
             process.once("exit", onExit);
-            process.once("SIGTERM", onSignal);
-            process.once("SIGINT", onSignal);
+            // on, not once: a second signal while stopping waits for the stop too
+            process.on("SIGTERM", onSignal);
+            process.on("SIGINT", onSignal);
+            unwatchFolder = config.claim.onLost((err) => {
+                lost = err;
+                logger.error(`[Paperboard Server] ${err.message}`);
+                void end("lost", !config.noAuth && !config.headless).catch((stopErr) => logger.error("[Paperboard Server] stopping after the data folder moved didn't finish cleanly:", stopErr));
+            });
         },
         advertise(handle: AdvertisementHandle | null) {
             advertisement = handle;
+        },
+        showing(shown: PaperCraneTui) {
+            tui = shown;
         },
     };
 }
@@ -663,10 +710,12 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                             // --start-pairing at launch. A daemon listening on the
                             // LAN never offers a pairing code on its own.
                             if (options.startPairing) auth.startPairing();
-                            new PaperCraneTui({ host, port: actualPort, secure: tlsIdentity !== null, auth, onStop: () => lifecycle.stop() }).start();
+                            const tui = new PaperCraneTui({ host, port: actualPort, secure: tlsIdentity !== null, auth, onStop: () => lifecycle.stop() });
+                            lifecycle.showing(tui);
+                            tui.start();
                         }
                     }
-                    resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: () => lifecycle.stop() });
+                    resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: () => lifecycle.stop(), ended: lifecycle.ended });
                 })
                 .catch(failAfterListening);
         };

@@ -125,24 +125,32 @@ export default function DataDirectoryDoc() {
                 </thead>
                 <tbody>
                     <tr><td>macOS</td><td>A lock on the data folder itself. A disk that can't hold the lock stops the daemon, which asks you to move the folder to a local disk.</td></tr>
-                    <tr><td>Linux</td><td>A name the system holds for the daemon, made from the folder's disk and its number on that disk.</td></tr>
-                    <tr><td>Windows</td><td>A named pipe the system holds for the daemon, made from the folder's volume and its number on that volume.</td></tr>
+                    <tr><td>Linux</td><td>Two names the system holds for the daemon: one made from the folder's disk and its number on that disk, and one made from the folder's path.</td></tr>
+                    <tr><td>Windows</td><td>Two named pipes the system holds for the daemon: one made from the folder's volume and its number on that volume, and one made from the folder's path.</td></tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
                 The claim belongs to the folder, not to how its path is written: the folder reached through a link, written in another case, or moved is the same folder.
                 A copy is another folder, with a claim of its own (see <PaperLink href="#copying-it">Copying it</PaperLink>).
+                On Linux and Windows, the path is claimed too: while a daemon runs, no second daemon starts on its path, even once the path leads to another folder.
+            </PaperText>
+            <PaperText preset="body" as="p" id="moved-while-running">
+                A running daemon doesn't follow its folder. If the folder is moved, deleted or replaced while the daemon runs (or a link in its path is pointed at another folder), the daemon stops, saying that the data folder was moved, deleted or replaced while Paperboard was running.
+                It writes nothing more at the path, so the folder that is there now gets none of its changes, and changes it hadn't saved yet are lost; the moved folder keeps everything saved before.
+                It checks before each save of its own state and of the computer list, and once a second: a panel's own files written in that second can still land at the path.
+                Start Paperboard again to use the folder that is at the path now.
             </PaperText>
             <PaperText preset="body" as="p">
-                On Linux and Windows, another program on this computer, under any account, could take the folder's name first. Then no daemon starts on the folder until that program stops, and the error names what holds the claim.
+                On Linux and Windows, another program on this computer, under any account, could take the folder's or the path's name first. Then no daemon starts on the folder until that program stops, and the error names which one is held.
             </PaperText>
             <PaperText preset="body" as="p">
                 What the claim can't stop:
             </PaperText>
             <PaperTextList>
                 <li>A data folder on a network share is claimed on this computer only, so a daemon on another computer that uses the same share isn't stopped. Use the folder from one computer at a time. The daemon warns about this when it starts on a share it recognizes: on Linux, NFS, SMB, 9P, Ceph, AFS, GlusterFS, and shares mounted with sshfs, rclone, GNOME's gvfs or davfs; on Windows, a folder whose path is a network path such as <PaperCode>\\server\share</PaperCode>. It doesn't recognize other kinds of share.</li>
-                <li>On Linux, daemons in containers that each have a network of their own don't see each other's claim. A daemon that starts in a Docker or Podman container, or one that sets the <PaperCode>container</PaperCode> variable, warns about this. Give each container its own data folder.</li>
-                <li>A daemon of an older Paperboard takes no claim. Either one still finds the other once it is running, through <PaperCode>local/crane.json</PaperCode>, and won't start beside it. Only an older and a newer daemon that start at the same moment aren't stopped.</li>
+                <li>On Linux, daemons in containers that each have a network of their own don't see each other's claim. A daemon can't tell that from inside a container (Toolbox and Distrobox share the computer's network, Docker and Podman usually don't), so it doesn't warn about it. Give each container its own data folder.</li>
+                <li>On macOS the claim is the folder's alone: once the path leads to another folder, a second daemon can start there while the first still runs. The first stops before it writes there again.</li>
+                <li>A daemon of Paperboard 0.4 or before takes no claim. Either one still finds the other once it is running, through <PaperCode>local/crane.json</PaperCode>, and won't start beside it. Only an older and a newer daemon that start at the same moment aren't stopped.</li>
             </PaperTextList>
 
             <PaperText preset="subheader" as="h2" id="logs">Logs</PaperText>
@@ -153,7 +161,7 @@ export default function DataDirectoryDoc() {
 
             <PaperText preset="subheader" as="h2" id="copying-it">Copying it</PaperText>
             <PaperText preset="body" as="p">
-                Stop Paperboard and the daemon before you copy or move the folder, so nothing is written while you copy.
+                Stop Paperboard and the daemon before you copy or move the folder, so nothing is written while you copy. A daemon running while its folder is moved stops (see <PaperLink href="#moved-while-running">above</PaperLink>).
                 A copy contains your secrets and pairing tokens in plain files. Keep it as private as the computer.
             </PaperText>
             <PaperText preset="body" as="p">

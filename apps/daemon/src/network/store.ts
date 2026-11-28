@@ -94,6 +94,7 @@ import { KeyedQueue, SerialQueue } from "@mileniumhq/paperapi/serialQueue";
 import { logger } from "../core/logger";
 import { ensurePrivateDir } from "../core/paths";
 import { writeFileAtomic, writeJsonAtomicSync } from "../core/storage";
+import { checkDataWrite } from "../core/folderClaim";
 import type { TlsIdentity } from "../security/tlsIdentity";
 import {
     KEYS_SPACE,
@@ -828,6 +829,8 @@ export class RecordStore {
     }
 
     private async flush(): Promise<void> {
+        // before any file of the store is made, written or removed: the data folder is still the one claimed (core/folderClaim.ts)
+        checkDataWrite(this.dir);
         // forgotten cursors first: a crash after this re-pulls for nothing,
         // one before it can't keep a cursor past what was thrown away
         if (this.cursorsDirty) await writeFileAtomic(path.join(this.dir, "cursors.json"), JSON.stringify(this.cursors));
@@ -911,6 +914,7 @@ export class RecordStore {
     // false.
     private saveCursor(key: string, cursor: ChangeCursor | PushCursor, generation?: number): Promise<boolean> {
         return this.queue.run(async () => {
+            if (this.closed) throw new Error(`The record store in ${this.dir} is closed`);
             if (generation !== undefined && generation !== this.pullGeneration) return false;
             const cursors = { ...this.cursors, [key]: cursor };
             await writeFileAtomic(path.join(this.dir, "cursors.json"), JSON.stringify(cursors));

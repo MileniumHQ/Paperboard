@@ -183,10 +183,15 @@ export class PaperCraneTui {
     }
 
     public stop() {
+        this.release();
+        this.onStop();
+    }
+
+    /** Gives the terminal back as it was, for a daemon that stops without being asked here. */
+    public release() {
         if (process.stdin.setRawMode) {
             process.stdin.setRawMode(false);
         }
         process.stdin.pause();
-        this.onStop();
     }
 }

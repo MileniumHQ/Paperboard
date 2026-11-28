@@ -77,6 +77,16 @@ export default function TroubleshootingDoc() {
                 If no Paperboard server is running, the message names what holds the folder's claim instead: another program on this computer took it, and no daemon starts on the folder until that program stops. See <PaperLink href="/docs/paperboard/data-directory/#one-server">One server per folder</PaperLink>.
             </PaperText>
 
+            <PaperText preset="title" as="h3" id="path-still-running">A Paperboard server that started with the data folder path is still running</PaperText>
+            <PaperText preset="body" as="p">
+                The data folder was moved, deleted or replaced while a daemon ran on it, and that daemon hasn't stopped yet. It stops on its own before it writes at the path again, within about a second. Then start this one. On Linux and Windows, if no Paperboard server is running, the message names what holds the path&apos;s claim: another program on this computer took it. See <PaperLink href="/docs/paperboard/data-directory/#moved-while-running">One server per folder</PaperLink>.
+            </PaperText>
+
+            <PaperText preset="title" as="h3" id="folder-moved">The data folder was moved, deleted or replaced while Paperboard was running</PaperText>
+            <PaperText preset="body" as="p">
+                The daemon found that its data folder&apos;s path no longer leads to the folder it started on, and stopped without writing there. The folder that was moved keeps everything saved before; what the daemon hadn&apos;t saved yet is lost. Put the folder back, or keep the new one, and start Paperboard again: it uses the folder at the path then.
+            </PaperText>
+
             <PaperText preset="title" as="h3" id="needs-root">A --system service needs root, or This is running as root</PaperText>
             <PaperText preset="body" as="p">
                 A system service is installed with <PaperCode>sudo papercrane install-service --system</PaperCode>. A user service is installed as your own account, without <PaperCode>sudo</PaperCode>.

@@ -1,21 +1,25 @@
 // One daemon per data folder, held by the operating system (core/folderClaim.ts):
-// an abstract socket on Linux and a named pipe on Windows, each named by the
-// folder's identity, and a flock on the folder on macOS. A second daemon
-// stops before it reads or writes anything in the folder; many started at
-// once never hold it two at a time, a new folder's first starts included; a
-// claim makes nothing but the folder; a holder that is killed leaves nothing
-// behind; a folder by another spelling, or moved, is the same folder, and a
-// copy is another; and in one process a claim being released is waited for.
+// on Linux two abstract sockets and on Windows two named pipes, one named by
+// the folder's device and inode and one by its path, and a flock on the
+// folder on macOS. A second daemon stops before it reads or writes anything
+// in the folder; many started at once never hold it two at a time, a new
+// folder's first starts included; a claim makes nothing but the folder; a
+// holder that is killed leaves nothing behind; a folder by another spelling,
+// or moved, is the same folder, and a copy is another; a daemon whose data
+// path stops leading to its folder (moved, deleted and made again, a link
+// pointed elsewhere) stops loudly and writes nothing at the path; and in one
+// process a claim being released is waited for. Electron's Node and Bun
+// naming one claim alike is folderClaimRuntimes.test.ts.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { claimDataFolder, claimLimits, FolderClaimedError, mountTypeOf } from "../../src/core/folderClaim";
+import { checkDataWrite, claimDataFolder, DataFolderMovedError, FolderClaimedError, mountTypeOf } from "../../src/core/folderClaim";
 import { startCrane, type CraneProcess } from "testkit/crane";
 import { dataDir, restoreEnv } from "testkit/fs";
 import { startDaemon, stopDaemon } from "testkit/inproc";
 import { startPaperCraneServer } from "../../src/index";
-import { TEST_TIMEOUT_MS, waitFor } from "testkit/wait";
+import { TEST_TIMEOUT_MS, waitFor, within } from "testkit/wait";
 
 setDefaultTimeout(TEST_TIMEOUT_MS * 4);
 
@@ -178,20 +182,6 @@ describe("one daemon per data folder", () => {
 		expect(mountTypeOf(mountinfo, "/etc")).toBe("btrfs");
 	});
 
-	// Inventory: Data loss — what the claim can't cover is said to the person running the server.
-	test.skipIf(process.platform !== "linux")("a server in a container is told what the claim can't cover there", () => {
-		const dir = dataDir();
-		const previous = process.env.container;
-		try {
-			delete process.env.container;
-			const outside = claimLimits(dir);
-			process.env.container = "podman";
-			expect(claimLimits(dir)).toEqual([...outside, expect.stringContaining("runs in a container")]);
-		} finally {
-			restoreEnv("container", previous);
-		}
-	});
-
 	// Inventory: Data loss — one folder by another casing is one claim, where the disk ignores case.
 	test("a folder spelled in another case is the same folder, where the disk ignores case", async () => {
 		const parent = dataDir();
@@ -274,5 +264,111 @@ describe("one daemon per data folder", () => {
 		const before = ownFiles();
 		await expect(startDaemon({ dataDir: dir })).rejects.toBeInstanceOf(FolderClaimedError);
 		expect(ownFiles()).toEqual(before);
+	});
+
+	// Inventory: Data loss — a daemon doesn't follow its folder: once the path leads elsewhere, the next write is refused and it stops.
+	test("in one process, once the data path stops leading to the claimed folder, every write there is refused and the claim's listeners hear it once", async () => {
+		const parent = dataDir();
+		const dir = path.join(parent, "data");
+		await inFolder(dir, async () => {
+			const claim = await claimDataFolder();
+			const heard: DataFolderMovedError[] = [];
+			claim.onLost((err) => heard.push(err));
+			const file = path.join(dir, "local", "state.json");
+			checkDataWrite(file);
+			// a file outside the folder is no claim's to check
+			checkDataWrite(path.join(parent, "elsewhere.json"));
+			fs.renameSync(dir, path.join(parent, "moved"));
+			fs.mkdirSync(dir);
+			expect(() => checkDataWrite(file)).toThrow(DataFolderMovedError);
+			// latched: the folder put back doesn't make the path the claim's again
+			fs.rmdirSync(dir);
+			fs.renameSync(path.join(parent, "moved"), dir);
+			expect(() => checkDataWrite(file)).toThrow(`The data folder ${dir} was moved, deleted or replaced while Paperboard was running`);
+			await waitFor("the listener to hear it", () => heard.length > 0);
+			expect(heard.length).toBe(1);
+			await claim.releaseAfter(Promise.resolve());
+			// let go: the path is nobody's to check, and claimed again it is this folder's
+			checkDataWrite(file);
+			const again = await claimDataFolder();
+			checkDataWrite(file);
+			await again.releaseAfter(Promise.resolve());
+		});
+	});
+
+	/**
+	 * The reviewer's case: daemon A runs on `path`, the path is made to lead
+	 * to another folder (`replace`), daemon B starts on the path, and A is
+	 * asked to write. On Linux and Windows B is refused (the path's name is
+	 * A's); on macOS the lock is on A's folder alone, so B runs. Either way A
+	 * writes nothing there and stops with a failure, saying why, and nothing
+	 * of A's is in the folder at the path.
+	 */
+	async function replacedWhileRunning(replace: (dataPath: string) => void, dataPath: string): Promise<void> {
+		const a = await startCrane({ dataDir: dataPath });
+		cranes.push(a);
+		const rpc = await a.rpc();
+		const self: string = (await rpc.ok("computers:list")).self;
+		await rpc.ok("computers:update", { id: self, name: "Before the move" });
+		replace(dataPath);
+		let b: Awaited<ReturnType<typeof startDaemon>> | null = null;
+		let refused: unknown = null;
+		try {
+			b = await startDaemon({ dataDir: dataPath });
+		} catch (err) {
+			refused = err;
+		}
+		if (process.platform === "darwin") {
+			if (!b) throw new Error(`macOS: daemon B on ${dataPath} should start beside A (the lock is on A's folder alone), but: ${String(refused)}`);
+		} else {
+			expect(refused).toBeInstanceOf(FolderClaimedError);
+			// the path's name, or the folder's when the new folder got the inode the old one had
+			expect(String(refused)).toMatch(/was moved, deleted or replaced while it ran|already starting or running with the data folder/);
+		}
+		const wrote = await rpc.ok("computers:update", { id: self, name: "After the move" }).then(
+			() => true,
+			() => false, // quiet: refused, or the connection closed as A stopped: both mean A didn't write it
+		);
+		expect(wrote).toBe(false);
+		const ended = await within("daemon A to stop after its folder moved", a.exited, 20_000);
+		expect(ended.code).toBe(1);
+		expect(a.output()).toContain(`The data folder ${dataPath} was moved, deleted or replaced while Paperboard was running`);
+		if (b) await stopDaemon();
+		// nothing of A's at the path: no record it signed, no log line, no state file
+		for (const [file, bytes] of filesUnder(fs.realpathSync(dataPath))) {
+			if (bytes === "folder") continue;
+			if (bytes.includes(self) || bytes.includes("After the move")) throw new Error(`${process.platform}: ${file} in the folder now at ${dataPath} holds daemon A's ${self}`);
+		}
+	}
+
+	// Inventory: Data loss — a folder moved away while its daemon runs: a second daemon on the path never shares a store with the first.
+	test("a data folder moved away while its daemon runs: a second daemon on the path never gets the first one's writes, and the first stops loudly", async () => {
+		const dataPath = path.join(dataDir(), "data");
+		await replacedWhileRunning((p) => fs.renameSync(p, `${p}.moved`), dataPath);
+	});
+
+	// Inventory: Data loss — a data folder deleted and made again while its daemon runs: the new folder never gets the old daemon's writes.
+	test("a data folder deleted and made again while its daemon runs: the new folder never gets the old daemon's writes, and it stops loudly", async () => {
+		const dataPath = path.join(dataDir(), "data");
+		await replacedWhileRunning((p) => {
+			fs.rmSync(p, { recursive: true, force: true });
+			fs.mkdirSync(p);
+		}, dataPath);
+	});
+
+	// Inventory: Data loss — a link to the data folder pointed elsewhere while the daemon runs: the folder it now leads to never gets its writes.
+	test("a link the data path goes through, pointed at another folder while the daemon runs: that folder never gets its writes, and it stops loudly", async () => {
+		const parent = dataDir();
+		const first = path.join(parent, "first");
+		const second = path.join(parent, "second");
+		fs.mkdirSync(first);
+		fs.mkdirSync(second);
+		const link = path.join(parent, "data");
+		const kind = process.platform === "win32" ? "junction" : "dir";
+		fs.symlinkSync(first, link, kind);
+		await replacedWhileRunning((p) => {
+			fs.unlinkSync(p);
+			fs.symlinkSync(second, p, kind);
+		}, link);
 	});
 });

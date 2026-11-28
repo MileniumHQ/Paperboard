@@ -789,6 +789,31 @@ describe("network keys", () => {
 });
 
 describe("on disk", () => {
+	// Inventory: Data loss — a closed store writes nothing more: the daemon lets its folder go once it has closed.
+	test("a store closed while a push waits on its relay saves no cursor once it is closed", async () => {
+		const [a] = await network("a", "b");
+		wall = T0 + 1000;
+		await a.store.put("notes", "x", 1);
+		let appended!: () => void;
+		const asked = new Promise<void>((resolve) => (appended = resolve));
+		let answer!: (log: string) => void;
+		const answered = new Promise<string>((resolve) => (answer = resolve));
+		const pushing = a.store.push("relay", {
+			append: () => {
+				appended();
+				return answered;
+			},
+		});
+		await asked;
+		const cursors = path.join(a.dir, "cursors.json");
+		const before = fs.existsSync(cursors) ? fs.readFileSync(cursors, "utf8") : null;
+		const closing = a.store.close();
+		answer("relay-log");
+		await expect(pushing).rejects.toThrow("is closed");
+		await closing;
+		expect(fs.existsSync(cursors) ? fs.readFileSync(cursors, "utf8") : null).toBe(before);
+	});
+
 	test("a write a crash cut short leaves the old state, and its temp file is swept", async () => {
 		const [a] = await network("a", "b");
 		wall = T0 + 1000;

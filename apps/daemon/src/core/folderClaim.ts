@@ -1,63 +1,109 @@
 // One daemon per data folder, held by the operating system before the
-// daemon reads or writes anything in the folder. The claim is one name,
-// taken in one atomic step, that ends with the process however it ends:
+// daemon reads or writes anything in the folder. A claim is names the
+// system holds for this process alone, taken without waiting, and ended with
+// the process however it ends. Nothing is kept on disk for it, so there is
+// nothing to lose, copy, replace or clear.
 //
+//   Linux    two sockets in the abstract namespace (no file): only one
+//            process can listen on a name, and the kernel frees it with
+//            the process
+//   Windows  two named pipes: only one process can create a name
 //   macOS    an exclusive flock on the data folder itself, taken as it is
 //            opened (O_EXLOCK | O_NONBLOCK)
-//   Linux    a socket in the abstract namespace (no file), named by the
-//            folder's device and inode: only one process can listen on a
-//            name, and the kernel frees it with the process
-//   Windows  a named pipe, named by the folder's volume serial number and
-//            file id: only one process can create a name
 //
-// All three belong to the folder itself, not to how it is spelled: a
-// symlink, a junction, a bind mount, another casing on a case-insensitive
-// disk, or the folder moved or renamed is the same claim. A copy of the
-// folder is another folder, with a claim of its own. Nothing is kept on
-// disk for the claim, so there is nothing to lose, copy, replace or clear.
+// On Linux and Windows the two names are, in the order they are taken:
+//
+//   the folder   named by the folder's device and inode (volume serial
+//                number and file id): the same folder under another
+//                spelling (a symlink, a junction, a bind mount, another
+//                casing on a case-insensitive disk) is the same name
+//   the path     named by the data folder's path as it was given (made
+//                absolute, never resolved through a symlink): a path that
+//                leads to another folder than it did (the folder moved
+//                away, deleted and made again, a symlink pointed elsewhere)
+//                is still the same name
+//
+// A start that finds the folder's name held stops there: another server
+// uses this folder. One that takes it but finds the path's name held lets
+// it go and stops: a server that started on this path still runs, on the
+// folder that was here before. On macOS the lock is on the folder alone, so
+// a path that leads to a new folder is free to claim at once.
+//
+// A daemon doesn't follow its folder. Every write goes by path, so a daemon
+// checks that the path still leads to the folder it claimed (same device,
+// inode and birth time) before it writes the folder's state (checkDataWrite:
+// the atomic state files, core/storage.ts; each save of the record store;
+// each log line), and once a second for everything else. Once the path
+// leads elsewhere, or nowhere, no checked write is made again and the
+// daemon stops (onLost). Writes that aren't checked (a panel's own files, an
+// install, a backup) can still land at the path in the second before the
+// timer finds it.
 //
 // Before the claim, a start makes exactly one thing: the data folder, when
-// it is missing (with any missing folders above it), empty. A folder has
-// to be there to be claimed; making it is safe for any number of starters
-// at once and puts nothing in it.
+// it is missing (with any missing folders above it, made as any folder is;
+// only the data folder is private), empty. A folder has to be there to be
+// claimed; making it is safe for any number of starters at once and puts
+// nothing in it.
 //
-// Another program on this computer may hold the name (on Linux and Windows
+// Another program on this computer may hold a name (on Linux and Windows
 // any account can take any name first). Then no daemon starts on the folder
-// until it lets go, and the error says what holds the claim; it can't make
-// two daemons run on one folder.
+// until it lets go, and the error says which name is held; it can't make two
+// daemons run on one folder.
 //
 // What the claim can't cover, said at start where it can be found cheaply
 // (claimLimits) and in the docs (data-directory): two computers sharing one
 // folder over a network share (each claims on its own computer), and on
 // Linux two containers with network namespaces of their own sharing one
-// folder (abstract names are per network namespace). A Paperboard before
-// this one takes no claim: either finds the other once it runs
-// (refuseRunningDaemon, server.ts), and only two started at the same
-// moment aren't stopped.
+// folder (abstract names are per network namespace; this can't be told
+// from inside a container, so it is said only in the docs). A Paperboard
+// before this one takes no claim (refuseRunningDaemon, server.ts).
 //
 // In this process, a claim that is being released (releaseAfter) is waited
 // for: a daemon embedded in the app and started again at once opens the
 // folder only after the last one has saved its last writes.
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as net from "net";
+import * as path from "path";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { getPaperboardDir } from "./paths";
 
 // macOS's open(2) flag for an exclusive flock: Node names no constant for it
 const O_EXLOCK = 0x20;
+/** how often a daemon looks whether its data path still leads to its folder, besides before each checked write */
+const WATCH_MS = 1000;
 
 /** Another daemon, or another program on this computer, holds this data folder's claim. */
 export class FolderClaimedError extends Error {
-    constructor(message: string) {
+    /**
+     * "folder": another server uses this folder; "path": one that started
+     * on this path still runs, on the folder that was there before.
+     */
+    constructor(message: string, readonly held: "folder" | "path") {
         super(message);
         this.name = "FolderClaimedError";
     }
 }
 
+/** The data path no longer leads to the folder this daemon claimed: it was moved, deleted or replaced. */
+export class DataFolderMovedError extends Error {
+    constructor(dir: string) {
+        super(
+            `The data folder ${dir} was moved, deleted or replaced while Paperboard was running. This Paperboard server stopped and wrote nothing more there; ` +
+                `what it hadn't saved yet is not saved. Start Paperboard again to use the folder that is at ${dir} now.`,
+        );
+        this.name = "DataFolderMovedError";
+    }
+}
+
 /** A data folder this process holds. */
 export interface FolderClaim {
+    /** the data folder as it was claimed */
+    readonly dir: string;
     /** What Paperboard can't guarantee for this folder (claimLimits), for the daemon to tell; empty for none. */
     readonly limits: string[];
+    /** Hears, once, that the data path no longer leads to the claimed folder; returns the unsubscribe. */
+    onLost(listener: (err: DataFolderMovedError) => void): () => void;
     /**
      * Ends the claim once `last` settles (the folder's last writes saved),
      * whether it resolves or rejects. A claim of the folder in this process
@@ -67,25 +113,48 @@ export interface FolderClaim {
     releaseAfter(last: Promise<unknown>): Promise<void>;
 }
 
-/** the folder's identity → this process's claim on it, and its release once one began */
-const HELD = new Map<string, { released: Promise<void> | null }>();
+/** what a folder is, wherever its path leads: device, inode and birth time (birth time tells an inode used again) */
+interface FolderStat {
+    dev: bigint;
+    ino: bigint;
+    birth: bigint;
+}
 
-/** the folder itself, whatever spells it: device (volume serial on Windows) and inode (file id) */
-function folderIdentity(dir: string): string {
+function statFolder(dir: string): FolderStat {
     const stat = fs.statSync(dir, { bigint: true });
     if (!stat.isDirectory()) throw new Error(`${dir} isn't a folder`);
-    return `${stat.dev.toString(16)}-${stat.ino.toString(16)}`;
+    return { dev: stat.dev, ino: stat.ino, birth: stat.birthtimeNs };
 }
 
-/** what holds the claim of the folder with this identity, as a person could look for it */
-function claimName(identity: string): string {
-    if (process.platform === "darwin") return "a lock on the folder";
-    if (process.platform === "win32") return `the named pipe \\\\.\\pipe\\paperboard-daemon-${identity}`;
-    return `the abstract socket @paperboard-daemon-${identity}`;
+/** the names a claim of `dir` takes on this platform: the folder's, then the path's; on macOS only the folder's lock */
+function claimNames(dir: string, stat: FolderStat): { folder: string; path: string | null } {
+    const folder = `paperboard-daemon-${stat.dev.toString(16)}-${stat.ino.toString(16)}`;
+    if (process.platform === "darwin") return { folder, path: null };
+    // the path as given, made absolute: a Windows path is the same in any casing
+    const spelled = path.resolve(dir);
+    const digest = crypto.createHash("sha256").update(process.platform === "win32" ? spelled.toLowerCase() : spelled).digest("hex").slice(0, 32);
+    return { folder, path: `paperboard-daemon-path-${digest}` };
 }
 
-/** listens on `address`; null when another process does already */
-function listenAt(address: string): Promise<net.Server | null> {
+/** a name as a person could look for it */
+function describe(name: string | null): string {
+    if (name === null) return "a lock on the folder";
+    return process.platform === "win32" ? `the named pipe \\\\.\\pipe\\${name}` : `the abstract socket @${name}`;
+}
+
+/**
+ * What this runtime names the claim of `dir` (the folder must exist): the
+ * folder's name (on macOS the lock takes none, but the folder is the same
+ * device and inode) and the path's. For tests that compare runtimes: a
+ * claim takes exactly these.
+ */
+export function claimNamesOf(dir: string): { folder: string; path: string | null } {
+    return claimNames(path.resolve(dir), statFolder(dir));
+}
+
+/** listens on the name; null when another process does already */
+function listenAt(name: string): Promise<net.Server | null> {
+    const address = process.platform === "win32" ? `\\\\.\\pipe\\${name}` : `\0${name}`;
     return new Promise((resolve, reject) => {
         // nobody is served here: the name is only held
         const server = net.createServer((socket) => socket.destroy());
@@ -94,26 +163,44 @@ function listenAt(address: string): Promise<net.Server | null> {
     });
 }
 
-/** takes the operating system's claim; null when another process holds it. Resolves with the release. */
-async function takeClaim(dir: string, identity: string): Promise<(() => Promise<void>) | null> {
-    if (process.platform === "darwin") {
-        let fd: number;
-        try {
-            fd = fs.openSync(dir, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | O_EXLOCK);
-        } catch (err) {
-            const code = errorCode(err);
-            if (code === "EAGAIN" || code === "EWOULDBLOCK") return null;
-            if (code === "ENOTSUP" || code === "EOPNOTSUPP") {
-                throw new Error(`The data folder ${dir} is on a disk that can't hold the lock that keeps two Paperboard servers off one folder. Move the data folder to a local disk.`, { cause: err });
-            }
-            throw err;
+const closeServer = (server: net.Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+
+/** the folder's lock (macOS); null when another process holds it. Resolves with the release. */
+function lockFolder(dir: string): (() => Promise<void>) | null {
+    let fd: number;
+    try {
+        fd = fs.openSync(dir, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | O_EXLOCK);
+    } catch (err) {
+        const code = errorCode(err);
+        if (code === "EAGAIN" || code === "EWOULDBLOCK") return null;
+        if (code === "ENOTSUP" || code === "EOPNOTSUPP") {
+            throw new Error(`The data folder ${dir} is on a disk that can't hold the lock that keeps two Paperboard servers off one folder. Move the data folder to a local disk.`, { cause: err });
         }
-        return async () => fs.closeSync(fd);
+        throw err;
     }
-    const address = process.platform === "win32" ? `\\\\.\\pipe\\paperboard-daemon-${identity}` : `\0paperboard-daemon-${identity}`;
-    const server = await listenAt(address);
-    if (!server) return null;
-    return () => new Promise<void>((resolve) => server.close(() => resolve()));
+    return async () => fs.closeSync(fd);
+}
+
+/** takes the claim's names in order; the one held by another process when one is, else the release of all */
+async function takeClaim(dir: string, names: { folder: string; path: string | null }): Promise<{ held: "folder" | "path" } | { release: () => Promise<void> }> {
+    if (process.platform === "darwin") {
+        const release = lockFolder(dir);
+        return release ? { release } : { held: "folder" };
+    }
+    const folder = await listenAt(names.folder);
+    if (!folder) return { held: "folder" };
+    let byPath: net.Server | null;
+    try {
+        byPath = await listenAt(names.path!);
+    } catch (err) {
+        await closeServer(folder);
+        throw err;
+    }
+    if (!byPath) {
+        await closeServer(folder);
+        return { held: "path" };
+    }
+    return { release: async () => void (await Promise.all([closeServer(folder), closeServer(byPath)])) };
 }
 
 // Linux filesystem types (mountinfo) of network shares this recognizes: NFS,
@@ -156,26 +243,102 @@ function linuxFsType(real: string): string | null {
 /**
  * What Paperboard can't guarantee for the folder, found cheaply: a folder
  * on a network share (Linux: the filesystem types in NETWORK_FS; Windows: a
- * real path that is a network path, \\server\share), and a daemon in a
- * container (Linux: a container's marker file or variable). Each is a
- * sentence for a person. A network filesystem not in that list, and a
- * container that leaves no marker, aren't found.
+ * real path that is a network path, \\server\share). Each is a sentence for
+ * a person. A network filesystem not in that list isn't found.
  */
 export function claimLimits(dir: string): string[] {
-    const limits: string[] = [];
     const share = `The data folder ${dir} is on a network share. Paperboard keeps a second server on this computer off it, but can't see a server on another computer that uses the same share: use the folder from one computer at a time.`;
-    if (process.platform === "win32") {
-        if (/^\\\\(?![?.]\\)/.test(fs.realpathSync.native(dir))) limits.push(share);
-    } else if (process.platform === "linux") {
+    if (process.platform === "win32") return /^\\\\(?![?.]\\)/.test(fs.realpathSync.native(dir)) ? [share] : [];
+    if (process.platform === "linux") {
         const type = linuxFsType(fs.realpathSync(dir));
-        if (type !== null && NETWORK_FS.has(type)) limits.push(share);
-        if (process.env.container || fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv")) {
-            limits.push(
-                `This Paperboard server runs in a container. Paperboard keeps a second server in this container off the data folder ${dir}, but can't see one in another container that shares the folder with a network of its own: give each container a data folder of its own.`,
-            );
-        }
+        return type !== null && NETWORK_FS.has(type) ? [share] : [];
     }
-    return limits;
+    return [];
+}
+
+/** a claim's own record in this process: what its path must lead to, and who hears it doesn't */
+interface Held {
+    dir: string;
+    stat: FolderStat;
+    /** latched once the path leads elsewhere: every checked write after is refused with it */
+    lost: DataFolderMovedError | null;
+    listeners: Set<(err: DataFolderMovedError) => void>;
+    released: Promise<void> | null;
+}
+
+/** each name this process holds or is releasing → its claim */
+const HELD = new Map<string, Held>();
+/** the claims the timer looks at: held, not lost, not being released */
+const WATCHED = new Set<Held>();
+
+/** throws when the claim's path no longer leads to its folder; the first time, its listeners hear it */
+function check(held: Held): void {
+    if (held.lost) throw held.lost;
+    let now: FolderStat | null;
+    try {
+        now = statFolder(held.dir);
+    } catch (err) {
+        const code = errorCode(err);
+        // anything else (a disk error) isn't an answer: this write fails with it, and the next one asks again
+        if (code !== "ENOENT" && code !== "ENOTDIR" && !/isn't a folder/.test(errorMessage(err))) throw err;
+        now = null;
+    }
+    if (now && now.dev === held.stat.dev && now.ino === held.stat.ino && now.birth === held.stat.birth) return;
+    const lost = (held.lost = new DataFolderMovedError(held.dir));
+    WATCHED.delete(held);
+    // told after the write that found it has failed, never inside it: a listener stops the daemon
+    queueMicrotask(() => {
+        for (const listener of held.listeners) listener(lost);
+    });
+    throw lost;
+}
+
+/** whether `file` is the folder or inside it */
+function inside(dir: string, file: string): boolean {
+    const rel = path.relative(dir, file);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+/**
+ * Before a write to `file`: throws DataFolderMovedError when it is in a
+ * data folder this process claimed and the folder's path no longer leads to
+ * it. Nothing to check for a file outside any claimed folder.
+ */
+export function checkDataWrite(file: string): void {
+    // until a claim is let go, its last writes too (a stop saving what it has) are checked
+    for (const held of new Set(HELD.values())) if (inside(held.dir, file)) check(held);
+}
+
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+function watch(held: Held): void {
+    WATCHED.add(held);
+    if (watchTimer) return;
+    watchTimer = setInterval(() => {
+        for (const claim of [...WATCHED]) {
+            try {
+                check(claim);
+            } catch {
+                // quiet: a lost folder was told to its listeners by check(); a disk error is asked again next time
+            }
+        }
+        if (!WATCHED.size && watchTimer) {
+            clearInterval(watchTimer);
+            watchTimer = null;
+        }
+    }, WATCH_MS);
+    watchTimer.unref?.();
+}
+
+/** the data folder, made when missing: only it is private, the folders above it are made as any folder is */
+function makeDataFolder(dir: string): void {
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    try {
+        fs.mkdirSync(dir, { mode: 0o700 });
+    } catch (err) {
+        // quiet: there already, made by the person or by another starter at the same moment
+        if (errorCode(err) !== "EEXIST") throw err;
+    }
 }
 
 /**
@@ -184,45 +347,83 @@ export function claimLimits(dir: string): string[] {
  * does and isn't releasing it.
  */
 export async function claimDataFolder(): Promise<FolderClaim> {
-    const dir = getPaperboardDir();
+    const dir = path.resolve(getPaperboardDir());
     // the one thing made before the claim (the top of this file)
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const identity = folderIdentity(dir);
-    for (let mine = HELD.get(identity); mine; mine = HELD.get(identity)) {
-        if (!mine.released) throw new FolderClaimedError(`This process already runs a Paperboard server with the data folder ${dir}. Only one server can use a data folder at a time.`);
+    makeDataFolder(dir);
+    const stat = statFolder(dir);
+    const names = claimNames(dir, stat);
+    const keys = [names.folder, ...(names.path ? [names.path] : [])];
+    for (let mine = keys.map((k) => HELD.get(k)).find(Boolean); mine; mine = keys.map((k) => HELD.get(k)).find(Boolean)) {
+        if (!mine.released) {
+            if (mine.lost) {
+                throw new FolderClaimedError(`This process still runs the Paperboard server that started with the data folder path ${dir}, on the folder that was there before it was moved or replaced. It is stopping: start this one again once it has.`, "path");
+            }
+            throw new FolderClaimedError(`This process already runs a Paperboard server with the data folder ${dir}. Only one server can use a data folder at a time.`, "folder");
+        }
         await mine.released;
     }
-    const held: { released: Promise<void> | null } = { released: null };
-    HELD.set(identity, held);
-    let release: (() => Promise<void>) | null = null;
-    let limits: string[];
+    const held: Held = { dir, stat, lost: null, listeners: new Set(), released: null };
+    for (const key of keys) HELD.set(key, held);
+    const forget = () => {
+        for (const key of keys) if (HELD.get(key) === held) HELD.delete(key);
+        WATCHED.delete(held);
+    };
+    let taken: Awaited<ReturnType<typeof takeClaim>>;
     try {
-        release = await takeClaim(dir, identity);
-        limits = release ? claimLimits(dir) : [];
+        taken = await takeClaim(dir, names);
     } catch (err) {
-        HELD.delete(identity);
-        await release?.();
+        forget();
         throw new Error(`The data folder ${dir} couldn't be claimed for this Paperboard server: ${errorMessage(err)}`, { cause: err });
     }
-    if (!release) {
-        HELD.delete(identity);
+    if ("held" in taken) {
+        forget();
+        if (taken.held === "folder") {
+            throw new FolderClaimedError(
+                `Another Paperboard server is already starting or running with the data folder ${dir}, or another program on this computer holds the folder's claim (${describe(process.platform === "darwin" ? null : names.folder)}). Only one server can use a data folder at a time: stop the other one first.`,
+                "folder",
+            );
+        }
         throw new FolderClaimedError(
-            `Another Paperboard server is already starting or running with the data folder ${dir}, or another program on this computer holds the folder's claim (${claimName(identity)}). Only one server can use a data folder at a time: stop the other one first.`,
+            `A Paperboard server that started with the data folder path ${dir} is still running, on the folder that was there before: the folder was moved, deleted or replaced while it ran. ` +
+                `It stops before it writes there again. Stop it, then start this one. (Or another program on this computer holds the path's claim, ${describe(names.path)}.)`,
+            "path",
         );
     }
-    const end = release;
+    const end = taken.release;
+    let limits: string[];
+    try {
+        limits = claimLimits(dir);
+    } catch (err) {
+        forget();
+        // the error is the limits' one; a release that fails too is said beside it, never in its place
+        let undone = "";
+        try {
+            await end();
+        } catch (releaseErr) {
+            undone = ` (letting go of the claim failed too: ${errorMessage(releaseErr)})`;
+        }
+        throw new Error(`The data folder ${dir} couldn't be checked for this Paperboard server: ${errorMessage(err)}${undone}`, { cause: err });
+    }
+    watch(held);
     return {
+        dir,
         limits,
+        onLost(listener) {
+            held.listeners.add(listener);
+            return () => held.listeners.delete(listener);
+        },
         releaseAfter(last) {
             held.released ??= last
                 .then(
                     () => undefined,
                     () => undefined, // quiet: whoever handed `last` in reports its failure; the claim ends either way
                 )
-                .then(end)
-                .finally(() => {
-                    if (HELD.get(identity) === held) HELD.delete(identity);
-                });
+                .then(() => {
+                    WATCHED.delete(held);
+                    held.listeners.clear();
+                    return end();
+                })
+                .finally(forget);
             return held.released;
         },
     };

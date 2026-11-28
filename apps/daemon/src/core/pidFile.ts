@@ -3,6 +3,7 @@ import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { writeFileAtomicSync } from "./storage";
+import { checkDataWrite } from "./folderClaim";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { errorCode } from "@mileniumhq/paperapi/errors";
@@ -55,7 +56,10 @@ function readPidRecord(): PidFileRecord | null {
 
 export function removePidFile() {
     try {
-        fs.unlinkSync(getPidFile());
+        const file = getPidFile();
+        // a data folder moved away while the daemon ran: the file at the path is another folder's
+        checkDataWrite(file);
+        fs.unlinkSync(file);
     } catch (err) {
         // gone already is the goal; anything else leaves a record the next
         // start reads as a stale instance to reclaim

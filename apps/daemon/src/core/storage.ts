@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import { logger } from "./logger";
+import { checkDataWrite } from "./folderClaim";
 import * as crypto from "crypto";
 import { pipeline } from "node:stream/promises";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
@@ -45,13 +46,18 @@ function saveFailed(filePath: string, err: unknown): Error {
     return failure;
 }
 
-/** Writes a file atomically via temp plus rename; the mode, when given, applies at birth. */
+/**
+ * Writes a file atomically via temp plus rename; the mode, when given,
+ * applies at birth. A file in a data folder this daemon claimed is written
+ * only while the folder's path still leads to it (checkDataWrite).
+ */
 export function writeFileAtomic(filePath: string, data: string, options?: { mode?: number }): Promise<void> {
-    return writeLines.run(filePath, () =>
-        writeWhole(filePath, data, options).catch((err) => {
+    return writeLines.run(filePath, async () => {
+        checkDataWrite(filePath);
+        await writeWhole(filePath, data, options).catch((err) => {
             throw saveFailed(filePath, err);
-        }),
-    );
+        });
+    });
 }
 
 export function writeJsonAtomicSync(
@@ -67,6 +73,7 @@ export function writeFileAtomicSync(
     data: string,
     options?: { mode?: number },
 ): void {
+    checkDataWrite(filePath);
     try {
         writeWholeSync(filePath, data, options);
     } catch (err) {
