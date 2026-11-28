@@ -23,7 +23,7 @@ import RecoveryNotice from "./RecoveryNotice";
 import { errorMessage } from "../lib/failure";
 import type { Control } from "../games/types";
 import type { OverviewStats } from "./overviewStats";
-import { joinPort } from "../core/portNames";
+import { joinPort, portMoveText, portSpan } from "../core/portNames";
 
 /** What a game's Overview says under the address, beside the button that edits it. */
 export function EditableDetail(props: { edit: string; onEdit(): void; children: JSX.Element }) {
@@ -174,11 +174,9 @@ export default function ServerOverview(props: {
                 {/* a taken port moved for this run alone: friends must join on the new one */}
                 <For each={portMoves()}>
                     {(move) => {
-                        // ports in a row move together: "Ports 2456–2457 were taken, so this run uses 2460–2461"
-                        const span = (from: number) => ((move.count ?? 1) > 1 ? `${from}–${from + move.count! - 1}` : String(from));
-                        const what = (move.count ?? 1) > 1 ? `${move.primary ? "Ports" : `${move.label} ports`} ${span(move.from)} were` : `${move.primary ? "Port" : `${move.label} port`} ${move.from} was`;
+                        const span = (from: number) => portSpan(move, from);
                         return (
-                            <PaperQuote variant="warning" icon="swap_horiz" title={`${what} taken, so this run uses ${span(move.to)}`}>
+                            <PaperQuote variant="warning" icon="swap_horiz" title={portMoveText(move, !move.primary)}>
                                 {move.primary ? `Players join on ${move.to} until the server stops.` : `It uses ${span(move.to)} until the server stops.`} The next start asks for {span(move.from)} again.
                             </PaperQuote>
                         );
