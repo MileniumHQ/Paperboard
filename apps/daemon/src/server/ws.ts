@@ -18,6 +18,9 @@ import { portsRpc } from "../rpc/ports";
 import { problemsFor, problemsRpc } from "../rpc/problems";
 import { pagesRpc } from "../rpc/pages";
 import { computersRpc } from "../rpc/computers";
+import { sharedRpc } from "../rpc/shared";
+import type { SharedDocuments } from "../network/shared";
+import { SHARED_EVENT } from "@mileniumhq/paperapi/sharedShape";
 import { PROTOCOL_VERSION, ErrorCode } from "../core/protocol";
 import { panelId as panelIdShape, readParams, readValue } from "@mileniumhq/paperapi/protocol";
 import { rpcErrorCode } from "../rpc/errors";
@@ -75,6 +78,7 @@ export function isAllowedOrigin(origin: string): boolean {
 // to rpc/*.
 interface ServerOptions extends TunnelOptions {
     staticToken?: string | null;
+    shared: SharedDocuments;
 }
 
 const MAX_CONNECTIONS = 4096;
@@ -83,6 +87,7 @@ const MAX_CONNECTIONS = 4096;
 const dispatch = rpcDispatcher([
     terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, blocksRpc,
     systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc, pagesRpc, computersRpc,
+    sharedRpc,
 ]);
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 
@@ -103,6 +108,16 @@ export function setupWebSocketServer(
     const offProblems = problemsFor(engine).onChange((panelId, problems) => events.deliver(PROBLEMS_EVENT, { panelId, problems }, panelId));
     // the computer list changed: this computer's app asks for it again
     const offRoster = options.roster.onChange(() => events.deliver("computers:changed", {}, null));
+    // shared documents changed: only their panel's sockets and the host's
+    // hear it (the shell's documents, only the host's)
+    const socketPanels = new WeakMap<WebSocket, SocketIdentity>();
+    const offShared = options.shared.onChange((owner, ids) =>
+        events.deliver(SHARED_EVENT, { panelId: owner.panelId, ids }, owner.panelId, (socket) => {
+            const identity = socketPanels.get(socket);
+            if (!identity || identity.relayTo !== null) return false;
+            return identity.panelId === null || identity.panelId === owner.panelId;
+        }),
+    );
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
@@ -116,6 +131,7 @@ export function setupWebSocketServer(
         offBackupProgress();
         offProblems();
         offRoster();
+        offShared();
         identities.clear();
         events.clear();
         monitor.clear();
@@ -155,6 +171,7 @@ export function setupWebSocketServer(
             if (!identity.authenticated) ws.close(4401, "Authentication timed out");
         }, HANDSHAKE_TIMEOUT_MS);
         handshakeTimer.unref?.();
+        socketPanels.set(ws, identity);
         const tunnels = socketTunnels(ws, identity, options);
 
         const sendEvent: RpcContext["sendEvent"] = (event, payload) => {
@@ -248,6 +265,7 @@ export function setupWebSocketServer(
                     engine,
                     auth,
                     roster: options.roster,
+                    shared: options.shared,
                     callerPanelId: () => identity.panelId,
                     isOwner,
                     sendEvent,

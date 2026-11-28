@@ -106,7 +106,8 @@ import { RPC, readParams } from "@mileniumhq/paperapi/protocol";`}
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td><PaperLink href="/docs/paperapi/config/">configApi</PaperLink></td><td>JSON documents the panel saves: settings and workspace files.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/config/">configApi</PaperLink></td><td>JSON documents the panel saves on this computer: settings and workspace files.</td></tr>
+                    <tr><td><PaperLink href="/docs/paperapi/shared/">sharedApi</PaperLink></td><td>JSON documents every computer of the network holds: what the person made, kept in step.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/secrets/">secretsApi</PaperLink></td><td>API keys, tokens and passwords, kept apart from config and files.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/file/">fileApi</PaperLink></td><td>The panel's file storage, downloads, and the export and import windows.</td></tr>
                     <tr><td><PaperLink href="/docs/paperapi/process/">processApi</PaperLink></td><td>Programs the daemon starts and supervises for the panel.</td></tr>
@@ -134,7 +135,7 @@ import { RPC, readParams } from "@mileniumhq/paperapi/protocol";`}
             <PaperText preset="body" as="p">
                 Panels are reviewed and first-party, and they are not sandboxed.
                 A panel can start any program and reach any HTTPS address.
-                What the daemon does enforce is ownership: a panel's credential reads and writes only that panel's config, files, secrets, ports, backups and processes.{" "}
+                What the daemon does enforce is ownership: a panel's credential reads and writes only that panel's config, shared documents, files, secrets, ports, backups and processes.{" "}
                 <PaperLink href="/docs/paperapi/permissions/">Permissions</PaperLink> lists exactly what a panel credential can and cannot do.
             </PaperText>
 

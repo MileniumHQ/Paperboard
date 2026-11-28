@@ -13,6 +13,8 @@ import { pinnedTlsOptions } from "daemon/security/pinnedTls";
 import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { importPairedComputers } from "daemon/network/importPairedComputers";
 import { Roster } from "daemon/network/roster";
+import { NETWORK_DIR, RosterRecords } from "daemon/network/rosterStore";
+import { SharedDocuments } from "daemon/network/shared";
 import { memberIdOf } from "daemon/network/memberId";
 import { setupWebSocketServer } from "daemon/server/ws";
 import { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
@@ -410,7 +412,10 @@ async function tunnelHost(remotes: unknown[]) {
 	const dir = dataDir();
 	const localDir = path.join(dir, "local");
 	fs.writeFileSync(path.join(localDir, "paired_computers.json"), JSON.stringify({ computers: remotes }));
-	const roster = await Roster.open(localDir, createTlsIdentity());
+	const identity = createTlsIdentity();
+	const members = await RosterRecords.open(path.join(localDir, NETWORK_DIR), identity);
+	const roster = await Roster.open(localDir, identity, members);
+	const shared = new SharedDocuments({ store: members.records, nameOf: (id) => roster.member(id)?.name });
 	await importPairedComputers(localDir, roster);
 	const engine = new PaperCraneEngine(dir);
 	const auth = new PaperCraneAuth(false, path.join(dir, "local"));
@@ -418,7 +423,7 @@ async function tunnelHost(remotes: unknown[]) {
 	auth.injectToken(hostToken, "host");
 	const server = http.createServer();
 	const wss = new WebSocketServer({ server });
-	setupWebSocketServer(wss, engine, auth, { roster, tunnelHeartbeatMs: 100 });
+	setupWebSocketServer(wss, engine, auth, { roster, shared, tunnelHeartbeatMs: 100 });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const url = `ws://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
 	return {
@@ -432,6 +437,7 @@ async function tunnelHost(remotes: unknown[]) {
 			wss.close();
 			server.closeAllConnections();
 			await new Promise<void>((resolve) => server.close(() => resolve()));
+			shared.close();
 			roster.close();
 		},
 	};

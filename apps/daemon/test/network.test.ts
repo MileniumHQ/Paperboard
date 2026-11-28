@@ -24,6 +24,7 @@ import {
 	RecordStore,
 	RecordStoreCorruptError,
 	RecordStoreOwnerError,
+	SPACE_BUCKETS,
 } from "../src/network/store";
 import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
 import type { ChangeBatch, ChangeCursor, RecordSource } from "../src/network/store";
@@ -143,6 +144,23 @@ function shuffle<T>(items: T[], next: () => number): T[] {
 		[out[i], out[j]] = [out[j], out[i]];
 	}
 	return out;
+}
+
+/** where a record id's bucket of a space is kept (store.ts "Disk") */
+function bucketFile(dir: string, space: string, id: string): string {
+	const bucket = crypto.createHash("sha256").update(id, "utf8").digest("hex").slice(0, 2);
+	return path.join(dir, "spaces", Buffer.from(space, "utf8").toString("hex"), `${bucket}.json`);
+}
+
+/** ids that fall in different buckets, the first `n` found */
+function idsInDistinctBuckets(n: number): string[] {
+	const seen = new Map<string, string>();
+	for (let i = 0; seen.size < n; i++) {
+		const id = `doc-${i}`;
+		const bucket = crypto.createHash("sha256").update(id, "utf8").digest("hex").slice(0, 2);
+		if (!seen.has(bucket)) seen.set(bucket, id);
+	}
+	return [...seen.values()];
 }
 
 const value = (store: RecordStore, space: string, id: string) => {
@@ -778,9 +796,7 @@ describe("on disk", () => {
 		const [a] = await network("a", "b");
 		wall = T0 + 1000;
 		await a.store.put("notes", "x", "saved");
-		const spaces = path.join(a.dir, "spaces");
-		const [file] = fs.readdirSync(spaces);
-		const temp = path.join(spaces, `${file}.0123456789ab.tmp`);
+		const temp = `${bucketFile(a.dir, "notes", "x")}.0123456789ab.tmp`;
 		fs.writeFileSync(temp, '{"records": [ half');
 		a.reopen();
 		expect(value(a.store, "notes", "x")).toBe("saved");
@@ -842,8 +858,8 @@ describe("on disk", () => {
 	test("a damaged file stops the store from opening and is left as it was", () => {
 		wall = T0;
 		const a = computer("a");
-		for (const name of ["meta.json", "held.json", "cursors.json", path.join("spaces", `${Buffer.from("notes").toString("hex")}.json`)]) {
-			const file = path.join(a.dir, name);
+		for (const file of [...["meta.json", "held.json", "cursors.json"].map((name) => path.join(a.dir, name)), bucketFile(a.dir, "notes", "x")]) {
+			fs.mkdirSync(path.dirname(file), { recursive: true });
 			const before = fs.existsSync(file) ? fs.readFileSync(file) : null;
 			fs.writeFileSync(file, '{"records": [ {"seq": 1, "rec');
 			expect(() => a.reopen()).toThrow(RecordStoreCorruptError);
@@ -854,6 +870,71 @@ describe("on disk", () => {
 		// a record that parses but isn't one is damage too
 		fs.writeFileSync(path.join(a.dir, "held.json"), JSON.stringify({ records: [{ v: 1 }] }));
 		expect(() => a.reopen()).toThrow(RecordStoreCorruptError);
+	});
+
+	test("a put rewrites only its own bucket of the space", async () => {
+		const [a] = await network("a");
+		wall = T0 + 1000;
+		const ids = idsInDistinctBuckets(3);
+		for (const id of ids) await a.store.put("notes", id, `first ${id}`);
+		const before = ids.map((id) => fs.readFileSync(bucketFile(a.dir, "notes", id), "utf8"));
+		await a.store.put("notes", ids[1], "second");
+		const after = ids.map((id) => fs.readFileSync(bucketFile(a.dir, "notes", id), "utf8"));
+		expect(after[0]).toBe(before[0]);
+		expect(after[2]).toBe(before[2]);
+		expect(after[1]).not.toBe(before[1]);
+		expect(fs.readdirSync(path.dirname(bucketFile(a.dir, "notes", ids[0]))).length).toBe(3);
+		expect(SPACE_BUCKETS).toBe(256);
+		a.reopen();
+		expect(ids.map((id) => value(a.store, "notes", id))).toEqual([`first ${ids[0]}`, "second", `first ${ids[2]}`]);
+	});
+
+	test("a bucket a readmit empties is removed, and a crash before its removal leaves the record once", async () => {
+		const [a, b] = await network("a", "b");
+		wall = T0 + 1000;
+		await b.store.put("notes", "x", "theirs");
+		await a.store.pull("b", b.store);
+		const bucket = bucketFile(a.dir, "notes", "x");
+		const kept = fs.readFileSync(bucket, "utf8");
+		a.roster.removedFrom.set(b.id, T0 + 500);
+		await a.store.readmit();
+		expect(fs.existsSync(bucket)).toBe(false);
+		expect(a.store.heldCount).toBe(1);
+		// as if the crash came after held was saved, before the bucket went
+		fs.writeFileSync(bucket, kept);
+		a.reopen();
+		expect(a.store.heldCount).toBe(0);
+		expect(value(a.store, "notes", "x")).toBe("theirs");
+		// the next readmit holds it again, and every start asks once (rosterStore.ts)
+		await a.store.readmit();
+		expect(a.store.heldCount).toBe(1);
+		a.reopen();
+		expect(a.store.heldCount).toBe(1);
+		expect(a.store.get("notes", "x")).toBeNull();
+	});
+
+	test("a record in another bucket or space than its own, or a file that isn't a bucket, is damage", async () => {
+		const [a] = await network("a");
+		wall = T0 + 1000;
+		const [x, y] = idsInDistinctBuckets(2);
+		await a.store.put("notes", x, 1);
+		const right = bucketFile(a.dir, "notes", x);
+		const wrong = bucketFile(a.dir, "notes", y);
+		fs.renameSync(right, wrong);
+		expect(() => a.reopen()).toThrow(`which belongs in bucket`);
+		fs.renameSync(wrong, right);
+		const elsewhere = bucketFile(a.dir, "other", x);
+		fs.mkdirSync(path.dirname(elsewhere), { recursive: true });
+		fs.copyFileSync(right, elsewhere);
+		expect(() => a.reopen()).toThrow(`it holds a record of notes`);
+		fs.rmSync(path.dirname(elsewhere), { recursive: true });
+		for (const stray of [path.join(path.dirname(right), "notes.json"), path.join(a.dir, "spaces", `${Buffer.from("notes").toString("hex")}.json`)]) {
+			fs.writeFileSync(stray, '{"records": []}');
+			expect(() => a.reopen()).toThrow(RecordStoreCorruptError);
+			fs.rmSync(stray);
+		}
+		a.reopen();
+		expect(value(a.store, "notes", x)).toBe(1);
 	});
 
 	test("a store is one key's: opened with another, it refuses and changes nothing", async () => {

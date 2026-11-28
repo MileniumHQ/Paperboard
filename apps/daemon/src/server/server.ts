@@ -36,6 +36,8 @@ import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
 import { Roster } from "../network/roster";
 import { NETWORK_DIR, RosterRecords } from "../network/rosterStore";
 import { LINK_PATH, NetworkLinks } from "../network/links";
+import { SharedDocuments } from "../network/shared";
+import type { RecordStore } from "../network/store";
 import { importPairedComputers } from "../network/importPairedComputers";
 
 export const DEFAULT_PORT =
@@ -63,6 +65,8 @@ export interface ServerInstance {
     wss: WebSocketServer;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
+    /** the network's record store: the computer list's records and the shared documents' */
+    records: RecordStore;
     /** the computers of the network, this one among them */
     roster: Roster;
     /** the links to the other members, and the sync over them */
@@ -87,6 +91,9 @@ interface DaemonConfig {
     tlsIdentity: TlsIdentity | null;
     roster: Roster;
     network: NetworkLinks;
+    records: RecordStore;
+    // the panels' and the shell's documents every computer holds
+    shared: SharedDocuments;
 }
 
 // handshake file for local clients, written on every listen. Throws: a
@@ -171,6 +178,8 @@ export async function startPaperCraneServer(
         roster,
         // a daemon on loopback only can't be dialed: it dials out
         network: new NetworkLinks({ identity, roster, store: members.records, listening: !isLoopbackHost(host) }),
+        records: members.records,
+        shared: new SharedDocuments({ store: members.records, nameOf: (id) => roster.member(id)?.name }),
     };
 
     const port = options.port ?? DEFAULT_PORT;
@@ -181,6 +190,7 @@ export async function startPaperCraneServer(
             const inUse = err?.code === "EADDRINUSE" || /already in use|in use/i.test(err?.message || "");
             if (inUse && (await killStalePaperCrane(port))) continue;
             // this start is over: nothing reads the roster for it
+            config.shared.close();
             roster.close();
             if (!inUse) throw err;
             // Port is held by a foreign, non-PaperCrane application.
@@ -270,7 +280,7 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
             });
         });
     }
-    setupWebSocketServer(wss, engine, auth, { roster: config.roster, staticToken });
+    setupWebSocketServer(wss, engine, auth, { roster: config.roster, shared: config.shared, staticToken });
     return { server, localServer, wss };
 }
 
@@ -345,6 +355,7 @@ function daemonLifecycle(parts: DaemonParts) {
         step("ending the links to the other computers", () => {
             config.network.stop().catch((err) => logger.error("[Paperboard Server] while stopping, saving when the other computers were last seen failed:", err));
         });
+        step("closing the shared documents", () => config.shared.close());
         step("closing the computer list", () => config.roster.close());
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
@@ -536,7 +547,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
 
             // links are taken and dialed once this daemon is the one listening
             config.network.start();
-            resolve({ server, wss, engine, auth, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: lifecycle.stop });
+            resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: lifecycle.stop });
         };
 
         const onListening = () => {
