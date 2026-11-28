@@ -88,7 +88,7 @@ export default function DataDirectoryDoc() {
                     <tr><td><PaperCode>crane.json</PaperCode></td><td>How programs on this computer reach the running daemon, with its token. Removed when the daemon stops.</td></tr>
                     <tr><td><PaperCode>process-owners.json</PaperCode></td><td>Which panel owns which running program.</td></tr>
                     <tr><td><PaperCode>machine-id.json</PaperCode></td><td>A random id the daemon announces on the local network.</td></tr>
-                    <tr><td><PaperCode>network/</PaperCode></td><td>The computer list and the panels' shared documents, as signed and encrypted records: each computer's name, address, certificate and operating system, and what panels keep with <PaperLink href="/docs/paperapi/shared/">sharedApi</PaperLink>. It holds no tokens and no order, so it can be shared with every computer as it is. A damaged file here stops the daemon from starting rather than being read as empty.</td></tr>
+                    <tr><td><PaperCode>network/</PaperCode></td><td>The computer list, as signed and encrypted records: each computer's name, address, certificate and operating system. It holds no tokens and no order, so it can be shared with every computer as it is. A damaged file here stops the daemon from starting rather than being read as empty.</td></tr>
                     <tr><td><PaperCode>network_roster_private.json</PaperCode></td><td>This computer's own part of the list: its tokens for the computers it is paired with, the ids older versions of Paperboard gave them, the order you put them in here, and what it saw of the others from where it is: the address each last answered at, and when it was last linked and in sync with each.</td></tr>
                     <tr><td><PaperCode>active_computer.json</PaperCode></td><td>The computer the desktop app has selected.</td></tr>
                     <tr><td><PaperCode>app-settings.json</PaperCode></td><td>The desktop app's settings: appearance, animations, blur, start page, run on startup.</td></tr>
@@ -102,7 +102,7 @@ export default function DataDirectoryDoc() {
                 These permissions apply on Linux and macOS. On a drive without file permissions, such as FAT, Paperboard cannot set them and logs a warning.
             </PaperText>
             <PaperText preset="body" as="p">
-                Deleting <PaperCode>tls_identity.json</PaperCode> gives the daemon a new certificate on its next start, and every paired computer has to pair again. This computer keeps its name and place in the computer list.
+                Deleting <PaperCode>tls_identity.json</PaperCode> gives the daemon a new certificate on its next start, and every paired computer has to pair again. The computer list starts over with only this computer in it, and the old one is kept beside it as <PaperCode>network.replaced-…</PaperCode>.
                 If the file is damaged, the daemon does not start and says so, instead of making a new one.
             </PaperText>
 

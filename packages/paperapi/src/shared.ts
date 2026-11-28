@@ -3,6 +3,11 @@
 // between them. configApi is the other kind, kept on one computer. The
 // daemon's network/shared.ts says how they are kept, and which panel's they
 // are: the caller's credential decides, never a name given here.
+//
+// Not exported from the package yet, and not in the docs: until computers
+// can join one network, a shared document lives on one computer and no
+// backup holds it, so no panel should move its data here. Both come with
+// joining.
 import { getTransport, RPC_ROUTES } from "./ipc";
 import type { RpcParams } from "./protocol";
 import { errorMessage } from "./errors";

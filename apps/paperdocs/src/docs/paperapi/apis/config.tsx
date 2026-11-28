@@ -14,7 +14,6 @@ export default function ConfigApiDoc() {
             <PaperText preset="body" as="p">
                 configApi saves a panel's settings and other small JSON data on the computer the panel runs on.
                 It works on a panel page, in a widget and in a service, and every one of them reads the same documents.
-                What the person expects on every computer of the network, such as a project or a bot, goes in <PaperLink href="/docs/paperapi/shared/">sharedApi</PaperLink> instead; see <PaperLink href="/docs/paperapi/shared/#which">sharedApi or configApi</PaperLink>.
                 Keep passwords and tokens out of it: those go in <PaperLink href="/docs/paperapi/secrets/">secretsApi</PaperLink>.
             </PaperText>
 

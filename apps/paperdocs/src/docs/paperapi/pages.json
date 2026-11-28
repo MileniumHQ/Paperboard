@@ -90,9 +90,6 @@
                 "secrets": {
                     "name": "Secrets API"
                 },
-                "shared": {
-                    "name": "Shared API"
-                },
                 "shell": {
                     "name": "Shell API"
                 },
