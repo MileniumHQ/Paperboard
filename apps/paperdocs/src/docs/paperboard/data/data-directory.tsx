@@ -84,11 +84,13 @@ export default function DataDirectoryDoc() {
                 <tbody>
                     <tr><td><PaperCode>secrets.json</PaperCode></td><td>Passwords, keys and tokens that panels saved, and the sign-ins for backup locations. Plain JSON, not encrypted.</td></tr>
                     <tr><td><PaperCode>authorized_tokens.json</PaperCode></td><td>The tokens of the computers paired with this daemon.</td></tr>
-                    <tr><td><PaperCode>tls_identity.json</PaperCode></td><td>The daemon's certificate and key. Paired computers trust this certificate.</td></tr>
+                    <tr><td><PaperCode>tls_identity.json</PaperCode></td><td>The daemon's certificate and key. Paired computers trust this certificate, and the computer list knows this computer by its key.</td></tr>
                     <tr><td><PaperCode>crane.json</PaperCode></td><td>How programs on this computer reach the running daemon, with its token. Removed when the daemon stops.</td></tr>
                     <tr><td><PaperCode>process-owners.json</PaperCode></td><td>Which panel owns which running program.</td></tr>
                     <tr><td><PaperCode>machine-id.json</PaperCode></td><td>A random id the daemon announces on the local network.</td></tr>
-                    <tr><td><PaperCode>paired_computers.json</PaperCode></td><td>The desktop app's list of computers it is paired with, with their tokens and certificates.</td></tr>
+                    <tr><td><PaperCode>network_roster.json</PaperCode></td><td>The computer list: each computer's name, address, certificate, operating system and place in your order. It holds no tokens.</td></tr>
+                    <tr><td><PaperCode>network_roster_private.json</PaperCode></td><td>This computer's tokens for the computers it is paired with, and the ids older versions of Paperboard gave them.</td></tr>
+                    <tr><td><PaperCode>active_computer.json</PaperCode></td><td>The computer the desktop app has selected.</td></tr>
                     <tr><td><PaperCode>app-settings.json</PaperCode></td><td>The desktop app's settings: appearance, animations, blur, start page, run on startup.</td></tr>
                     <tr><td><PaperCode>panel-permissions.json</PaperCode></td><td>Your microphone, camera and screen answers for each panel.</td></tr>
                     <tr><td><PaperCode>last_update.json</PaperCode></td><td>When the last update check ran.</td></tr>
@@ -96,11 +98,11 @@ export default function DataDirectoryDoc() {
                 </tbody>
             </PaperTable>
             <PaperText preset="body" as="p">
-                <PaperCode>secrets.json</PaperCode>, <PaperCode>authorized_tokens.json</PaperCode>, <PaperCode>tls_identity.json</PaperCode>, <PaperCode>crane.json</PaperCode> and <PaperCode>process-owners.json</PaperCode> are also private files of their own, readable by your account only.
+                <PaperCode>secrets.json</PaperCode>, <PaperCode>authorized_tokens.json</PaperCode>, <PaperCode>tls_identity.json</PaperCode>, <PaperCode>network_roster.json</PaperCode>, <PaperCode>network_roster_private.json</PaperCode>, <PaperCode>crane.json</PaperCode> and <PaperCode>process-owners.json</PaperCode> are also private files of their own, readable by your account only.
                 These permissions apply on Linux and macOS. On a drive without file permissions, such as FAT, Paperboard cannot set them and logs a warning.
             </PaperText>
             <PaperText preset="body" as="p">
-                Deleting <PaperCode>tls_identity.json</PaperCode> gives the daemon a new certificate on its next start, and every paired computer has to pair again.
+                Deleting <PaperCode>tls_identity.json</PaperCode> gives the daemon a new certificate on its next start, and every paired computer has to pair again. This computer keeps its name and place in the computer list.
                 If the file is damaged, the daemon does not start and says so, instead of making a new one.
             </PaperText>
 

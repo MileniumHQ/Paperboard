@@ -3,7 +3,7 @@
 // shape (PaperAPI's protocol/rpc.ts) and answers with what the handler returns.
 import type { RpcContext } from "./context";
 import { isRpcAction, readParams, RPC, type RpcAction, type RpcParams, type RpcResult } from "@mileniumhq/paperapi/protocol";
-import { Refusal, rpcErrorCode } from "./errors";
+import { forbidden, Refusal, rpcErrorCode } from "./errors";
 import { requireHost } from "../security/principal";
 
 export type RpcHandler<A extends RpcAction> = (params: RpcParams<A>, ctx: RpcContext, action: A) => Promise<RpcResult<A>> | RpcResult<A>;
@@ -39,6 +39,7 @@ export function rpcDispatcher(modules: RpcModule[]) {
         if (!isRpcAction(action) || !route) return false;
         try {
             if ("host" in RPC[action]) requireHost(ctx.callerPanelId(), action);
+            if ("owner" in RPC[action] && !ctx.isOwner()) throw forbidden(`${action} needs this computer's own host credential (local/crane.json)`);
             ctx.reply(id, await route.handler(readParams(action, params), ctx, action));
         } catch (err) {
             if (err instanceof Refusal) ctx.reply(id, null, err.message, err.code);

@@ -17,6 +17,7 @@ import { backupServiceFor, backupsRpc } from "../rpc/backups";
 import { portsRpc } from "../rpc/ports";
 import { problemsFor, problemsRpc } from "../rpc/problems";
 import { pagesRpc } from "../rpc/pages";
+import { computersRpc } from "../rpc/computers";
 import { PROTOCOL_VERSION, ErrorCode } from "../core/protocol";
 import { panelId as panelIdShape, readParams, readValue } from "@mileniumhq/paperapi/protocol";
 import { rpcErrorCode } from "../rpc/errors";
@@ -81,7 +82,7 @@ const MAX_CONNECTIONS = 4096;
 // every action PaperAPI's protocol/rpc.ts declares, past the auth gate
 const dispatch = rpcDispatcher([
     terminalRpc, processRpc, filesRpc, packagesRpc, panelsRpc, blocksRpc,
-    systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc, pagesRpc,
+    systemRpc, secretsRpc, backupsRpc, portsRpc, problemsRpc, pagesRpc, computersRpc,
 ]);
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 
@@ -89,7 +90,7 @@ export function setupWebSocketServer(
     wss: WebSocketServer,
     engine: PaperCraneEngine,
     auth: PaperCraneAuth,
-    options: ServerOptions = {},
+    options: ServerOptions,
 ) {
     const identities = new SocketIdentities();
     let inFlightTotal = 0;
@@ -100,6 +101,8 @@ export function setupWebSocketServer(
     const offBackupProgress = backupServiceFor(engine).onProgress((change) => events.deliver(BACKUP_PROGRESS_EVENT, change, null));
     // a panel's problems changed: the shell shows them by its name, and its page may follow its own
     const offProblems = problemsFor(engine).onChange((panelId, problems) => events.deliver(PROBLEMS_EVENT, { panelId, problems }, panelId));
+    // the computer list changed: this computer's app asks for it again
+    const offRoster = options.roster.onChange(() => events.deliver("computers:changed", {}, null));
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
@@ -112,6 +115,7 @@ export function setupWebSocketServer(
         offRevocations();
         offBackupProgress();
         offProblems();
+        offRoster();
         identities.clear();
         events.clear();
         monitor.clear();
@@ -160,6 +164,13 @@ export function setupWebSocketServer(
         };
 
         const broadcastEvent: RpcContext["broadcastEvent"] = (event, payload) => events.deliver(event, payload, identity.panelId);
+        // this computer's own host credential (local/crane.json): never a
+        // panel, a relay, or a paired computer's token
+        const isOwner = () => {
+            const hostToken = options.staticToken;
+            return !!hostToken && !!identity.token && identity.panelId === null &&
+                identity.relayTo === null && secretsMatch(identity.token, hostToken);
+        };
 
         ws.on("close", () => {
             clearTimeout(handshakeTimer);
@@ -236,7 +247,9 @@ export function setupWebSocketServer(
                     ws,
                     engine,
                     auth,
+                    roster: options.roster,
                     callerPanelId: () => identity.panelId,
+                    isOwner,
                     sendEvent,
                     broadcastEvent,
                     reply: send,
@@ -264,10 +277,7 @@ export function setupWebSocketServer(
                 // this computer's own host credential (local/crane.json)
                 // only: never a panel, a relay, or a paired computer's token
                 if (action === MONITOR_SUBSCRIBE) {
-                    const hostToken = options.staticToken;
-                    const local = !!hostToken && !!identity.token && identity.panelId === null &&
-                        identity.relayTo === null && secretsMatch(identity.token, hostToken);
-                    if (!local) {
+                    if (!isOwner()) {
                         reply(null, `${MONITOR_SUBSCRIBE} needs this computer's own host credential (local/crane.json)`, ErrorCode.FORBIDDEN);
                         return;
                     }

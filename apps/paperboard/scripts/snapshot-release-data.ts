@@ -13,8 +13,9 @@
 // the snapshot holds: the token store (a paired computer's credential, a
 // panel credential that computer minted, and the panel service's own), a
 // panel's configs, the port registry, a backup location choice and a backup
-// in it, a supervised workload's record, the Home layout, and the desktop
-// app's own files (its settings and its paired computer).
+// in it, a supervised workload's record, the Home layout, a computer this
+// one paired (in the daemon's roster, with its token), and the desktop app's
+// own files (its settings and the computer its rail has selected).
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as net from "node:net";
@@ -152,6 +153,17 @@ async function main(): Promise<void> {
     await host.call("backup:panel-location-set", { panelId: SNAPSHOT_PANEL, locationId: locations[0].id });
     await host.call("backup:create", { panelId: SNAPSHOT_PANEL, label: "Before the update" });
 
+    // a computer this one paired: the daemon keeps it in its roster, its token apart
+    const rack = loadOrCreateTlsIdentity(path.join(work, "remote"));
+    await host.call("computers:pair", {
+        cert: rack.cert,
+        pairToken: `pc_${crypto.randomBytes(24).toString("hex")}`,
+        name: "Snapshot Rack",
+        // loopback, refused: opening the snapshot never reaches a network
+        dial: { host: "127.0.0.2", port: 1 },
+        facts: { os: "linux", arch: "x64" },
+    });
+
     // a supervised workload: its record stays when the daemon stops
     await host.call("process:run", { id: "snapshot-workload", command: process.execPath, args: ["-e", "setInterval(() => {}, 1 << 30)"], cwd: work });
     host.close();
@@ -169,21 +181,7 @@ async function main(): Promise<void> {
 
     // the desktop app's own files, in the format this release writes
     fs.writeFileSync(path.join(dataDir, "local", "app-settings.json"), JSON.stringify({ darkMode: "dark", reducedMotion: true, runOnStartup: false }, null, 2));
-    const remote = loadOrCreateTlsIdentity(path.join(work, "remote"));
-    fs.writeFileSync(path.join(dataDir, "local", "paired_computers.json"), JSON.stringify({
-        activeId: "local",
-        computers: [{
-            id: "snapshot-rack",
-            name: "Snapshot Rack",
-            // loopback, refused: opening the snapshot never reaches a network
-            host: "127.0.0.2",
-            port: 1,
-            token: `pc_${crypto.randomBytes(24).toString("hex")}`,
-            cert: remote.cert,
-            os: "linux",
-            arch: "x64",
-        }],
-    }, null, 2), { mode: 0o600 });
+    fs.writeFileSync(path.join(dataDir, "local", "active_computer.json"), JSON.stringify({ activeId: "local" }, null, 2));
 
     copyRegularFiles(dataDir, OUT);
     fs.writeFileSync(path.join(OUT, "README.md"), [

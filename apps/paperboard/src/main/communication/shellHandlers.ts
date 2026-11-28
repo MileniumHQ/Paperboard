@@ -91,10 +91,11 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
             return { ...creds, computerId: "local" };
         },
 
-        "computers-list": () => ({
-            computers: connectionPool.listComputers(),
-            activeId: connectionPool.getActiveId(),
-        }),
+        // a list the daemon couldn't give is asked for again, and its failure said
+        "computers-list": async () => {
+            await connectionPool.ready();
+            return { computers: connectionPool.listComputers(), activeId: connectionPool.getActiveId() };
+        },
 
         "computer-probe": ({ host, port }) => connectionPool.probe(host, port),
         "computer-reach": ({ id }) => connectionPool.reach(id),

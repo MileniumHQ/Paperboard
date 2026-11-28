@@ -11,6 +11,8 @@ import { PaperCraneAuth } from "daemon/security/auth";
 import { PaperCraneEngine } from "daemon/engine/index";
 import { pinnedTlsOptions } from "daemon/security/pinnedTls";
 import { createTlsIdentity } from "daemon/security/tlsIdentity";
+import { importPairedComputers } from "daemon/network/importPairedComputers";
+import { memberIdOf, Roster } from "daemon/network/roster";
 import { setupWebSocketServer } from "daemon/server/ws";
 import { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
 import { PaperCraneClient } from "../../src/main/communication/papercrane/PaperCraneClient";
@@ -400,26 +402,28 @@ describe("a paired computer found again", () => {
 });
 
 // The local daemon whose sockets open tunnels: the real WS server and auth,
-// with the tunnel heartbeat shortened.
-// `standalone` passes no remotesFile, as `papercrane serve` and the systemd
-// service do: the daemon must find the file in its own data folder.
-async function tunnelHost(remotes: unknown[], { standalone = false } = {}) {
+// with the tunnel heartbeat shortened. Its computers are paired the way 0.4
+// listed them, and imported into its roster as a daemon's start does, so
+// each is reached by the id 0.4 gave it.
+async function tunnelHost(remotes: unknown[]) {
 	const dir = dataDir();
-	const remotesFile = path.join(dir, "local", "paired_computers.json");
-	fs.writeFileSync(remotesFile, JSON.stringify({ computers: remotes }));
+	const localDir = path.join(dir, "local");
+	fs.writeFileSync(path.join(localDir, "paired_computers.json"), JSON.stringify({ computers: remotes }));
+	const roster = await Roster.open(localDir, createTlsIdentity().cert);
+	await importPairedComputers(localDir, roster);
 	const engine = new PaperCraneEngine(dir);
 	const auth = new PaperCraneAuth(false, path.join(dir, "local"));
 	const hostToken = crypto.randomBytes(24).toString("hex");
 	auth.injectToken(hostToken, "host");
 	const server = http.createServer();
 	const wss = new WebSocketServer({ server });
-	setupWebSocketServer(wss, engine, auth, { ...(standalone ? {} : { remotesFile }), tunnelHeartbeatMs: 100 });
+	setupWebSocketServer(wss, engine, auth, { roster, tunnelHeartbeatMs: 100 });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const url = `ws://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
 	return {
 		auth,
 		url,
-		remotesFile,
+		roster,
 		host: () => Rpc.authed(url, hostToken),
 		socket: (token: string) => Rpc.authed(url, token),
 		close: async () => {
@@ -427,6 +431,7 @@ async function tunnelHost(remotes: unknown[], { standalone = false } = {}) {
 			wss.close();
 			server.closeAllConnections();
 			await new Promise<void>((resolve) => server.close(() => resolve()));
+			roster.close();
 		},
 	};
 }
@@ -528,16 +533,19 @@ describe("tunnels and scoped credentials", () => {
 		}
 	});
 
-	test("a standalone daemon tunnels to the computers paired in its own data folder", async () => {
-		const local = await tunnelHost([{ id: "far", name: "Far", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken }], { standalone: true });
-		const previous = process.env.PAPERBOARD_DIR;
-		process.env.PAPERBOARD_DIR = path.dirname(path.dirname(local.remotesFile));
+	// Inventory: Core contract — a panel reaches a paired computer by the id 0.4 gave it, by its key's id, and by a name only one computer has.
+	test("a tunnel reaches a computer by the id 0.4 gave it, by its member id, and by its name", async () => {
+		const local = await tunnelHost([{ id: "far", name: "Far", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken }]);
 		try {
 			const host = await local.host();
-			host.send({ type: "remote:open", tunnelId: "s1", computerId: "far" });
-			await tunnelOpen(host, "s1");
+			for (const [tunnelId, computerId] of [["s1", "far"], ["s2", memberIdOf(remoteCert)], ["s3", "Far"]]) {
+				host.send({ type: "remote:open", tunnelId, computerId });
+				await tunnelOpen(host, tunnelId!);
+			}
+			// this computer is never the end of a tunnel
+			host.send({ type: "remote:open", tunnelId: "s4", computerId: "local" });
+			expect((await tunnelClosed(host, "s4")).reason).toBe("unknown-computer");
 		} finally {
-			restoreEnv("PAPERBOARD_DIR", previous);
 			await local.close();
 		}
 	});
@@ -557,14 +565,17 @@ describe("tunnels and scoped credentials", () => {
 
 	test("a remote with a different certificate is unreachable and never receives the token; an uncertified entry is not dialed; an ambiguous name is refused", async () => {
 		const impostor = await impostorServer();
-		const local = await tunnelHost([
+		const spoofed = await tunnelHost([
 			{ id: "spoofed", name: "Spoofed", host: "127.0.0.1", port: impostor.port, cert: remoteCert, token: remoteToken },
 			{ id: "nocert", name: "No cert", host: "127.0.0.1", port: impostor.port, token: remoteToken },
+		]);
+		// two computers (two keys) by one name
+		const twins = await tunnelHost([
 			{ id: "one", name: "Twin", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken },
-			{ id: "two", name: "Twin", host: "127.0.0.1", port: remote.port, cert: remoteCert, token: remoteToken },
+			{ id: "two", name: "Twin", host: "127.0.0.1", port: impostor.port, cert: createTlsIdentity().cert, token: remoteToken },
 		]);
 		try {
-			const host = await local.host();
+			const host = await spoofed.host();
 			host.send({ type: "remote:open", tunnelId: "t1", computerId: "spoofed" });
 			expect((await tunnelClosed(host, "t1")).reason).toBe("unreachable");
 			expect(impostor.accepted()).toBe(1);
@@ -574,12 +585,14 @@ describe("tunnels and scoped credentials", () => {
 			expect((await tunnelClosed(host, "t2")).reason).toBe("unknown-computer");
 			expect(impostor.accepted()).toBe(1);
 
-			host.send({ type: "remote:open", tunnelId: "t3", computerId: "Twin" });
-			expect((await tunnelClosed(host, "t3")).reason).toBe("ambiguous-computer");
-			host.send({ type: "remote:open", tunnelId: "t4", computerId: "one" });
-			await tunnelOpen(host, "t4");
+			const twinHost = await twins.host();
+			twinHost.send({ type: "remote:open", tunnelId: "t3", computerId: "Twin" });
+			expect((await tunnelClosed(twinHost, "t3")).reason).toBe("ambiguous-computer");
+			twinHost.send({ type: "remote:open", tunnelId: "t4", computerId: "one" });
+			await tunnelOpen(twinHost, "t4");
 		} finally {
-			await local.close();
+			await spoofed.close();
+			await twins.close();
 			await impostor.close();
 		}
 	});

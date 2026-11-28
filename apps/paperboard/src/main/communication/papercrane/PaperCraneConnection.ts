@@ -5,7 +5,6 @@
 import { WebSocket, type RawData } from "ws";
 import { logger } from "daemon/core/logger";
 import { EventEmitter } from "events";
-import * as path from "path";
 import * as crypto from "crypto";
 import { startPaperCraneServer, ServerInstance, DEFAULT_PORT } from "daemon";
 import { PROTOCOL_VERSION } from "daemon/core/protocol";
@@ -15,7 +14,6 @@ import {
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
     type CraneHandshakeFile,
 } from "daemon/security/handshake";
-import { getLocalDir } from "daemon/core/paths";
 import {
     peerCertPem,
     pinnedRequest,
@@ -305,7 +303,6 @@ export class PaperCraneConnection extends EventEmitter {
                 host: "127.0.0.1",
                 headless: true,
                 staticToken: freshToken,
-                remotesFile: path.join(getLocalDir(), "paired_computers.json"),
             });
             if (!this.embeddedServer.port) throw new Error("it started without a port");
             this.port = this.embeddedServer.port;
@@ -645,9 +642,13 @@ export class PaperCraneConnection extends EventEmitter {
     }
 
     // panels own their streams through PaperAPI's transport; this client
-    // only hears progress for the updater's package downloads
+    // hears progress for the updater's package downloads, and passes the
+    // broadcasts its owner subscribed to on as "event"
     private handlePushEvent(event: string, payload: unknown) {
-        if (event !== "progress") return;
+        if (event !== "progress") {
+            this.emit("event", event, payload);
+            return;
+        }
         if (!payload || typeof payload !== "object" || typeof (payload as ProgressPayload).downloadId !== "string") return;
         const progress = payload as ProgressPayload;
         this.progressListeners.get(progress.downloadId)?.(progress);

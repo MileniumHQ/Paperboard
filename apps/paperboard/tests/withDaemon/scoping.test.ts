@@ -7,7 +7,8 @@ import * as path from "node:path";
 import { PaperCraneEngine } from "daemon/engine/index";
 import { PaperCraneAuth } from "daemon/security/auth";
 import { CredentialStore } from "daemon/security/credentials";
-import { readRemotes } from "daemon/system/remotes";
+import { memberIdOf, Roster } from "daemon/network/roster";
+import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { getPaperboardDir } from "daemon/core/paths";
 import { parseBackupLocationRequest } from "../../src/renderer/src/lib/backupLocationRequest";
 import { CraneTransport } from "@mileniumhq/paperapi/ws";
@@ -134,29 +135,41 @@ describe("config storage layout", () => {
 describe("unreadable state is quarantined", () => {
 	const corruptCopies = (dir: string, name: string) => fs.readdirSync(dir).filter((f) => f.startsWith(`${name}.corrupt-`));
 
-	test("token store, vault and paired computers: missing is default, corrupt is set aside with its bytes, unreadable throws", () => {
+	test("token store, vault and computer list: missing is default, corrupt is set aside with its bytes, unreadable throws", async () => {
 		const local = path.join(dataDir(), "local");
 		const tokens = path.join(local, "authorized_tokens.json");
 		const vault = path.join(local, "secrets.json");
-		const remotes = path.join(local, "paired_computers.json");
+		const roster = path.join(local, "network_roster.json");
+		const rosterPrivate = path.join(local, "network_roster_private.json");
+		const { cert } = createTlsIdentity();
+		// a roster that was never written holds this computer alone
+		const members = async () => {
+			const opened = await Roster.open(local, cert);
+			opened.close();
+			return opened.list().map((m) => m.id);
+		};
+		const self = memberIdOf(cert);
 
 		expect(new PaperCraneAuth(false, local).getAuthorizedClients()).toEqual([]);
-		expect(readRemotes(remotes)).toEqual([]);
+		expect(await members()).toEqual([self]);
 
-		for (const file of [tokens, vault, remotes]) fs.writeFileSync(file, "{broken");
+		for (const file of [tokens, vault, roster, rosterPrivate]) fs.writeFileSync(file, "{broken");
 		expect(new PaperCraneAuth(false, local).getAuthorizedClients()).toEqual([]);
 		new CredentialStore(path.dirname(local));
-		expect(readRemotes(remotes)).toEqual([]);
-		for (const name of ["authorized_tokens.json", "secrets.json", "paired_computers.json"]) {
+		expect(await members()).toEqual([self]);
+		for (const name of ["authorized_tokens.json", "secrets.json", "network_roster.json", "network_roster_private.json"]) {
 			const [copy] = corruptCopies(local, name);
 			expect(fs.readFileSync(path.join(local, copy!), "utf8")).toBe("{broken");
 		}
 
 		// a path that exists but cannot be read as a file
-		for (const file of [tokens, vault, remotes]) fs.mkdirSync(file);
+		for (const file of [tokens, vault, roster, rosterPrivate]) {
+			fs.rmSync(file, { force: true });
+			fs.mkdirSync(file);
+		}
 		expect(() => new PaperCraneAuth(false, local)).toThrow();
 		expect(() => new CredentialStore(path.dirname(local))).toThrow();
-		expect(() => readRemotes(remotes)).toThrow();
+		await expect(members()).rejects.toThrow();
 	});
 
 	test("a vault entry with no readable value is kept aside, not dropped by the next save", () => {

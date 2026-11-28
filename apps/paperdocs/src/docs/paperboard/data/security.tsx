@@ -19,7 +19,7 @@ export default function SecurityDoc() {
             <PaperText preset="subheader" as="h2" id="network">Connections between computers</PaperText>
             <PaperTextList>
                 <li>The server daemon listens on every network on port <PaperCode>45464</PaperCode> unless you choose otherwise.</li>
-                <li>A daemon that other computers can reach accepts only encrypted (TLS) connections from them. It makes its own certificate the first time it starts, keeps it in <PaperCode>local/tls_identity.json</PaperCode>, and uses it for ten years.</li>
+                <li>A daemon that other computers can reach accepts only encrypted (TLS) connections from them. It makes its own certificate the first time it starts, keeps it in <PaperCode>local/tls_identity.json</PaperCode>, and uses it for ten years. The daemon built into the desktop app makes one too: the computer list knows each computer by its certificate's key, never by its address or name.</li>
                 <li>Unencrypted connections exist only inside the computer, on <PaperCode>127.0.0.1</PaperCode>, for Paperboard and panels running on that same computer.</li>
                 <li>The daemon built into the desktop app listens on <PaperCode>127.0.0.1</PaperCode> only. No other computer can connect to it.</li>
                 <li>Every request needs a token, except a health check that answers with <PaperCode>ok</PaperCode> and the daemon's version, and the pairing request itself.</li>
@@ -37,7 +37,8 @@ export default function SecurityDoc() {
 
             <PaperText preset="subheader" as="h2" id="tokens">Tokens</PaperText>
             <PaperTextList>
-                <li>Each paired computer gets its own random token. The daemon keeps them in <PaperCode>local/authorized_tokens.json</PaperCode>, and the desktop app keeps its copies in <PaperCode>local/paired_computers.json</PaperCode>. Both are plain files inside the private <PaperCode>local/</PaperCode> folder.</li>
+                <li>Each paired computer gets its own random token. The daemon keeps them in <PaperCode>local/authorized_tokens.json</PaperCode>, and the computer that paired keeps its copies in <PaperCode>local/network_roster_private.json</PaperCode>, apart from the computer list. Both are plain files inside the private <PaperCode>local/</PaperCode> folder.</li>
+                <li>Only this computer's own Paperboard can read the computer list and its tokens from the daemon. A paired computer's token and a panel's token are refused.</li>
                 <li>Tokens do not expire. A token works until you forget the computer in Paperboard or remove it on the daemon. See <PaperLink href="/docs/paperboard/connect/#remove-from-the-daemon">Remove a paired computer from the daemon</PaperLink>.</li>
                 <li>Programs on the same computer reach the daemon through <PaperCode>local/crane.json</PaperCode>, which holds a token and only your account can read. The daemon proves it holds that token before a program sends it, so a different program on the same port learns nothing.</li>
                 <li>Each panel gets a token of its own, which reaches only that panel's own settings, files and secrets through Paperboard.</li>

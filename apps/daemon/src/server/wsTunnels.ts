@@ -1,10 +1,8 @@
 // Tunnels from one RPC socket to paired remotes: the upstream handshake
 // (auth, then a scope grant for a panel socket), the heartbeat that notices
 // a remote gone quiet, and forwarding frames both ways.
-import * as path from "path";
 import { WebSocket } from "ws";
-import { getLocalDir } from "../core/paths";
-import { readRemotes, remoteHosts } from "../system/remotes";
+import { dialHosts, type Roster } from "../network/roster";
 import { dialPinned, type PinnedDial } from "../security/pinnedDial";
 import { logger } from "../core/logger";
 import { ErrorCode } from "../core/protocol";
@@ -16,9 +14,8 @@ import type { SocketIdentity } from "./wsIdentity";
 const TUNNEL_HEARTBEAT_MS = 15_000;
 
 export interface TunnelOptions {
-    /** the paired-computers file; a standalone daemon (papercrane serve, the
-     *  systemd service) reads the one in its own data folder */
-    remotesFile?: string;
+    /** the computers a tunnel may reach: the daemon's own roster */
+    roster: Roster;
     /** upstream ping interval for remote tunnels (tests shorten it) */
     tunnelHeartbeatMs?: number;
 }
@@ -100,33 +97,35 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
         const tunnelId = readValue(text(128), maybe.tunnelId ?? maybe.id, "tunnel id");
         const computerId = readValue(text(128), maybe.computerId, "computerId");
         if (tunnels.has(tunnelId)) throw new Error("Tunnel id is already open");
+        const { roster } = options;
         // a relay credential reaches exactly the computer that served its
-        // panel, by id — never another, never by name
-        if (identity.relayTo !== null && computerId !== identity.relayTo) {
+        // panel, by id (its own, or one an older Paperboard gave it) — never
+        // another, never by name
+        if (identity.relayTo !== null && (roster.resolve(computerId) ?? computerId) !== (roster.resolve(identity.relayTo) ?? identity.relayTo)) {
             ws.send(JSON.stringify({ type: "tunnel-closed", id: tunnelId, reason: "relay-scope" }));
             return;
         }
-        // identity first: exact id match wins. A bare name only resolves
-        // when it is unambiguous — with two remotes sharing a name,
+        // identity first: an id match wins. A bare name only resolves when
+        // it is unambiguous — with two computers sharing a name,
         // first-match-wins could tunnel to the wrong machine, so refuse
-        // instead of guessing.
-        const candidates = readRemotes(options.remotesFile ?? path.join(getLocalDir(), "paired_computers.json")).filter(
-            (r) => r.id === computerId || r.name === computerId,
-        );
-        const entry =
-            candidates.find((r) => r.id === computerId) ??
-            (candidates.length === 1 ? candidates[0] : undefined);
-        if (!entry) {
+        // instead of guessing. This computer is never a tunnel's end.
+        const byId = roster.resolve(computerId);
+        const named = roster.list().filter((m) => m.name === computerId && m.id !== roster.self);
+        const memberId = byId ?? (named.length === 1 ? named[0]!.id : null);
+        const member = memberId && memberId !== roster.self ? roster.member(memberId) : undefined;
+        const token = member && roster.token(member.id);
+        if (!member?.dial || !token) {
             ws.send(JSON.stringify({
                 type: "tunnel-closed",
                 id: tunnelId,
-                reason: candidates.length > 1 ? "ambiguous-computer" : "unknown-computer",
+                reason: !byId && named.length > 1 ? "ambiguous-computer" : "unknown-computer",
             }));
             return;
         }
+        const { dial: where, cert } = member;
         try {
             // its .local name and last address at once; the pinned certificate says which is it
-            const dial = dialPinned(remoteHosts(entry), entry.port, entry.cert, { timeoutMs: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_WS_PAYLOAD });
+            const dial = dialPinned(dialHosts(where), where.port, cert, { timeoutMs: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_WS_PAYLOAD });
             const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
             timer.unref?.();
             const tunnel: Tunnel = { socket: null, dial, ready: false, timer };
@@ -204,7 +203,7 @@ export function socketTunnels(ws: WebSocket, identity: SocketIdentity, options: 
                 upstream.send(JSON.stringify({
                     id: "__tunnel-auth",
                     action: "auth:verify",
-                    params: { token: entry.token },
+                    params: { token },
                 }));
             };
             dial.result.then(

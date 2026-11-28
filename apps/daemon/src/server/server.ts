@@ -33,6 +33,8 @@ import { clipProblemReport } from "@mileniumhq/paperapi/problemShape";
 import { readDaemonStatus } from "../cli/localControl";
 import { killStalePaperCrane, removePidFile, writePidFile } from "../core/pidFile";
 import { errorCode, errorMessage } from "@mileniumhq/paperapi/errors";
+import { Roster } from "../network/roster";
+import { importPairedComputers } from "../network/importPairedComputers";
 
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || DEFAULT_LISTEN_PORT;
@@ -48,8 +50,6 @@ export interface ServerOptions {
     startPairing?: boolean;
     // Provision a single known token, pairing stays disabled
     staticToken?: string;
-    // Path to the paired-computers registry enabling remote tunnels
-    remotesFile?: string;
     // mDNS announcement on non-loopback binds (default on)
     advertise?: boolean;
     // stop, as on SIGTERM, once the process that started the daemon is gone
@@ -61,6 +61,8 @@ export interface ServerInstance {
     wss: WebSocketServer;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
+    /** the computers of the network, this one among them */
+    roster: Roster;
     port: number;
     // plaintext loopback port for this machine's own clients (crane.json,
     // panel services). Equals port when the daemon is loopback-only.
@@ -79,6 +81,7 @@ interface DaemonConfig {
     // set off loopback: reachable from other computers = TLS with this
     // computer's pinned identity. Plaintext exists only on loopback.
     tlsIdentity: TlsIdentity | null;
+    roster: Roster;
 }
 
 // handshake file for local clients, written on every listen. Throws: a
@@ -136,13 +139,30 @@ export async function startPaperCraneServer(
     if (noAuth) {
         console.warn("[Paperboard Server] WARNING: --no-auth disables authentication. Any local program can control this daemon and its data. Use only for development on a trusted, single-user machine.");
     }
+    // every daemon has its key, loopback-only too: it is who this computer
+    // is in the roster, whether or not other computers can reach it yet
+    const localDir = ensurePrivateDir(getLocalDir());
+    const identity = loadOrCreateTlsIdentity(localDir);
+    const roster = await Roster.open(localDir, identity.cert);
+    try {
+        // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
+        await importPairedComputers(localDir, roster);
+    } catch (err) {
+        roster.close();
+        throw new Error(`The paired computers couldn't be moved into the computer list (local/paired_computers.json is kept as it was, and the next start tries again): ${errorMessage(err)}`, { cause: err });
+    }
+    // what this computer is now, saved before anyone asks for the list
+    await roster.refreshSelfFacts().catch((err) => {
+        logger.error("[Paperboard Server] this computer's OS details couldn't be read; the computer list keeps the ones it had:", err); // quiet: the roster keeps the last details it read, and the next start reads them again
+    });
     const config: DaemonConfig = {
         options,
         host,
         noAuth,
         headless: options.headless ?? false,
         staticToken: options.staticToken ?? (noAuth ? null : crypto.randomBytes(24).toString("hex")),
-        tlsIdentity: isLoopbackHost(host) ? null : loadOrCreateTlsIdentity(getLocalDir()),
+        tlsIdentity: isLoopbackHost(host) ? null : identity,
+        roster,
     };
 
     const port = options.port ?? DEFAULT_PORT;
@@ -151,8 +171,10 @@ export async function startPaperCraneServer(
             return await listenOnce(config, port);
         } catch (err: any) {
             const inUse = err?.code === "EADDRINUSE" || /already in use|in use/i.test(err?.message || "");
+            if (inUse && (await killStalePaperCrane(port))) continue;
+            // this start is over: nothing reads the roster for it
+            roster.close();
             if (!inUse) throw err;
-            if (await killStalePaperCrane(port)) continue;
             // Port is held by a foreign, non-PaperCrane application.
             // The caller prints it (main.ts fatalCliError) or shows it
             // (the desktop app): printing it here too said it twice
@@ -231,10 +253,7 @@ function createListeners(config: DaemonConfig, engine: PaperCraneEngine, auth: P
             });
         });
     }
-    setupWebSocketServer(wss, engine, auth, {
-        remotesFile: config.options.remotesFile,
-        staticToken,
-    });
+    setupWebSocketServer(wss, engine, auth, { roster: config.roster, staticToken });
     return { server, localServer, wss };
 }
 
@@ -305,6 +324,7 @@ function daemonLifecycle(parts: DaemonParts) {
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
+        step("closing the computer list", () => config.roster.close());
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
             advertisement = null;
@@ -493,7 +513,7 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 }).start();
             }
 
-            resolve({ server, wss, engine, auth, port: actualPort, localPort, host, stop: lifecycle.stop });
+            resolve({ server, wss, engine, auth, roster: config.roster, port: actualPort, localPort, host, stop: lifecycle.stop });
         };
 
         const onListening = () => {

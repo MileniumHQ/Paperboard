@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseHomeLayout } from "../../../src/renderer/src/lib/homeLayout";
+import { memberIdOf } from "daemon/network/roster";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp, type BuiltCrane } from "./support/build";
 import { CraneSocket, startCrane, WAIT_MS } from "./support/crane";
 import { launchElectron, SHELL, shellReady } from "./support/electron";
@@ -60,23 +61,33 @@ describe("release data from a shipped release", () => {
             expect(await host.call("backup:list", { panelId: PANEL })).toEqual({ backups: [] });
             expect(await host.call("backup:status", { panelId: PANEL })).toMatchObject({ location: { id: "local", kind: "local" } });
             expect(written).toContain(record.replace(/\.json$/, ".pbbackup"));
+            // 0.4's paired computers (the desktop app's own list) are in the roster, named by their keys
+            const paired = readJson(snapshot, "local/paired_computers.json").computers[0];
+            const roster = await host.call("computers:list");
+            expect(roster.members.find((m: any) => m.id === memberIdOf(paired.cert))).toMatchObject({ name: paired.name, dial: { host: paired.host, port: paired.port }, cert: paired.cert });
+            expect(roster.tokens[memberIdOf(paired.cert)]).toBe(paired.token);
+            expect(roster.aliases[paired.id]).toBe(memberIdOf(paired.cert));
             host.close();
             await daemon.stop();
 
             // the new app on the same data: its paired computer and settings
             const electron = await launchElectron({ appDir: app.dir, dataDir, args: ["--skip-update"] });
             await shellReady(electron);
+            // under the id 0.4 gave it: its panels' pages keep their origin
             const listed = await electron.evalIn(SHELL, `window.paperboardShell.invoke("computers-list")`);
-            const paired = readJson(snapshot, "local/paired_computers.json").computers[0];
             expect(listed.computers.find((c: any) => c.id === paired.id)).toMatchObject({ name: paired.name, host: paired.host, port: paired.port });
             expect(await electron.evalMain(`return electron.nativeTheme.themeSource`)).toBe("dark");
             expect(electron.failures()).toEqual([]);
             await electron.quit();
 
-            // nothing quarantined, nothing gone, nothing rewritten but bookkeeping
+            // nothing quarantined, nothing gone but what was moved, nothing rewritten but bookkeeping
             const after = files(dataDir).map((rel) => rel.split(path.sep).join("/"));
             expect(after.filter((rel) => rel.includes(".corrupt-"))).toEqual([]);
+            // TODO(remove after v0.6): with importPairedComputers
+            const moved = new Set(["local/paired_computers.json"]);
+            for (const rel of moved) expect(after).not.toContain(rel);
             for (const [rel, bytes] of before) {
+                if (moved.has(rel)) continue;
                 expect(after).toContain(rel);
                 if (rel === "local/authorized_tokens.json") continue;
                 expect({ rel, same: fs.readFileSync(path.join(dataDir, ...rel.split("/"))).equals(bytes) }).toEqual({ rel, same: true });
