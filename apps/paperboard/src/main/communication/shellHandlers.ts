@@ -101,7 +101,7 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "computer-reach": ({ id }) => connectionPool.reach(id),
         // the shell goes to the computer it paired; its token and pinned
         // certificate stay in main, which dials it
-        "computer-pair": async ({ host, port, code, name }) => ({ id: (await connectionPool.pairComputer(host, port, code, name)).id }),
+        "computer-pair": async ({ host, port, code }) => ({ id: (await connectionPool.pairComputer(host, port, code)).id }),
         "computer-update": ({ id, name }) => connectionPool.renameComputer(id, name),
         "computer-remove": ({ id, evenIfUntold }) => connectionPool.unpairComputer(id, evenIfUntold === true),
         "computer-switch": ({ id }) => connectionPool.setActive(id),
@@ -109,7 +109,7 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
 
         "discovery-list": () => discovery.look(),
         "computer-ssh-check": async ({ host }) => ({ ssh: await sshAnswers(host) }),
-        "computer-setup-start": ({ host, name }) => computerSetups.start(host, name),
+        "computer-setup-start": ({ host }) => computerSetups.start(host),
         "computer-setup-sign-in": ({ jobId, username, password }) => computerSetups.signIn(jobId, username, password),
         "computer-setup-cancel": ({ jobId }) => computerSetups.cancel(jobId),
 

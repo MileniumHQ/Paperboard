@@ -57,14 +57,14 @@ describe("setting a computer up over SSH", () => {
 		if (!again) pools.push(pool);
 		const sshDir = path.join(tempDir("pb-ssh-local-"), ".ssh");
 		const states: ComputerSetupState[] = [];
-		const job = new ComputerSetupJob("job", "127.0.0.1", undefined, {
+		const job = new ComputerSetupJob("job", "127.0.0.1", {
 			openSsh: (o) => openSsh({ ...o, port: server.port, sshDir, localUser: USER, agent: null }),
 			defaultUsername: () => USER,
 			craneIndex: async () => {
 				throw new Error("this test publishes no releases");
 			},
 			probe: async (host, port) => (await pool.probe(host, port)).reachable,
-			pair: async (host, port, code, name, expect) => ({ id: (await pool.pairComputer(host, port, code, name, expect)).id }),
+			pair: async (host, port, code, expect) => ({ id: (await pool.pairComputer(host, port, code, expect)).id }),
 			tempDir: () => tempDir(),
 			changed: (state) => {
 				states.push(state);
@@ -103,8 +103,8 @@ describe("setting a computer up over SSH", () => {
 		}
 	});
 
-	// Inventory: Security — pairing a computer again replaces its pairing and gives the old token back.
-	test("setting up a computer paired before keeps one entry, under its id, and leaves it one token", async () => {
+	// Inventory: Security — pairing a computer again replaces its pairing, gives the old token back, and keeps the name it was given.
+	test("setting up a computer paired before keeps one entry, under its id and name, and leaves it one token", async () => {
 		const box = computer();
 		fs.symlinkSync(await craneBinary(), path.join(box.bin, "papercrane"));
 		const crane = await startCrane({ dataDir: box.data, host: "0.0.0.0" });
@@ -116,10 +116,12 @@ describe("setting a computer up over SSH", () => {
 		const id = (first.result as { paired: { id: string } }).paired.id;
 		await waitFor("the paired computer to connect", () => first.pool.listComputers().find((c) => c.id === id)?.status.connected);
 		const issued = tokens();
+		// renamed in between: setting it up again keeps the name
+		expect(await first.pool.renameComputer(id, "Game Box")).toBe(true);
 		// the same pool sets it up again, as a second Add Computer would
 		const again = await run(server, {}, first.pool);
 		expect(again.result).toEqual({ paired: { id } });
-		expect(first.pool.listComputers().filter((c) => c.id !== "local").map((c) => c.id)).toEqual([id]);
+		expect(first.pool.listComputers().filter((c) => c.id !== "local").map((c) => [c.id, c.name])).toEqual([[id, "Game Box"]]);
 		await waitFor("the old token to be given back", () => tokens() === issued);
 		await waitFor("the computer to connect on the new token", () => first.pool.listComputers().find((c) => c.id === id)?.status.connected);
 	});

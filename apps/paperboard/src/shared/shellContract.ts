@@ -221,7 +221,8 @@ export interface ShellCallContract {
     "computer-probe": { args: { host: string; port?: number | string }; answer: ComputerProbeResult };
     "computer-reach": { args: { id: string }; answer: ComputerReachResult };
     "computer-pair": {
-        args: { host: string; port?: number | string; code: string; name?: string };
+        // no name: a new computer is named by its hostname, and one paired again keeps its own
+        args: { host: string; port?: number | string; code: string };
         // the id of the computer it paired, which the shell goes to, and
         // nothing more: the pairing's token stays in main
         answer: { id?: string };
@@ -238,7 +239,7 @@ export interface ShellCallContract {
     // sets the computer up over SSH; progress comes as computer-setup-changed.
     // A new setup cancels the one before it.
     // answers with the setup as it stands, so what it pushed before the answer isn't missed
-    "computer-setup-start": { args: { host: string; name?: string }; answer: ComputerSetupState };
+    "computer-setup-start": { args: { host: string }; answer: ComputerSetupState };
     // the password is used for this setup alone, and never stored
     "computer-setup-sign-in": { args: { jobId: string; username: string; password: string }; answer: void };
     "computer-setup-cancel": { args: { jobId: string }; answer: void };

@@ -506,20 +506,19 @@ export class ConnectionPool extends EventEmitter {
         }
     }
 
-    // the address, port and name are checked as probe and renameComputer
-    // check them before anything is dialed
+    // the address and port are checked as probe checks them before anything
+    // is dialed. No name is given: a new computer is named by its hostname,
+    // and one paired again keeps the name it has (renameComputer renames)
     public async pairComputer(
         host: string,
         port: number | string = DEFAULT_PORT,
         code: string,
-        customName?: unknown,
         // the certificate the computer must answer with, when something it
         // trusts already named it (`papercrane pair --json` over SSH)
         expect?: { fingerprint: string },
     ): Promise<KnownComputer> {
         const checked = checkProbeTarget(host, port);
         if ("error" in checked) throw new Error(checked.error);
-        const name = customName === undefined ? undefined : checkComputerName(customName);
         // kept as sockets dial it: "[::1]" as typed is ::1
         host = bareHost(host);
         const tempClient = new PaperCraneClient();
@@ -556,7 +555,7 @@ export class ConnectionPool extends EventEmitter {
                 paired = await this.ask("computers:pair", {
                     cert,
                     pairToken: pairRes.token,
-                    name: name ?? (before ? undefined : pairRes.hostname || host),
+                    name: before ? undefined : pairRes.hostname || host,
                     dial: named ? { host: pairRes.mdnsName!, address: host, port: checked.port } : { host, port: checked.port },
                     facts: definedOnly({ ...osFactsOf(pairRes), arch: pairRes.arch }),
                 });

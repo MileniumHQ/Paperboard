@@ -31,7 +31,7 @@ export interface ComputerSetupDeps {
     craneIndex(): Promise<{ entries: Record<string, CraneIndexEntry>; downloadUrl(target: string): string }>;
     /** whether a Paperboard Server answers at host:port */
     probe(host: string, port: number): Promise<boolean>;
-    pair(host: string, port: number, code: string, name: string | undefined, expect: { fingerprint: string }): Promise<{ id: string }>;
+    pair(host: string, port: number, code: string, expect: { fingerprint: string }): Promise<{ id: string }>;
     /** where the download is unpacked; removed afterwards */
     tempDir(): string;
     /** called with each new state */
@@ -120,7 +120,6 @@ export class ComputerSetupJob {
     constructor(
         readonly id: string,
         private readonly host: string,
-        private readonly name: string | undefined,
         private readonly deps: ComputerSetupDeps,
     ) {
         this.state = {
@@ -383,7 +382,7 @@ export class ComputerSetupJob {
         this.check();
         // a daemon on every address is reached where SSH reached it
         const host = listen.host === "0.0.0.0" || listen.host === "::" ? session.host : listen.host;
-        const paired = await this.deps.pair(host, listen.port, code, this.name, { fingerprint });
+        const paired = await this.deps.pair(host, listen.port, code, { fingerprint });
         return paired.id;
     }
 
@@ -436,9 +435,9 @@ export class ComputerSetups {
     constructor(private readonly deps: () => ComputerSetupDeps) {}
 
     /** starts a setup, answering with where it stands: it may have pushed already */
-    start(host: string, name: string | undefined): ComputerSetupState {
+    start(host: string): ComputerSetupState {
         this.job?.cancel();
-        const job = new ComputerSetupJob(crypto.randomUUID(), host, name, this.deps());
+        const job = new ComputerSetupJob(crypto.randomUUID(), host, this.deps());
         this.job = job;
         void job.run();
         return job.current();

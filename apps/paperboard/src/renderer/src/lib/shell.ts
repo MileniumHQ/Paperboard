@@ -128,8 +128,8 @@ export const computersApi = {
     probe: (host: string, port?: number | string) => shellIpc().invoke("computer-probe", { host, port }),
     /** whether a paired computer answers, at any address it is known by */
     reach: (id: string) => shellIpc().invoke("computer-reach", { id }),
-    pair: (host: string, port: number | undefined, code: string, name?: string) =>
-        shellIpc().invoke("computer-pair", { host, port, code, name }),
+    pair: (host: string, port: number | undefined, code: string) =>
+        shellIpc().invoke("computer-pair", { host, port, code }),
     rename: (id: string, name: string) => shellIpc().invoke("computer-update", { id, name }),
     /** null once forgotten; otherwise why the computer couldn't be told, and
      * nothing was forgotten unless `evenIfUntold` */
@@ -143,7 +143,7 @@ export const computersApi = {
 // Setting a computer up over SSH: main runs one setup at a time and pushes its whole state
 export const computerSetupApi = {
     sshCheck: (host: string) => shellIpc().invoke("computer-ssh-check", { host }),
-    start: (host: string, name?: string) => shellIpc().invoke("computer-setup-start", { host, name }),
+    start: (host: string) => shellIpc().invoke("computer-setup-start", { host }),
     signIn: (jobId: string, username: string, password: string) => shellIpc().invoke("computer-setup-sign-in", { jobId, username, password }),
     cancel: (jobId: string) => shellIpc().invoke("computer-setup-cancel", { jobId }),
     onChanged: (cb: (state: PushPayload<"computer-setup-changed">) => void) => shellIpc().on("computer-setup-changed", cb),

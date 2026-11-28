@@ -349,6 +349,10 @@ describe("a paired computer found again", () => {
 			const unnamed = await pool.pairComputer("127.0.0.5", misnamed.port, "123456");
 			expect({ host: unnamed.host, address: unnamed.address }).toEqual({ host: "127.0.0.5", address: undefined });
 			expect(other.frames).toEqual([]);
+			// renamed, then paired again by code (as the Add Computer wizard does from the nearby list): the name stays
+			expect(await pool.renameComputer(named.id, "Game Box")).toBe(true);
+			const again = await pool.pairComputer("127.0.0.2", far.port, "123456");
+			expect([again.id, again.name]).toEqual([named.id, "Game Box"]);
 		} finally {
 			pool.dispose();
 			await Promise.all([far.close(), misnamed.close(), other.close()]);

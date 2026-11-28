@@ -190,7 +190,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             setSigningIn(false);
         });
         const target = host().trim();
-        computerSetupApi.start(target, name().trim() || undefined).then(
+        computerSetupApi.start(target).then(
             (started) => {
                 if (token !== startToken) return cancelJob(started.jobId);
                 jobId = started.jobId;
@@ -246,7 +246,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 host().trim(),
                 Number(port()) || DAEMON_PORT,
                 code().trim(),
-                name().trim() || undefined,
             );
 
             if (!res.id) throw new Error("The computer answered the pairing without saying who it is.");
