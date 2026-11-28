@@ -290,6 +290,7 @@ export function cs2Service(ctx: Server): GameService {
         async saveWorld() { throw new Error("Counter-Strike 2 keeps no world to save"); },
         stopTimeoutMs: 30_000, stopEntry: "quit",
         stop: () => send("quit"),
+        flushConsole: () => local.console.flush(ctx),
         commandLine(command) {
             const line = singleLine(command, "Command").trim();
             if (/^(quit|exit|rcon_password|sv_setsteamaccount)\b/i.test(line)) throw new Error("Paperboard keeps the server's passwords and stops it; use Options and Stop");

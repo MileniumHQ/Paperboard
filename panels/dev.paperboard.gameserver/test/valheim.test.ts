@@ -12,7 +12,7 @@ import { TRIGGER_IDS } from "../src/service/contract";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
 import { waitUntil } from "../src/games/serviceKit";
 import { ValheimLog } from "../src/games/valheim/log";
-import { launchArgs, passwordProblem, worldName } from "../src/games/valheim/service";
+import { launchArgs, passwordProblem, valheimService, worldName } from "../src/games/valheim/service";
 
 let daemon: TestDaemon;
 beforeAll(async () => {
@@ -120,6 +120,47 @@ describe("Valheim", () => {
         expect(await call(server, "valheimSession")).toBeNull();
         await server.server.lifecycle.released;
         expect(fs.existsSync(path.join(server.dir, ".valheim-run.json"))).toBe(false);
+    });
+
+    test("a restart of Paperboard reads only this run's console: an earlier run's players and join code stay with it, also once the launch line is trimmed away", async () => {
+        const server = await valheimServer();
+        await call(server, "writeGameOptions", { patch: { world: "Yggdrasil", crossplay: true } });
+        await online(server);
+        serverSays(server.dir, `Got connection SteamID ${STEAM_ID}`, "Got character ZDOID from Ragnar : 12345:1");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Ragnar"), "Ragnar to join");
+        await waitUntil(async () => !!((await call(server, "valheimSession")) as { joinCode: string | null }).joinCode, 5_000, "the join code in the log");
+        // Ragnar is on as it stops, and Valheim logs no leave for him
+        await stop(server);
+        // the run's last lines, still held back as it exits, go above what the exit says
+        const lines = server.server.state.serverEntries.map((e) => String(e.content));
+        expect(lines.findIndex((l) => l.endsWith("Net scene destroyed"))).toBe(lines.indexOf("[Server] Process stopped.") - 1);
+        await server.server.lifecycle.released;
+
+        fs.rmSync(path.join(server.dir, "install", "fake-valheim-lines.txt"));
+        await call(server, "writeGameOptions", { patch: { crossplay: false } });
+        await online(server);
+        serverSays(server.dir, "Got connection SteamID 76561198000000002", "Got character ZDOID from Bjorn : 23456:1");
+        // the console publishes its lines a moment after they are read
+        await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).endsWith("from Bjorn : 23456:1")), "Bjorn's join in the console");
+        // the console still holds the first run's lines, above this one's
+        expect(consoleOf(server)).toContain("join code 150661");
+        expect(consoleOf(server)).toContain("from Ragnar");
+
+        // Paperboard restarted with the server running: a new service reads what the console kept
+        const reattach = async () => {
+            const game = valheimService(server.server);
+            await game.initialize(true);
+            const ask = async (id: string) => pickCall(await game.calls(), id)(server.server, {});
+            return { session: await ask("valheimSession"), online: ((await ask("valheimPlayers")) as { online: unknown[] }).online };
+        };
+        const bjorn = [{ name: "Bjorn", id: "Steam_76561198000000002" }];
+        const run = { world: "Yggdrasil", listed: false, crossplay: false, joinCode: null, address: null };
+        expect(await reattach()).toEqual({ session: run, online: bjorn } as never);
+        // a run long enough that the history trimmed its launch line away keeps only its own lines
+        const launch = server.server.state.serverEntries.findLastIndex((e) => String(e.content).startsWith("Starting Valheim"));
+        server.server.setState({ serverEntries: server.server.state.serverEntries.slice(launch + 1) });
+        expect(await reattach()).toEqual({ session: run, online: bjorn } as never);
+        await stop(server);
     });
 
     test("the server's port and the next are claimed as one: a taken second port moves both, and the run uses the moved pair", async () => {

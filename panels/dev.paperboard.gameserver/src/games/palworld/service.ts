@@ -321,6 +321,7 @@ export function palworldService(ctx: Server): GameService {
         stopTimeoutMs: 120_000, stopEntry: "shutdown",
         // Palworld saves before it shuts down
         stop: () => rest().shutdown(1, "The server is stopping."),
+        flushConsole: () => local.console.flush(ctx),
         commandLine() { throw new Error("Palworld has no console; use Players, Save and Stop"); },
         async sendChat(message) {
             const line = singleLine(message, "Message");

@@ -383,6 +383,8 @@ export function handleProcessExit(ctx: Server, exitCode?: number): void {
         ctx.game.observeLine(ctx.lifecycle.lineBuffer, true);
         ctx.lifecycle.lineBuffer = "";
     }
+    // the run's last lines go above what its exit says, and the next start's line
+    ctx.game.flushConsole?.();
     // the run's moves end with it as it goes offline; the game is told them
     const moves = ctx.state.portMoves;
 

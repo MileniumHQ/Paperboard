@@ -429,6 +429,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         stopTimeoutMs: 120_000, stopEntry: "Stopping: Factorio saves the map as it quits",
         // Ctrl+C: the server saves its map, then quits
         stop: () => ctx.process.kill(PROC, "SIGINT"),
+        flushConsole: () => local.console.flush(ctx),
         commandLine(command) {
             if (/[\r\n\0]/.test(command)) throw new Error("A command must be a single line");
             if (/^\s*\/(?:quit|config\s+set\s+password)\b/i.test(command)) throw new Error("Paperboard stops the server and keeps its join password; use Stop and Options");

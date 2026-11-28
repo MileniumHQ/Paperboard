@@ -237,7 +237,9 @@ function addConsoleLine<T>(lines: T[], line: T, text: (line: T) => string): T[] 
 
 /**
  * Console lines gathered for a tenth of a second and published together, so a
- * chatty server costs one state update per batch rather than one per line.
+ * chatty server costs one state update per batch rather than one per line. The
+ * process's exit publishes what is held at once (GameService.flushConsole), so
+ * a run's last lines come before what the exit says and the next start's line.
  */
 export class ConsoleBuffer {
     private pending: string[] = [];
@@ -249,15 +251,19 @@ export class ConsoleBuffer {
         if (!line) return;
         this.pending = addConsoleLine(this.pending, line, String).slice(-CONSOLE_LINES);
         if (this.timer) return;
-        this.timer = setTimeout(() => {
-            this.timer = null;
-            const lines = this.pending;
-            this.pending = [];
-            // added to what is published now: a line written in between keeps the old progress line
-            let entries: ConsoleLine[] = ctx.state.serverEntries;
-            for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
-            ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
-        }, 100);
+        this.timer = setTimeout(() => this.flush(ctx), 100);
+    }
+    /** Publishes the lines held back now. */
+    flush(ctx: Server) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = null;
+        const lines = this.pending;
+        this.pending = [];
+        if (lines.length === 0) return;
+        // added to what is published now: a line written in between keeps the old progress line
+        let entries: ConsoleLine[] = ctx.state.serverEntries;
+        for (const content of lines) entries = addConsoleLine(entries, { type: this.isError(content) ? "error" : "info", content }, (entry) => String(entry.content));
+        ctx.setState({ serverEntries: entries.slice(-CONSOLE_LINES) });
     }
     dispose() {
         if (this.timer) clearTimeout(this.timer);

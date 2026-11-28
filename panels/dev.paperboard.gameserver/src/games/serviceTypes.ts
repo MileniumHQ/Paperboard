@@ -75,6 +75,8 @@ export interface GameService {
     stop(): Promise<void>;
     /** Checks a console command and gives what is sent: the stdin write, or for "rcon" the line itself. */
     commandLine(command: string): string;
+    /** Publishes the console lines the game holds back (ConsoleBuffer); the exit calls it before it says anything. */
+    flushConsole?(): void;
     /** Runs a console command when the game's control is "rcon", as commandLine gave it. */
     sendCommand?(command: string): Promise<void>;
     sendChat?(message: string): Promise<void>;

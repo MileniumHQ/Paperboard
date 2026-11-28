@@ -21,7 +21,7 @@ const DEFAULT_PORT = 2456;
 const PORTS_IN_A_ROW = 2;
 /** where the world and lists live, given to the server as -savedir */
 const SAVE_DIR = "save";
-/** what the running server was started with, kept so a restart of Paperboard still knows: its options are read only as it starts */
+/** what the running server was started with and the console line its start said, kept so a restart of Paperboard still knows: its options are read only as it starts */
 const RUN_FILE = ".valheim-run.json";
 /** Unity's own errors and the game's ZLog.LogError lines; Valheim's many "Failed to place" lines are world generation, not failures */
 const isError = (line: string) => /exception|^(?:\d{1,2}\/\d{1,2}\/\d{4} [\d:]+: )?(?:Error|Could not parse)\b/i.test(line);
@@ -77,6 +77,19 @@ export function launchArgs(saved: Record<string, unknown>, run: { port: number; 
 
 /** what a run was started with: its world, whether it is in the server list, and crossplay */
 interface Run { world: string; listed: boolean; crossplay: boolean }
+/** what RUN_FILE keeps: the run, and the console line its start said, which is where its own lines begin */
+interface RunRecord { run: Run; launch: string }
+
+/**
+ * The run's own lines of a kept console: those after its launch line, the
+ * last one that says it. The lines above are earlier runs', whose players
+ * left with them. A console trimmed past the launch line holds only the
+ * run's own lines, as the trim drops the oldest first.
+ */
+function runLines(entries: readonly { type?: string; content: unknown }[], launch: string): string[] {
+    const from = entries.findLastIndex((e) => e.type === "info" && e.content === launch);
+    return entries.slice(from + 1).flatMap((e) => (typeof e.content === "string" ? [e.content] : []));
+}
 
 /** One server's part of the game: its process, console, world and lists are its own. */
 export function valheimService(ctx: Server): GameService {
@@ -114,12 +127,12 @@ export function valheimService(ctx: Server): GameService {
     });
     const runFile = async () => path.join(await ctx.root(), RUN_FILE);
     /** The run a server found running was started with, from the record its start left. */
-    async function readRun(): Promise<Run> {
+    async function readRun(): Promise<RunRecord> {
         const text = await unlessMissing(fs.readFile(await runFile(), "utf8"), null);
         if (text === null) throw new Error(`Valheim is running without ${RUN_FILE}, which Paperboard writes as it starts it; stop it from the computer and start it again here`);
-        const run = JSON.parse(text) as Partial<Run>;
-        if (typeof run.world !== "string" || typeof run.listed !== "boolean" || typeof run.crossplay !== "boolean") throw new Error(`${RUN_FILE} is not a record of how Valheim was started`);
-        return { world: run.world, listed: run.listed, crossplay: run.crossplay };
+        const { run, launch } = JSON.parse(text) as { run?: Partial<Run>; launch?: unknown };
+        if (!run || typeof run.world !== "string" || typeof run.listed !== "boolean" || typeof run.crossplay !== "boolean" || typeof launch !== "string") throw new Error(`${RUN_FILE} is not a record of how Valheim was started`);
+        return { run: { world: run.world, listed: run.listed, crossplay: run.crossplay }, launch };
     }
 
     const displayVersion = (s: Record<string, unknown>) => (s.version ? String(s.version) : s.build ? `Build ${s.build}` : "");
@@ -304,9 +317,10 @@ export function valheimService(ctx: Server): GameService {
             local.lists = new ValheimLists(await ctx.root(), await saveDir());
             if (running) {
                 // a server that kept running while Paperboard restarted: its console kept the lines that say who is on
-                local.run = await readRun();
+                const { run, launch } = await readRun();
+                local.run = run;
                 local.secrets = [await joinPassword.value()].filter(Boolean);
-                for (const entry of ctx.state.serverEntries) if (typeof entry.content === "string") readLine(entry.content, true);
+                for (const line of runLines(ctx.state.serverEntries, launch)) readLine(line, true);
             } else await fs.rm(await runFile(), { force: true });
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Valheim's current operation"); },
@@ -326,13 +340,14 @@ export function valheimService(ctx: Server): GameService {
             freshRun();
             local.start.newWorld = !(await worldExists(world));
             local.run = { world, listed: setting("public") === true, crossplay: setting("crossplay") === true };
-            await fs.writeFile(await runFile(), JSON.stringify(local.run));
+            const message = `Starting Valheim${saved().version ? ` ${saved().version}` : ""} with ${world}…`;
+            await fs.writeFile(await runFile(), JSON.stringify({ run: local.run, launch: message } satisfies RunRecord));
             local.secrets = [password].filter(Boolean);
             const home = path.join(await ctx.root(), "profile");
             await fs.mkdir(home, { recursive: true });
             const port = ctx.runPort(GAME, Number(setting("port")));
             return {
-                message: `Starting Valheim${saved().version ? ` ${saved().version}` : ""} with ${world}…`,
+                message,
                 command: {
                     executable,
                     args: launchArgs(saved(), { port, saveDir: save, password }),
@@ -358,6 +373,7 @@ export function valheimService(ctx: Server): GameService {
         stopTimeoutMs: 120_000, stopEntry: "Stopping: Valheim saves its world as it quits",
         // Ctrl+C, as the server's manual says to stop it; it saves the world before it exits
         stop: () => ctx.process.kill(PROC, "SIGINT"),
+        flushConsole: () => local.console.flush(ctx),
         commandLine() { throw new Error("Valheim's server reads no console commands; manage admins and bans in Players"); },
         observeLine(raw) {
             const line = redact(raw.replace(/\r/g, ""), local.secrets);

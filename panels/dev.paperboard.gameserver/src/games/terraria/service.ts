@@ -349,6 +349,7 @@ export function terrariaService(ctx: Server): GameService {
             await generate("").catch(err => report(ctx, "Could not take the join password out of serverconfig.txt", err));
             await ctx.process.write(PROC, "exit\n");
         },
+        flushConsole: () => local.console.flush(ctx),
         commandLine(command) { const line = singleLine(command, "Command").trim(); if (/^(password|exit-nosave)\b/i.test(line)) throw new Error("Use Options for the password and Stop for a saved shutdown"); return `${line}\n`; },
         sendChat: (message) => ctx.process.write(PROC, `say ${singleLine(message, "Message")}\n`),
         observePartialLine(line) {
