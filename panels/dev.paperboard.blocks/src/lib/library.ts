@@ -216,3 +216,24 @@ export function base64(mode: string, text: string): string {
         throw new Error("That base64 isn't text");
     }
 }
+
+/** The longest text "pad" makes, in characters. */
+export const MAX_PAD = 10_000;
+
+/** Text made `length` long by adding `with` (a space when empty) at its start or end; longer text stays as it is. */
+export function pad(text: string, length: number, side: string, with_: string): string {
+    if (!Number.isInteger(length) || length < 0 || length > MAX_PAD) throw new Error(`Pad to a whole number of characters, 0 to ${MAX_PAD}`);
+    const fill = with_ || " ";
+    if (side === "START") return text.padStart(length, fill);
+    if (side === "END") return text.padEnd(length, fill);
+    throw new Error(`Unknown side ${side}`);
+}
+
+/** The most decimals a number is written with. */
+export const MAX_DECIMALS = 20;
+
+/** A number as text with this many decimals, as this computer writes numbers; `grouped` puts in its thousands separators. */
+export function formatNumber(n: number, decimals: number, grouped: boolean): string {
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > MAX_DECIMALS) throw new Error(`A number has a whole number of decimals, 0 to ${MAX_DECIMALS}`);
+    return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: grouped });
+}

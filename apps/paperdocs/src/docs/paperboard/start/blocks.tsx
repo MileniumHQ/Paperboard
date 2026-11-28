@@ -26,6 +26,9 @@ export default function BlocksDoc() {
             <PaperText preset="body" as="p">
                 Blocks opens on your projects. A project is one canvas of flows.
                 Select <b>New project</b> to start one, or select a project to open it.
+                New project asks what to start with: an empty project, or a template that is ready to run.
+                Blocks has <b>Count runs with Data</b>, and other panels add their own while they run, such as Game Server's <b>Restart a game server every night</b> and <b>Log when a backup fails</b>.
+                A template that can't be made yet is greyed out and says why, such as <b>Make a server in Game Server first</b>.
                 A project's <b>⋮</b> menu has <b>Open</b>, <b>Rename</b>, <b>Make a copy</b> and <b>Delete</b>.
             </PaperText>
             <PaperText preset="body" as="p">
@@ -56,9 +59,12 @@ export default function BlocksDoc() {
 
             <PaperText preset="subheader" as="h2" id="library">What the Library has</PaperText>
             <PaperText preset="body" as="p">
-                The first sections are Blocks' own: <b>Flow</b> (waits, conditions, loops and <b>Try</b>), <b>Logic</b>, <b>Math</b>, <b>Text</b>, <b>Lists</b>, <b>Time</b>, <b>Web</b>, <b>Variables</b> and <b>Functions</b>.
+                The first sections are Blocks' own: <b>Flow</b> (waits, conditions, loops and <b>Try</b>), <b>Logic</b>, <b>Math</b>, <b>Text</b>, <b>Lists</b>, <b>Data</b>, <b>Time</b> (with the schedules), <b>Web</b>, <b>Variables</b> and <b>Functions</b>.
                 Under them, each installed panel has a section with its icon. Its blocks show the same icon and share a colour.
                 A panel with projects of its own, such as Game Server's servers, has a menu at the top of its section to pick which one the blocks use. Each project shows the picture its panel shows, such as a server's icon.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                For tidy output, <b>Text</b> has <b>pad</b> (7 becomes 007) and <b>with … decimals</b> (1234.5 becomes 1,234.50), and <b>Flow</b> has <b>For each … at …</b>, which gives each item and its position.
             </PaperText>
             <PaperText preset="body" as="p">
                 A block whose panel is not running stays on the canvas with a warning, and works again when the panel is back.
@@ -74,6 +80,41 @@ export default function BlocksDoc() {
                 The <b>Console</b> under the canvas shows what <b>Log</b> blocks write, and every error.
                 A block that fails also gets a warning on the canvas that says what went wrong.
                 To handle a failure inside a flow, put the steps in a <b>Try</b> block: the steps under <b>If it fails</b> run instead of the flow stopping, and <b>error message</b> holds the reason.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="schedules">Run on a schedule</PaperText>
+            <PaperText preset="body" as="p">
+                The first blocks in <b>Time</b> start a flow on a schedule instead of an event:
+            </PaperText>
+            <PaperTextList>
+                <li><b>Every 5 minutes</b> runs again and again, that long apart. Pick seconds, minutes or hours; the shortest is 5 seconds.</li>
+                <li><b>Every day at 00:00</b> runs once a day at that time.</li>
+                <li><b>On weekdays at 00:00</b> runs on weekdays, weekends, or one day of the week.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                Type a time as hours and minutes on a 24-hour clock, such as <PaperCode>04:00</PaperCode> or <PaperCode>23:30</PaperCode>. Times are on the clock of the computer the flows run on.
+                The night the clocks go forward, a time they skip runs an hour later; the night they go back, a time that comes twice runs once.
+            </PaperText>
+            <PaperText preset="body" as="p">
+                Schedules run while the project's switch is on, with Blocks open or closed. Under each one, a line says when it runs next.
+                If a run is still going when the next one is due, that one is skipped, and the Console says so.
+                A run missed while the computer was off or asleep runs once when Blocks is back, a minute after it starts, and the schedule goes on from there. It never runs once for every run it missed, and a restart never runs it twice.
+                Switching a project off, or changing a schedule, starts the schedule again from then.
+            </PaperText>
+
+            <PaperText preset="subheader" as="h2" id="data">Keep data between runs</PaperText>
+            <PaperText preset="body" as="p">
+                A variable starts empty each run. To keep a value for the next run, use <b>Data</b>: each project keeps its own values by key, through restarts, until a flow deletes them.
+            </PaperText>
+            <PaperTextList>
+                <li><b>Save data</b> keeps a value under a key: text, a number, true or false, a list or an object.</li>
+                <li><b>data … or …</b> reads the value under a key, or the second value when there is none.</li>
+                <li><b>Change data … by …</b> adds to a number, starting from 0. Flows that count at the same time never lose a count.</li>
+                <li><b>data … exists</b>, <b>Delete data</b> and <b>data keys</b> check, remove and list what is kept.</li>
+            </PaperTextList>
+            <PaperText preset="body" as="p">
+                A project keeps up to 1000 keys and 512 KB of data. Data is in Blocks' backups, and loading a backup brings back its data.
+                Deleting a project deletes its data; <b>Make a copy</b> starts with none.
             </PaperText>
 
             <PaperText preset="subheader" as="h2" id="variables">Variables</PaperText>
@@ -105,7 +146,7 @@ export default function BlocksDoc() {
             <PaperTextList>
                 <li><b>Project</b>: <b>New project</b>, <b>Make a copy</b>, <b>Rename</b> and <b>Delete</b>.</li>
                 <li><b>File</b>: <b>Export</b> saves the project's flows to a file. <b>Import</b> adds a file's flows to this canvas, next to the ones already on it.</li>
-                <li><b>Backup</b>: <b>Create backup</b> backs up every project. The first time, Blocks asks where backups go. <b>Load backup</b> replaces every project with a backup's, and stops the flows running now.</li>
+                <li><b>Backup</b>: <b>Create backup</b> backs up every project and its data. The first time, Blocks asks where backups go. <b>Load backup</b> replaces every project and its data with a backup's, and stops the flows running now. Schedules don't run again for times they already ran.</li>
             </PaperTextList>
 
             <PaperText preset="body" as="p">

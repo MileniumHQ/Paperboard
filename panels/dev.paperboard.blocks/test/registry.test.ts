@@ -9,6 +9,7 @@ import { refreshChoices, registerChoicesField } from "../src/lib/choicesField";
 import { runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
 import { block, saved, steps, top } from "./helpers/workspace";
+import { memoryData } from "./helpers/data";
 
 const GAME = "dev.test.extras";
 const PLAYER = `${GAME}:player`;
@@ -72,6 +73,7 @@ function host(calls: unknown[][], logs: string[]): Host {
             return field === "online" ? true : String(value);
         },
         log: (message) => void logs.push(message),
+        data: memoryData(),
     };
 }
 

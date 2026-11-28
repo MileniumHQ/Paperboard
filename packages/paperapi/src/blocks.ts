@@ -1,6 +1,7 @@
 // Blocks API for the Blocks panel. A panel registers its types,
-// commands, values and events (see blocksSchema.ts); the Blocks panel lists
-// them, runs commands, reads values and properties, and listens for events.
+// commands, values, events and templates (see blocksSchema.ts); the Blocks
+// panel lists them, runs commands, reads values and properties, listens for
+// events, and makes new projects from templates.
 import { getTransport, getPanelId } from "./ipc";
 import type { EventPayload } from "./protocol";
 import {
@@ -22,6 +23,8 @@ import {
     type BlockKind,
     type BlockSchema,
     type BlockCategoryDefinition,
+    type BlockTemplateDefinition,
+    type BlockTemplateSchema,
     type BlockTypeDefinition,
     type BlockValueDefinition,
     type TypeLookup,
@@ -42,6 +45,8 @@ export interface BlockSet {
     commands?: BlockCommandDefinition[];
     values?: BlockValueDefinition[];
     events?: BlockEventDefinition[];
+    /** only on the panel's own handle: the flows a new Blocks project can start with */
+    templates?: BlockTemplateDefinition[];
 }
 
 export interface BlockProjectDefinition {
@@ -96,6 +101,12 @@ export interface BlockProjectInfo {
     image?: string;
 }
 
+/** A panel's template, as listed. */
+export interface BlockTemplateInfo {
+    panelId: string;
+    template: BlockTemplateDefinition;
+}
+
 export interface BlockCallOptions {
     /** milliseconds; defaults to 30_000, at most 60_000, null waits it out */
     timeoutMs?: number | null;
@@ -112,7 +123,7 @@ interface Backend {
 interface BackendBlock {
     entry: string;
     handler: (request: any) => Promise<unknown>;
-    schema: BlockSchema;
+    schema: BlockSchema | BlockTemplateSchema;
 }
 
 /** What one registry's panels registered, so payloads and results are checked against their own types. */
@@ -146,6 +157,14 @@ const daemon: Backend = {
         await transport.call("blocks:emit", { panelId, entry, payload });
     },
 };
+
+/** What crosses the wire: JSON, so a value the daemon couldn't carry fails here too. */
+const overTheWire = <T>(value: T): T => (value === undefined ? (null as T) : JSON.parse(JSON.stringify(value)));
+
+/** The definition a template's registry copy holds. */
+function templateOf({ kind: _kind, ...template }: BlockTemplateSchema): BlockTemplateDefinition {
+    return template;
+}
 
 function lookupFor(panelId: string, registered: Registered): TypeLookup {
     return (qualified) => {
@@ -233,6 +252,9 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
         if (project && set.categories?.length) {
             throw new Error(`Categories belong to the panel, not project "${project}": register them on blocksApi.panel()`);
         }
+        if (project && set.templates?.length) {
+            throw new Error(`Templates belong to the panel, not project "${project}": register them on blocksApi.panel()`);
+        }
         const available = new Set([...registered.types.keys()].filter((k) => k.startsWith(`${panelId}:`)).map((k) => k.slice(panelId.length + 1)));
         validateBlockDefinitions(set, panelId, available);
         for (const category of set.categories ?? []) registered.categories.set(`${panelId}:${category.name}`, category.icon);
@@ -293,6 +315,11 @@ function handleFor(panelId: string, project: string | undefined, registered: Reg
             blocks.push({ entry: blockEntry("event", event.id, project), schema: schemaOf("event", event), handler: async (request: { choices?: unknown }) => {
                 if (request?.choices !== undefined) return choicesOf(event.inputs, request.choices, ctx, event.name);
                 throw new Error(`${event.name} is an event: it fires, it is not run`);
+            } });
+        }
+        for (const template of set.templates ?? []) {
+            blocks.push({ entry: blockEntry("template", template.id), schema: { kind: "template", ...overTheWire(template) }, handler: async () => {
+                throw new Error(`${template.name} is a template: Blocks makes a project from it, it is not run`);
             } });
         }
         if (blocks.length) await backend.register(panelId, blocks);
@@ -400,6 +427,14 @@ export const blocksApi = {
         return res.projects;
     },
 
+    /** Every panel's templates, or one panel's: the flows a new Blocks project can start with. */
+    templates: async (panelId?: string): Promise<BlockTemplateInfo[]> => {
+        const transport = getTransport();
+        await transport.ensureConnected();
+        const res = await transport.call("blocks:templates", { panelId });
+        return res.templates;
+    },
+
     /** Runs a command; its inputs and result are checked by the panel that owns it. */
     run: <T = unknown>(panelId: string, command: string, inputs?: Record<string, unknown>, options?: BlockCallOptions & { project?: string }): Promise<T> =>
         callEntry<T>(panelId, blockEntry("command", command, options?.project), { inputs: inputs ?? {} }, options),
@@ -468,8 +503,10 @@ export interface MemoryBlocks {
     /** the panel's own handle, as blocksApi.panel() gives it */
     readonly panel: BlocksHandle;
     defineProject(project: BlockProjectDefinition): Promise<BlocksProjectHandle>;
-    /** every block registered, as blocksApi.list() lists them: internal ones left out */
+    /** every block registered, as blocksApi.list() lists them: internal ones and templates left out */
     list(): BlockInfo[];
+    /** the templates registered, as blocksApi.templates() lists them */
+    templates(): BlockTemplateInfo[];
     run<T = unknown>(command: string, inputs?: Record<string, unknown>, options?: { project?: string }): Promise<T>;
     read<T = unknown>(value: string, inputs?: Record<string, unknown>, options?: { project?: string }): Promise<T>;
     /** `type` is the type's id in this panel */
@@ -479,8 +516,6 @@ export interface MemoryBlocks {
     typeChoices(type: string, options?: { project?: string }): Promise<BlockChoice[]>;
 }
 
-/** What crosses the wire: JSON, so a value the daemon couldn't carry fails here too. */
-const overTheWire = <T>(value: T): T => (value === undefined ? (null as T) : JSON.parse(JSON.stringify(value)));
 
 /**
  * A Blocks registry in memory for a panel's tests. Blocks register and run
@@ -489,7 +524,7 @@ const overTheWire = <T>(value: T): T => (value === undefined ? (null as T) : JSO
  */
 export function memoryBlocks(panelId: string, listeners: MemoryBlocksListeners = {}): MemoryBlocks {
     const registered = newRegistered();
-    const entries = new Map<string, { handler: (request: any) => Promise<unknown>; schema: BlockSchema }>();
+    const entries = new Map<string, { handler: (request: any) => Promise<unknown>; schema: BlockSchema | BlockTemplateSchema }>();
     const backend: Backend = {
         register: async (_panel, blocks) => {
             for (const { entry, handler, schema } of blocks) entries.set(entry, { handler, schema: overTheWire(schema) });
@@ -516,10 +551,12 @@ export function memoryBlocks(panelId: string, listeners: MemoryBlocksListeners =
             for (const entry of [...entries.keys()]) if (entry.startsWith(`${project.id}/`)) entries.delete(entry);
         }),
         list: () =>
-            [...entries].filter(([, { schema }]) => (schema as { internal?: boolean }).internal !== true).map(([entry, { schema }]) => {
+            [...entries].flatMap(([entry, { schema }]) => {
+                if (schema.kind === "template" || (schema as { internal?: boolean }).internal === true) return [];
                 const slash = entry.indexOf("/");
-                return { panelId, entry, ...(slash === -1 ? {} : { project: entry.slice(0, slash) }), schema };
+                return [{ panelId, entry, ...(slash === -1 ? {} : { project: entry.slice(0, slash) }), schema }];
             }),
+        templates: () => [...entries.values()].flatMap(({ schema }) => (schema.kind === "template" ? [{ panelId, template: templateOf(schema) }] : [])),
         run: (command, inputs, options) => call(blockEntry("command", command, options?.project), { inputs: inputs ?? {} }),
         read: (value, inputs, options) => call(blockEntry("value", value, options?.project), { inputs: inputs ?? {} }),
         property: (type, field, value, options) => call(blockEntry("type", type), { field, value, ...(options?.project ? { project: options.project } : {}) }),

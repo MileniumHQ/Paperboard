@@ -12,7 +12,7 @@ const panelId = getPanelId();
 if (!panelId) throw new Error("the panel service booted without a panel id");
 
 // Blocks (Actions API v2): a type with a field read off the value and one
-// the panel looks up, and a project with a command, a value that says when
+// the panel looks up, a template, and a project with a command, a value that says when
 // it changes, and an event. "join" fires the event and the change, so the
 // test drives both from outside; "misfire" tries payloads the event never
 // declared and answers what the SDK refused.
@@ -40,6 +40,17 @@ async function blocks(): Promise<void> {
                         },
                     },
                 },
+            },
+        ],
+        templates: [
+            {
+                id: "say-who-joined",
+                name: "Say who joined",
+                description: "Logs each player who joins a server",
+                icon: "waving_hand",
+                eachProject: true,
+                when: { event: "joined" },
+                steps: [{ log: "Someone joined {project}" }],
             },
         ],
     });

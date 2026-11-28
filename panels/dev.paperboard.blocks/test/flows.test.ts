@@ -13,6 +13,7 @@ import { readFlows } from "../src/lib/flows";
 import { registerChoicesField } from "../src/lib/choicesField";
 import { BlockError, runHat, type Host } from "../src/lib/interpreter";
 import { BUILTIN, propertyBlockType, registryBlockType } from "../src/lib/names";
+import { memoryData } from "./helpers/data";
 
 const GAME = "dev.test.game";
 const PLAYER = `${GAME}:player`;
@@ -93,6 +94,7 @@ function recorder(answers: { read?: Record<string, unknown>; run?: (entry: strin
             log: (message) => {
                 logs.push(message);
             },
+            data: memoryData(),
         },
     };
 }
