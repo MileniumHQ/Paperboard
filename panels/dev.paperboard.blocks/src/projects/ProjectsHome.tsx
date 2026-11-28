@@ -24,6 +24,7 @@ import {
 } from "@mileniumhq/paperui";
 import CanvasPreview from "./CanvasPreview";
 import { DeleteProjectModal, RenameProjectModal } from "./ProjectDialogs";
+import { NewProjectModal } from "./NewProjectModal";
 import { AUTO_START, editedText, switchFailed, type ProjectsState } from "./state";
 import type { ProjectSummary } from "../panel";
 
@@ -36,7 +37,8 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
         if (!working()) await changes.run(failed, work);
     };
 
-    const create = () => change("Couldn't make a project", async () => props.onOpen(await props.projects.create()));
+    // New project asks what to start with: an empty canvas or a template
+    const [creating, setCreating] = createSignal(false);
     const duplicate = (id: string) => change("Couldn't copy the project", async () => { await props.projects.duplicate(id); });
     // a switch flips on its own, never waiting on another change, and moves once the service says so
     const switching = createAction();
@@ -75,7 +77,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
 
     const newProject = () => (
         <PaperEffect variant="success">
-            <PaperButton variant="success" disabled={working() || !props.projects.ready()} onClick={() => void create()}>
+            <PaperButton variant="success" disabled={working() || !props.projects.ready()} onClick={() => setCreating(true)}>
                 <PaperIcon>add</PaperIcon>
                 New project
             </PaperButton>
@@ -188,6 +190,11 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                 <PaperSeparator role="separator" />
                 <PaperContextMenuItem icon="delete" danger onClick={fromMenu(setDeleting)}>Delete</PaperContextMenuItem>
             </PaperContextMenu>
+            <NewProjectModal
+                open={creating()}
+                onCreate={async ({ name, flows }) => props.onOpen(await props.projects.create(name, flows))}
+                onClose={() => setCreating(false)}
+            />
             <RenameProjectModal project={renaming()} onRename={props.projects.rename} onClose={() => setRenaming(null)} />
             <DeleteProjectModal project={deleting()} onDelete={props.projects.remove} onClose={() => setDeleting(null)} />
         </PaperFlex>

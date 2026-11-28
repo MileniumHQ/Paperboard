@@ -219,6 +219,27 @@ describe("the panel's own blocks run its servers, and each server's settings and
         expect(schema("value.servers")).toMatchObject({ type: `list<${PANEL_ID}:server>`, changes: true });
     });
 
+    test("its templates reach Blocks, each made of blocks the panel has, in every server for one made for each", async () => {
+        const templates = (await blocksApi.templates(PANEL_ID)).map((t) => t.template);
+        expect(templates.map((t) => t.id)).toEqual(["nightly-restart", "backup-failed"]);
+        const all = await blocksApi.list(PANEL_ID);
+        const has = (entry: string) => all.find((b) => b.entry === entry)?.schema;
+        const projects = (await blocksApi.projects(PANEL_ID)).map((p) => p.id);
+        expect(projects).toEqual(["s-a", "s-t"]);
+        for (const template of templates) {
+            expect(has(`type.${template.needs}`)).toMatchObject({ dynamicChoices: true });
+            for (const project of template.eachProject ? projects : [undefined]) {
+                const at = (kind: string, id: string) => `${project ? `${project}/` : ""}${kind}.${id}`;
+                const event = "event" in template.when ? has(at("event", template.when.event)) : null;
+                if ("event" in template.when) expect(event).toBeDefined();
+                for (const step of template.steps) {
+                    if ("command" in step) expect(has(at("command", step.command))).toBeDefined();
+                    else for (const [, key] of step.log.matchAll(/\{([^}]*)\}/g)) if (key !== "project") expect(event).toMatchObject({ values: { [key!]: {} } });
+                }
+            }
+        }
+    });
+
     test("Servers and Server read the panel's servers, and a server's fields read its name, game and status", async () => {
         expect(await panelRead("servers")).toEqual(["s-a", "s-t"]);
         // any Server input starts as a dropdown of them

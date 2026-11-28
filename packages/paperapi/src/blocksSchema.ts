@@ -220,7 +220,42 @@ export interface BlockEventDefinition extends BlockDefinitionBase {
     filters?: Record<string, string>;
 }
 
-export type BlockKind = "type" | "command" | "value" | "event";
+/** What a template starts an input as: a value the input takes. */
+export type BlockTemplateValue = string | number | boolean;
+
+/** One step of a template's flow. */
+export type BlockTemplateStep =
+    /** one of the panel's commands, with what its inputs start as */
+    | { command: string; inputs?: Record<string, BlockTemplateValue> }
+    /** a line in the project's Console: "{key}" is a value the event fires, "{project}" the project's name */
+    | { log: string };
+
+/**
+ * A flow a new Blocks project can start with, made of the panel's own
+ * blocks. The Blocks panel offers it in New project while it can be made.
+ */
+export interface BlockTemplateDefinition {
+    id: string;
+    /** what New project calls it ("Restart a game server every night") */
+    name: string;
+    description: string;
+    /** a Material Symbols name */
+    icon: string;
+    /** what starts the flow: one of the panel's events, or a time each day ("04:00") */
+    when: { event: string; inputs?: Record<string, BlockTemplateValue> } | { everyDay: string };
+    /** what it does, one step under another */
+    steps: BlockTemplateStep[];
+    /**
+     * A type of the panel the template needs a value of ("server"). It is
+     * offered once the type lists one, and each required input of the type
+     * it leaves out starts as the first.
+     */
+    needs?: string;
+    /** one flow for each of the panel's projects, with the project's event and commands */
+    eachProject?: boolean;
+}
+
+export type BlockKind = "type" | "command" | "value" | "event" | "template";
 
 // ─── What reaches the registry ──────────────────────────────────────────────
 
@@ -243,6 +278,9 @@ export type BlockSchema =
     | ({ kind: "command" } & WithInputSchemas<Omit<BlockCommandDefinition, "run">>)
     | ({ kind: "value" } & WithInputSchemas<Omit<BlockValueDefinition, "read">>)
     | ({ kind: "event" } & WithInputSchemas<BlockEventDefinition>);
+
+/** A template as the registry keeps it: its definition, which is data already. */
+export type BlockTemplateSchema = { kind: "template" } & BlockTemplateDefinition;
 
 /** The registry entry a definition is registered under. */
 export function blockEntry(kind: BlockKind, id: string, project?: string): string {
@@ -374,6 +412,7 @@ export function validateBlockDefinitions(set: {
     commands?: BlockCommandDefinition[];
     values?: BlockValueDefinition[];
     events?: BlockEventDefinition[];
+    templates?: BlockTemplateDefinition[];
 }, panelId: string, availableTypes: ReadonlySet<string> = new Set()): void {
     const own = new Set<string>(availableTypes);
     for (const type of set.types ?? []) own.add(type?.id);
@@ -465,6 +504,59 @@ export function validateBlockDefinitions(set: {
     unique("command", set.commands ?? []);
     unique("value", set.values ?? []);
     unique("event", set.events ?? []);
+    for (const template of set.templates ?? []) assertTemplate(template, own);
+    unique("template", set.templates ?? []);
+}
+
+const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAX_STEPS = 32;
+
+function assertTemplateInputs(inputs: unknown, what: string): void {
+    if (inputs === undefined) return;
+    if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) throw new Error(`${what} inputs must be an object of values`);
+    for (const [key, value] of Object.entries(inputs)) {
+        if (!ID.test(key)) throw new Error(`${what} input "${key}" must be named with lowercase letters, digits and dashes`);
+        if (!["string", "number", "boolean"].includes(typeof value) || (typeof value === "number" && !Number.isFinite(value))) {
+            throw new Error(`${what} input "${key}" must start as text, a number or true/false`);
+        }
+    }
+}
+
+function assertTemplate(template: BlockTemplateDefinition, types: ReadonlySet<string>): void {
+    if (!template || typeof template !== "object") throw new Error("A template definition must be an object");
+    const label = describe("template", template.id);
+    if (typeof template.id !== "string" || !ID.test(template.id)) throw new Error(`${label} needs an id of lowercase letters, digits and dashes, at most 64`);
+    assertLabel(template.name, label);
+    if (typeof template.description !== "string" || !template.description.trim()) throw new Error(`${label} needs a description`);
+    assertOptionalText(template.description, `${label} description`, MAX_DESCRIPTION);
+    assertLabel(template.icon, `${label} icon`);
+    const when = template.when as Record<string, unknown> | undefined;
+    if (when && typeof when.everyDay === "string" && when.event === undefined) {
+        if (!TIME_OF_DAY.test(when.everyDay)) throw new Error(`${label} runs every day at "${when.everyDay}", which isn't a time of day as 04:00`);
+    } else if (when && typeof when.event === "string" && when.everyDay === undefined) {
+        if (!ID.test(when.event)) throw new Error(`${label} starts on "${when.event}", which isn't an event id`);
+        assertTemplateInputs(when.inputs, `${label} event`);
+    } else throw new Error(`${label} needs when: { event } or { everyDay }`);
+    if (!Array.isArray(template.steps) || template.steps.length === 0) throw new Error(`${label} needs at least one step`);
+    if (template.steps.length > MAX_STEPS) throw new Error(`${label} has more than ${MAX_STEPS} steps`);
+    for (const [i, step] of template.steps.entries()) {
+        const what = `${label} step ${i + 1}`;
+        const raw = step as Record<string, unknown>;
+        if (typeof raw?.command === "string" && raw.log === undefined) {
+            if (!ID.test(raw.command)) throw new Error(`${what} runs "${raw.command}", which isn't a command id`);
+            assertTemplateInputs(raw.inputs, what);
+        } else if (typeof raw?.log === "string" && raw.command === undefined) {
+            assertLabel(raw.log, `${what} log`, MAX_TEXT);
+            for (const [, key] of raw.log.matchAll(/\{([^}]*)\}/g)) {
+                if (key === "project" && !template.eachProject) throw new Error(`${what} logs {project}, but the template isn't made for each project`);
+                if (!ID.test(key!)) throw new Error(`${what} logs {${key}}, which isn't a value's key`);
+            }
+        } else throw new Error(`${what} must be { command } or { log }`);
+    }
+    if (template.needs !== undefined && (typeof template.needs !== "string" || !types.has(template.needs))) {
+        throw new Error(`${label} needs "${String(template.needs)}", which is not a type this panel defines`);
+    }
+    if (template.eachProject !== undefined && typeof template.eachProject !== "boolean") throw new Error(`${label} eachProject must be true or false`);
 }
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
@@ -484,7 +576,7 @@ function strip<T extends object>(def: T, drop: string[]): T {
 }
 
 /** The registry's copy of a definition: no code, every type qualified by panel. */
-export function blockSchema(kind: BlockKind, def: any, panelId: string): BlockSchema {
+export function blockSchema(kind: Exclude<BlockKind, "template">, def: any, panelId: string): BlockSchema {
     switch (kind) {
         case "type":
             return {

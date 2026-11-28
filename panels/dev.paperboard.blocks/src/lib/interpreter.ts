@@ -3,7 +3,8 @@
 // them, through `host`; built-in blocks run here. Nothing is generated or
 // evaluated as code. Every failure names the block it happened on.
 import { RUN_STOPPED } from "./failure";
-import { base64, formatTime, isPrime, median, modes, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
+import { base64, formatNumber, formatTime, isPrime, median, modes, pad, position, regex, standardDeviation, timePart, unitMs, web, type WebAnswer } from "./library";
+import { isScheduleHat } from "./schedule";
 import { BUILTIN, parseChoiceBlockType, parseEntry, parsePropertyBlockType, parseRegistryBlockType } from "./names";
 import { errorMessage } from "@mileniumhq/paperapi";
 
@@ -29,6 +30,19 @@ export interface SavedWorkspace {
     variables?: { name: string; id: string; type?: string }[];
 }
 
+/** The project's Data, which its flows keep through restarts. */
+export interface ProjectData {
+    /** undefined when nothing is kept under the key */
+    get(key: string): Promise<unknown>;
+    set(key: string, value: unknown): Promise<void>;
+    /** whether there was a value to delete */
+    delete(key: string): Promise<boolean>;
+    has(key: string): Promise<boolean>;
+    keys(): Promise<string[]>;
+    /** adds to the number under the key, none being 0; the new number */
+    change(key: string, by: number): Promise<number>;
+}
+
 /** What the interpreter asks of the outside world. */
 export interface Host {
     run(panelId: string, entry: string, inputs: Record<string, unknown>): Promise<unknown>;
@@ -36,6 +50,7 @@ export interface Host {
     /** a per-project field is read in its project */
     property(typeRef: string, field: string, value: unknown, project?: string): Promise<unknown>;
     log(message: string, blockId: string): void;
+    data: ProjectData;
     /** aborted when the run is stopped */
     signal: AbortSignal;
 }
@@ -57,9 +72,9 @@ class Return {
     constructor(readonly value: unknown) {}
 }
 
-/** The hat blocks a flow can start from: the run hat and the registry's. */
+/** The hat blocks a flow can start from: the run hat, the schedules and the registry's. */
 export function isHat(type: string): boolean {
-    if (type === BUILTIN.onRun) return true;
+    if (type === BUILTIN.onRun || isScheduleHat(type)) return true;
     const name = parseRegistryBlockType(type);
     return name?.kind === "event" || name?.kind === "changes";
 }
@@ -155,8 +170,8 @@ function field(block: SavedBlock, name: string): unknown {
     return block.fields?.[name];
 }
 
-function variableId(block: SavedBlock): string {
-    const v = field(block, "VAR") as { id?: string } | undefined;
+function variableId(block: SavedBlock, name = "VAR"): string {
+    const v = field(block, name) as { id?: string } | undefined;
     if (!v?.id) throw new BlockError("This block names no variable", block.id);
     return v.id;
 }
@@ -354,6 +369,13 @@ async function call(run: Run, block: SavedBlock): Promise<unknown> {
     }
 }
 
+/** The key a Data block names. */
+async function keyOf(run: Run, block: SavedBlock): Promise<string> {
+    const key = await textOf(run, block, "KEY");
+    if (!key) throw new BlockError("Say which key", block.id);
+    return key;
+}
+
 /** Pins any failure, awaited or returned, on this block. */
 async function statement(run: Run, block: SavedBlock): Promise<void> {
     try {
@@ -392,6 +414,18 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
             return loop(run, block, async () => {
                 if (i >= list.length) return false;
                 run.variables.set(id, list[i++]);
+                return (await body(run, block)) === "next";
+            });
+        }
+        case BUILTIN.forEachAt: {
+            const list = await listOf(run, block, "LIST", "The list");
+            const item = variableId(block, "ITEM");
+            const at = variableId(block, "AT");
+            let i = 0;
+            return loop(run, block, async () => {
+                if (i >= list.length) return false;
+                run.variables.set(item, list[i]);
+                run.variables.set(at, ++i);
                 return (await body(run, block)) === "next";
             });
         }
@@ -473,6 +507,19 @@ async function statementOf(run: Run, block: SavedBlock): Promise<void> {
         case BUILTIN.log:
             run.host.log(asText(await value(run, block, "TEXT")), block.id);
             return;
+        case BUILTIN.dataSet: {
+            const key = await keyOf(run, block);
+            await run.host.data.set(key, await required(run, block, "VALUE", "The value"));
+            return;
+        }
+        case BUILTIN.dataDelete:
+            await run.host.data.delete(await keyOf(run, block));
+            return;
+        case BUILTIN.dataChange: {
+            const key = await keyOf(run, block);
+            await run.host.data.change(key, await numberOf(run, block, "BY", "The change"));
+            return;
+        }
     }
     const name = parseRegistryBlockType(block.type);
     if (name?.kind === "command") {
@@ -694,6 +741,16 @@ async function textValue(run: Run, block: SavedBlock): Promise<unknown> {
             return asText(await value(run, block, "VALUE")).length;
         case "text_isEmpty":
             return asText(await value(run, block, "VALUE")).length === 0;
+        case BUILTIN.textPad: {
+            const t = await textOf(run, block, "TEXT");
+            const length = await numberOf(run, block, "LENGTH", "The length");
+            return pad(t, length, String(field(block, "SIDE")), await textOf(run, block, "WITH"));
+        }
+        case BUILTIN.numberFormat: {
+            const n = await numberOf(run, block, "NUMBER", "The number");
+            const decimals = await numberOf(run, block, "DECIMALS", "The decimals");
+            return formatNumber(n, decimals, field(block, "GROUPING") !== "PLAIN");
+        }
     }
     return NOT_THIS_FAMILY;
 }
@@ -763,6 +820,15 @@ async function dataValue(run: Run, block: SavedBlock): Promise<unknown> {
             return web("GET", await textOf(run, block, "URL"), undefined, field(block, "AS") as WebAnswer, run.host.signal);
         case BUILTIN.webPost:
             return web("POST", await textOf(run, block, "URL"), await value(run, block, "BODY"), field(block, "AS") as WebAnswer, run.host.signal);
+        case BUILTIN.dataGet: {
+            const key = await keyOf(run, block);
+            const kept = await run.host.data.get(key);
+            return kept === undefined ? ((await value(run, block, "DEFAULT")) ?? null) : kept;
+        }
+        case BUILTIN.dataHas:
+            return run.host.data.has(await keyOf(run, block));
+        case BUILTIN.dataKeys:
+            return run.host.data.keys();
     }
     return NOT_THIS_FAMILY;
 }

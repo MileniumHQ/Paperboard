@@ -6,7 +6,8 @@
 import { EMPTY_FLOWS as EMPTY, MAX_PREVIEW_BLOCKS, MAX_PREVIEW_PATH, PANEL_ID, type CanvasPreview, type PreviewBlock, type PreviewRect, type ProjectMeta, type ProjectSummary, type SavedFlows } from "../panel";
 import { readFlows } from "./flows";
 import { isHat } from "./interpreter";
-import { errorMessage, isRecord, SerialQueue } from "@mileniumhq/paperapi";
+import { errorMessage, isRecord } from "@mileniumhq/paperapi";
+import { HeldQueue } from "./heldQueue";
 
 /** the project index, in the panel's files */
 export const PROJECTS_FILE = "projects.json";
@@ -130,11 +131,8 @@ interface Project {
 
 export class ProjectStore {
     private projects = new Map<string, Project>();
-    private readonly queue = new SerialQueue();
+    private readonly queue = new HeldQueue();
     private opened = false;
-    // while paused, one task holds the queue: nothing is written until letGo
-    private held: Promise<void> | null = null;
-    private letGo: (() => void) | null = null;
 
     constructor(private readonly storage: ProjectStorage) {}
 
@@ -178,7 +176,7 @@ export class ProjectStore {
     }
 
     get paused(): boolean {
-        return this.held !== null;
+        return this.queue.paused;
     }
 
     /**
@@ -186,16 +184,7 @@ export class ProjectStore {
      * ones back until `resume`: the files can be copied or swapped meanwhile.
      */
     pause(): Promise<void> {
-        if (this.held) throw new Error("The projects are already paused");
-        return new Promise<void>((paused) => {
-            this.held = this.queue.run(
-                () =>
-                    new Promise<void>((go) => {
-                        this.letGo = go;
-                        paused();
-                    }),
-            );
-        });
+        return this.queue.pause();
     }
 
     /**
@@ -204,15 +193,8 @@ export class ProjectStore {
      * is thrown and the store stays paused, so a later `resume` goes on once
      * the files are as they were.
      */
-    async resume(reread: boolean): Promise<void> {
-        const held = this.held;
-        const go = this.letGo;
-        if (!held || !go) throw new Error("The projects are not paused");
-        if (reread) await this.open();
-        this.held = null;
-        this.letGo = null;
-        go();
-        await held;
+    resume(reread: boolean): Promise<void> {
+        return this.queue.resume(reread ? () => this.open() : undefined);
     }
 
     /** Every project, the most recently edited first. */
