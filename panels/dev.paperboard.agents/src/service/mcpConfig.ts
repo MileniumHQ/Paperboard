@@ -125,7 +125,7 @@ export function parseToolsConfig(raw: unknown): ToolsConfig {
     if (raw === null || raw === undefined) return structuredClone(DEFAULT_TOOLS);
     if (!isRecord(raw)) return fail("tools.json isn't a set of settings");
     if (Object.keys(raw).length === 0) return structuredClone(DEFAULT_TOOLS);
-    // TODO(remove after v0.5): v0.4 names the switch "actions"; it's the same switch, saved as "blocks" from then on
+    // TODO(remove after v0.6): v0.4 names the switch "actions"; it's the same switch, saved as "blocks" from then on
     exactKeys(raw, raw.blocks === undefined ? ["actions", "servers"] : ["blocks", "servers"], "tools.json");
     const blocks = raw.blocks ?? raw.actions ?? DEFAULT_TOOLS.blocks;
     if (typeof blocks !== "boolean") fail("tools.json: blocks is on or off");
