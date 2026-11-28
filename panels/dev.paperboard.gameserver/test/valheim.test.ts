@@ -80,9 +80,9 @@ describe("Valheim", () => {
         expect(server.server.state.maxPlayers).toBe(10);
         await server.server.waitFor((s) => s.serverVersion === "1.0.31", "the version from the log");
         // the relay registers the session a moment after the server is up
-        const session = () => call(server, "valheimSession") as Promise<{ address: string | null }>;
-        await waitUntil(async () => (await session()).address !== null, 5_000, "the join code in the log");
-        expect(await session()).toEqual({ world: "Yggdrasil", crossplay: true, joinCode: "150661", address: `203.0.113.7:${server.server.settings.port}` } as never);
+        const session = () => call(server, "valheimSession") as Promise<{ address: string | null } | null>;
+        await waitUntil(async () => ((await session())?.address ?? null) !== null, 5_000, "the join code in the log");
+        expect(await session()).toEqual({ world: "Yggdrasil", listed: true, crossplay: true, joinCode: "150661", address: `203.0.113.7:${server.server.settings.port}` } as never);
 
         // the server reads no console; Save is refused with the reason
         await expect(call(server, "saveWorld")).rejects.toThrow("saves its world on its own");
@@ -92,7 +92,34 @@ describe("Valheim", () => {
         await stop(server);
         // its stop saved the world it made
         expect(fs.readdirSync(path.join(server.dir, "save", "worlds_local", "Yggdrasil"))).toContain("_main.1.db2");
-        expect(await call(server, "valheimSession")).toEqual({ world: "Yggdrasil", crossplay: true, joinCode: null, address: null });
+        // the session is the run's, and the run is over
+        expect(await call(server, "valheimSession")).toBeNull();
+    });
+
+    test("a run ends with its players and its session; while it runs, the session is what it was started with, after a restart of Paperboard too", async () => {
+        const server = await valheimServer();
+        await call(server, "writeGameOptions", { patch: { world: "Yggdrasil", crossplay: true } });
+        await online(server);
+        serverSays(server.dir, `Got connection SteamID ${STEAM_ID}`, "Got character ZDOID from Ragnar : 12345:1");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Ragnar"), "Ragnar to join");
+        await waitUntil(async () => !!((await call(server, "valheimSession")) as { joinCode: string | null }).joinCode, 5_000, "the join code in the log");
+
+        // options are for the next start: the running server keeps its world and crossplay
+        await call(server, "writeGameOptions", { patch: { world: "Asgard", crossplay: false } });
+        const run = { world: "Yggdrasil", listed: false, crossplay: true };
+        expect(await call(server, "valheimSession")).toMatchObject(run);
+        // Paperboard restarted with the server running: it reads what the start recorded
+        await server.server.game.initialize(true);
+        expect(await call(server, "valheimSession")).toMatchObject(run);
+        expect(((await call(server, "valheimPlayers")) as { online: unknown[] }).online).toEqual([{ name: "Ragnar", id: `Steam_${STEAM_ID}` }]);
+
+        // Ragnar is still on as it stops, and its log never says he left; the Players tab reads again as it goes offline
+        const read = server.server.waitFor((s) => s.serverStatus === "offline", "the stop").then(() => call(server, "valheimPlayers") as Promise<{ online: unknown[] }>);
+        await stop(server);
+        expect((await read).online).toEqual([]);
+        expect(await call(server, "valheimSession")).toBeNull();
+        await server.server.lifecycle.released;
+        expect(fs.existsSync(path.join(server.dir, ".valheim-run.json"))).toBe(false);
     });
 
     test("the server's port and the next are claimed as one: a taken second port moves both, and the run uses the moved pair", async () => {
@@ -222,7 +249,10 @@ describe("Valheim", () => {
         await run("ban-player", { player: "Ragnar" });
         expect(await read("banned-players")).toEqual(["Griefer", "Ragnar"]);
         await expect(run("make-admin", { player: "Griefer" })).rejects.toThrow("platform id");
-        await expect(call(server, "valheimList", { list: "banned", id: "Steam_1\nSteam_2", name: null, on: true })).rejects.toThrow("one player's id or name");
+        await expect(call(server, "valheimList", { list: "banned", id: "Steam_1\nSteam_2", name: null, on: true })).rejects.toThrow("platform id");
+        // an id is a platform id: a name given as one would be an entry the server never matches
+        await expect(call(server, "valheimList", { list: "admin", id: "bob", name: null, on: true })).rejects.toThrow("platform id");
+        expect(list(server, "adminlist.txt")).not.toContain("bob");
         await stop(server);
     });
 

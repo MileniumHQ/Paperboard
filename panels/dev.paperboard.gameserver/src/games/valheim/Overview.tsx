@@ -6,14 +6,15 @@ import { valheim } from "./index";
 import { createMetrics, createUptime, overviewStats } from "../../components/overviewStats";
 
 export default function ValheimOverview() {
-    const { calls, gameSettings, serverStatus } = useServer();
-    // with crossplay, the join code the relay gives once the server registered with it
+    const { calls, gameSettings } = useServer();
+    // what the running server was started with, and with crossplay the relay's join code
     const session = createMetrics(calls.valheimSession);
     const uptime = createUptime();
-    const world = () => String(gameSettings().world ?? "");
+    // options are for the next start; while it runs, these are the run's own
+    const world = () => session.value()?.world ?? String(gameSettings().world ?? "");
+    const listed = () => session.value()?.listed ?? gameSettings().public === true;
     // the name players see in the server list
     const name = () => String(gameSettings().name ?? "");
-    const crossplay = () => gameSettings().crossplay === true;
     const joinCode = () => session.value()?.joinCode ?? null;
 
     return (
@@ -39,24 +40,22 @@ export default function ValheimOverview() {
             stats={overviewStats(
                 uptime(),
                 { icon: "public", label: "World", value: world() },
-                crossplay()
-                    ? { icon: "key", label: "Join code", value: joinCode() ?? "…" }
-                    : { icon: "list", label: "Server list", value: gameSettings().public === true ? "Listed" : "Not listed" },
+                { icon: "list", label: "Server list", value: listed() ? "Listed" : "Not listed" },
             )}
         >
             <Show when={session.error()}>
                 {(err) => (
                     <PaperError
-                        title="Couldn't read the server's join code"
+                        title="Couldn't read the running server's session"
                         error={err()}
                         action={{ label: "Try again", disabled: session.loading(), onClick: () => void session.reload() }}
                     />
                 )}
             </Show>
-            <Show when={crossplay() && serverStatus() === "online"}>
+            <Show when={session.value()?.crossplay}>
                 <PaperQuote variant="monochrome" icon="hub" title="Crossplay joins through Valheim's relay">
-                    <Show when={joinCode()} fallback="The server is registering with the relay; its join code shows here once it has one.">
-                        {(code) => `Players join with code ${code()}${session.value()?.address ? `, or at ${session.value()!.address}` : ""}. A crossplay server can't be joined at a local address.`}
+                    <Show when={joinCode()} fallback="The server is registering with the relay; its join code shows above once it has one.">
+                        {`Players join with the join code above${session.value()?.address ? `, or at ${session.value()!.address}` : ""}. A crossplay server can't be joined at a local address.`}
                     </Show>
                 </PaperQuote>
             </Show>

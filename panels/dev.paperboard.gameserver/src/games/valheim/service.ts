@@ -8,10 +8,11 @@ import { validateOptions } from "../options";
 import { installedBuild } from "../steam/steamcmd";
 import { steamInstall, steamInstallCalls, steamUpdateStatus, type SteamInstallSpec } from "../steam/installAction";
 import type { GameService } from "../serviceTypes";
-import { ConsoleBuffer, assertHost, exists, offlineBackup, pushChat, redact, report, serverSecret } from "../serviceKit";
+import { ConsoleBuffer, assertHost, exists, offlineBackup, pushChat, redact, report, serverSecret, unlessMissing } from "../serviceKit";
 import { KEYS, MODIFIERS, options, valheim, VALHEIM_APP_ID, VALHEIM_CLIENT_APP_ID, VALHEIM_MAX_PLAYERS, VALHEIM_PASSWORD_MIN, type ValheimOption } from "./index";
 import { ValheimLog } from "./log";
-import { entryIs, isList, listEntry, ValheimLists, type ValheimList } from "./lists";
+import { isList, listEntry, ValheimLists, type ValheimList } from "./lists";
+import { entryIs, isPlatformId, platformId } from "./ids";
 
 const GAME = "valheim";
 const PROC = "valheim-server";
@@ -20,6 +21,8 @@ const DEFAULT_PORT = 2456;
 const PORTS_IN_A_ROW = 2;
 /** where the world and lists live, given to the server as -savedir */
 const SAVE_DIR = "save";
+/** what the running server was started with, kept so a restart of Paperboard still knows: its options are read only as it starts */
+const RUN_FILE = ".valheim-run.json";
 /** Unity's own errors and the game's ZLog.LogError lines; Valheim's many "Failed to place" lines are world generation, not failures */
 const isError = (line: string) => /exception|^(?:\d{1,2}\/\d{1,2}\/\d{4} [\d:]+: )?(?:Error|Could not parse)\b/i.test(line);
 
@@ -72,6 +75,9 @@ export function launchArgs(saved: Record<string, unknown>, run: { port: number; 
     return args;
 }
 
+/** what a run was started with: its world, whether it is in the server list, and crossplay */
+interface Run { world: string; listed: boolean; crossplay: boolean }
+
 /** One server's part of the game: its process, console, world and lists are its own. */
 export function valheimService(ctx: Server): GameService {
     const local = {
@@ -80,6 +86,8 @@ export function valheimService(ctx: Server): GameService {
         lists: null as ValheimLists | null,
         /** what this run's start has seen of its readiness */
         start: { connected: false, generating: false, generated: false, newWorld: false, refused: null as string | null },
+        /** what the running server was started with; null while it is stopped */
+        run: null as Run | null,
         /** the crossplay session's join code and public address, once the relay registered it */
         session: { joinCode: null as string | null, address: null as string | null },
         /** world saves the server reported this run; the stop must add one for a backup to copy */
@@ -97,6 +105,22 @@ export function valheimService(ctx: Server): GameService {
     const lists = () => { const l = local.lists; if (!l) throw new Error("Valheim's lists are not ready"); return l; };
     const saved = () => ctx.settings;
     const setting = (id: string) => optionValue(options.find((o) => o.id === id)!, saved());
+
+    // who is on and the relay's session are the run's: a stop, a crash or a kill ends them
+    ctx.onRunEnd(() => {
+        local.log = new ValheimLog();
+        local.session = { joinCode: null, address: null };
+        local.run = null;
+    });
+    const runFile = async () => path.join(await ctx.root(), RUN_FILE);
+    /** The run a server found running was started with, from the record its start left. */
+    async function readRun(): Promise<Run> {
+        const text = await unlessMissing(fs.readFile(await runFile(), "utf8"), null);
+        if (text === null) throw new Error(`Valheim is running without ${RUN_FILE}, which Paperboard writes as it starts it; stop it from the computer and start it again here`);
+        const run = JSON.parse(text) as Partial<Run>;
+        if (typeof run.world !== "string" || typeof run.listed !== "boolean" || typeof run.crossplay !== "boolean") throw new Error(`${RUN_FILE} is not a record of how Valheim was started`);
+        return { world: run.world, listed: run.listed, crossplay: run.crossplay };
+    }
 
     const displayVersion = (s: Record<string, unknown>) => (s.version ? String(s.version) : s.build ? `Build ${s.build}` : "");
 
@@ -156,12 +180,10 @@ export function valheimService(ctx: Server): GameService {
         }
     }
 
+    /** A start's own readiness and save count; who is on was cleared as the last run ended. */
     function freshRun() {
-        local.log = new ValheimLog();
         local.start = { connected: false, generating: false, generated: false, newWorld: false, refused: null };
-        local.session = { joinCode: null, address: null };
         local.saves = 0;
-        ctx.setState({ onlinePlayers: [] });
     }
 
     /** Whom a block's player name is: one seen on the server, or an entry already on a list. */
@@ -172,13 +194,13 @@ export function valheimService(ctx: Server): GameService {
         if (ids.length > 1) throw new Error(`${ids.length} players are named ${name}; use the Players tab to pick one`);
         if (ids.length === 1) return { name, id: ids[0] };
         // a platform id given as the name, or a name only a ban list holds
-        return /^[A-Za-z]{2,16}_[A-Za-z0-9-]+$/.test(name) ? { id: name } : { name };
+        return isPlatformId(name) ? { id: name } : { name };
     }
 
     /** A list's entries by the name of the player each is, as the Players tab shows them; an entry Paperboard never saw join stays as it is written. */
     async function listNames(list: ValheimList): Promise<string[]> {
         const seen = await lists().seen();
-        return (await lists().read(list)).map((entry) => seen.find((p) => entryIs(entry, p, list))?.name ?? entry);
+        return (await lists().read(list)).map((entry) => seen.find((p) => entryIs(entry, p, list === "banned"))?.name ?? entry);
     }
 
     /** Puts a player on a list or takes them off, by their id or (bans only) their name. */
@@ -255,12 +277,11 @@ export function valheimService(ctx: Server): GameService {
                 return ctx.state.gameSettings;
             },
             ...steamInstallCalls(steam, install),
-            valheimSession: async () => ({
-                world: String(setting("world")),
-                crossplay: setting("crossplay") === true,
-                joinCode: ctx.state.serverStatus === "online" ? local.session.joinCode : null,
-                address: ctx.state.serverStatus === "online" ? local.session.address : null,
-            }),
+            // the running server's own: options changed since are for its next start
+            valheimSession: async () => {
+                const run = ctx.state.serverStatus === "online" ? local.run : null;
+                return run && { ...run, joinCode: local.session.joinCode, address: local.session.address };
+            },
             valheimPlayers: async () => ({
                 seen: await lists().seen(),
                 online: local.log.online(),
@@ -273,7 +294,7 @@ export function valheimService(ctx: Server): GameService {
                 if (typeof on !== "boolean") throw new Error("Say whether the player goes on the list or off it");
                 if (id === null && name === null) throw new Error("Choose a player");
                 // the server reads its lists again as it runs, so they change whether it runs or not
-                const player = { id: id === null ? null : listEntry(id), name: name === null ? undefined : listEntry(name) };
+                const player = { id: id === null ? null : platformId(id), name: name === null ? undefined : listEntry(name) };
                 await setList(list, player, on);
                 return true;
             },
@@ -283,9 +304,10 @@ export function valheimService(ctx: Server): GameService {
             local.lists = new ValheimLists(await ctx.root(), await saveDir());
             if (running) {
                 // a server that kept running while Paperboard restarted: its console kept the lines that say who is on
+                local.run = await readRun();
                 local.secrets = [await joinPassword.value()].filter(Boolean);
                 for (const entry of ctx.state.serverEntries) if (typeof entry.content === "string") readLine(entry.content, true);
-            }
+            } else await fs.rm(await runFile(), { force: true });
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Valheim's current operation"); },
         async dispose() { local.console.dispose(); },
@@ -303,6 +325,8 @@ export function valheimService(ctx: Server): GameService {
             await fs.mkdir(save, { recursive: true });
             freshRun();
             local.start.newWorld = !(await worldExists(world));
+            local.run = { world, listed: setting("public") === true, crossplay: setting("crossplay") === true };
+            await fs.writeFile(await runFile(), JSON.stringify(local.run));
             local.secrets = [password].filter(Boolean);
             const home = path.join(await ctx.root(), "profile");
             await fs.mkdir(home, { recursive: true });
@@ -318,6 +342,7 @@ export function valheimService(ctx: Server): GameService {
                 },
             };
         },
+        async afterStop() { await fs.rm(await runFile(), { force: true }); },
         isMutating: () => local.busy,
         // A world it already had is up once the server says "Game server connected"; a
         // new one generates its locations after that, and is up once that is done.
