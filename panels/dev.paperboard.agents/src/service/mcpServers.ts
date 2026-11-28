@@ -549,16 +549,21 @@ export class McpServers {
         p.finishing = true;
         try {
             const tokens = await exchange(this.fetcher, p.client, code, p.callback, p.verifier);
-            await this.deps.vault.set(vaultName(name, OAUTH_SECRET), JSON.stringify(tokens));
+            // canceled, removed or started again while the code was traded: that stands, and
+            // this one writes nothing. Under the lock, so none of those lands mid-write
+            const ended = await this.lock.run(async () => {
+                if (this.signIns.get(name) !== p) return true;
+                await this.deps.vault.set(vaultName(name, OAUTH_SECRET), JSON.stringify(tokens));
+                this.cancelSignIn(name, fromListener);
+                return false;
+            });
+            if (ended) return "this sign-in ended while its code was traded; start it again";
         } catch (e) {
             const why = errorMessage(e);
             console.error(`[agents] ${name}'s sign-in couldn't trade its code for tokens:`, why);
             if (this.signIns.get(name) === p) this.failSignIn(name, why, fromListener);
             return why;
         }
-        // canceled or started again while the tokens were traded: the newer one stands
-        if (this.signIns.get(name) !== p) return "this sign-in was canceled or started again meanwhile";
-        this.cancelSignIn(name, fromListener);
         // it starts again with the tokens, now rather than at the next turn
         const e = this.entries.get(name);
         if (e && e.spec.enabled) {
