@@ -21,6 +21,7 @@ export { craneEndpoint, type CraneCredentials } from "./ws";
 export * from "./secrets";
 export * from "./backups";
 export * from "./problems";
+export * from "./shared";
 export * from "./ports";
 export * from "./loopback";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";

@@ -10,6 +10,7 @@ import type { InstalledPackageRecord, PendingPackageUpdate } from "../package";
 import type { BlockInfo, BlockProjectInfo, BlockTemplateInfo } from "../blocks";
 import type { BlockSchema, BlockTemplateSchema } from "../blocksSchema";
 import type { InvalidPanel } from "../panels";
+import { isSharedId, isSharedPrefix, isSharedVersion, SHARED_DOCUMENTS_MAX, type SharedDelete, type SharedDocument, type SharedVersion, type SharedWrite } from "../sharedShape";
 import { anyText, configPath, envMap, flag, id, InvalidParamsError, list, numeric, object, opt, panelId, readValue, text, typed } from "./fields";
 
 /** The longest project picture: a data URL of a 256 KB server icon fits. */
@@ -207,6 +208,30 @@ const eventNames = (): Shape<string[]> => {
     return reading;
 };
 
+// a shared document's id, the start of one, and one of its versions (sharedShape.ts)
+const sharedId = (): Shape<string> => ({
+    check: (value, at) => (isSharedId(value) ? null : `Invalid shared document ${at}: ${JSON.stringify(value)}`),
+});
+const sharedPrefix = (): Shape<string> => ({
+    check: (value, at) => (isSharedPrefix(value) ? null : `Invalid shared document ${at}: ${JSON.stringify(value)}`),
+});
+const sharedVersion = (): Shape<string> => ({
+    check: (value, at) => (isSharedVersion(value) ? null : `Invalid shared document ${at}: ${JSON.stringify(value)}`),
+});
+const sharedIds = (): Shape<string[]> => ({
+    check: (value, at) => {
+        if (!Array.isArray(value)) return `Parameter "${at}" must be a list of shared document ids`;
+        if (value.length > SHARED_DOCUMENTS_MAX) return `Parameter "${at}" names more than ${SHARED_DOCUMENTS_MAX} documents`;
+        const bad = value.find((id) => !isSharedId(id));
+        return bad === undefined ? null : `Invalid shared document id in ${at}: ${JSON.stringify(bad)}`;
+    },
+});
+// whose documents: a panel's credential names its own panel; the host names
+// a panel, or none for the shell's own (the daemon's rpc/shared.ts)
+const sharedOf = { panelId: opt(panelId()) };
+// the version a write was based on; null: the document didn't exist
+const basedOn = () => shape.optional(shape.nullable(sharedVersion()));
+
 // a call that names a panel's backups: the panel, and which of its targets
 const backupOf = {
     panelId: panelId(),
@@ -367,6 +392,15 @@ export const RPC = {
     "backup:restore": { params: object({ ...backupOf, backupId: text(64) }) },
     "backup:delete": { params: object({ ...backupOf, backupId: text(64) }) },
 
+    // shared documents: every computer of the network holds them
+    "shared:get": { params: object({ ...sharedOf, id: sharedId() }) },
+    // ids: only these (a watch reading what changed); prefix: only ids that start with it
+    "shared:list": { params: object({ ...sharedOf, prefix: opt(sharedPrefix()), ids: opt(sharedIds()) }) },
+    "shared:set": { params: object({ ...sharedOf, id: sharedId(), value: shape.json(), basedOn: basedOn() }) },
+    "shared:delete": { params: object({ ...sharedOf, id: sharedId(), basedOn: basedOn() }) },
+    "shared:versions": { params: object({ ...sharedOf, id: sharedId() }) },
+    "shared:restore": { params: object({ ...sharedOf, id: sharedId(), version: sharedVersion() }) },
+
     // ports
     "ports:claim": {
         params: object({ panelId: panelId(), name: typed<unknown>(), label: typed<unknown>(), protocol: typed<unknown>(), preferred: typed<unknown>(), count: shape.optional(typed<unknown>()) }),
@@ -491,6 +525,13 @@ export interface RpcResults {
     "backup:list": { backups: BackupRecord[] };
     "backup:restore": BackupRecord;
     "backup:delete": Ack;
+
+    "shared:get": { document: SharedDocument | null };
+    "shared:list": { documents: SharedDocument[] };
+    "shared:set": SharedWrite;
+    "shared:delete": SharedDelete;
+    "shared:versions": { versions: SharedVersion[] };
+    "shared:restore": { document: SharedDocument | null };
 
     "ports:claim": PortClaim;
     "ports:prepare": PortClaim;

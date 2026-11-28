@@ -5,6 +5,7 @@
 import type { BackupProgress } from "../backups";
 import type { BACKUP_PROGRESS_EVENT } from "../channels";
 import type { PROBLEMS_EVENT, PanelProblem } from "../problemShape";
+import type { SHARED_EVENT } from "../sharedShape";
 
 export type ProgressStage = "starting" | "checking" | "stopping" | "downloading" | "verifying" | "extracting" | "completed" | "error";
 
@@ -47,6 +48,11 @@ export interface RpcEventPayloads {
     [PROBLEMS_EVENT]: {
         panelId: string;
         problems: PanelProblem[];
+    };
+    /** shared documents changed, here or on another computer: their ids, for the panel's own sockets and the host's (null: the shell's) */
+    [SHARED_EVENT]: {
+        panelId: string | null;
+        ids: string[];
     };
     "blocks:registry-updated": RegistryChangeEvent;
     /** the roster changed: this computer's app asks computers:list again */

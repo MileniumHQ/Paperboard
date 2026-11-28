@@ -44,6 +44,7 @@
         "./protocol": "./src/protocol/index.ts",
         "./registryFetch": "./src/registryFetch.ts",
         "./serialQueue": "./src/serialQueue.ts",
+        "./sharedShape": "./src/sharedShape.ts",
         "./widgetManifest": "./src/widgetManifest.ts",
         "./ws": "./src/ws.ts",
         "./package.json": "./package.json"
