@@ -382,9 +382,8 @@ function daemonLifecycle(parts: DaemonParts) {
             wss.close();
             localServer?.close();
             server.close(() => {
-                if (!config.noAuth && !config.headless) {
-                    process.exit(0);
-                }
+                // the process goes only once the record store is closed: a pull mid-write finishes it first
+                if (!config.noAuth && !config.headless) void ended.then(() => process.exit(0));
             });
         });
         if (handshakeFailure) throw handshakeFailure;
