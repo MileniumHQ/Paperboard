@@ -3,11 +3,13 @@
 // TLS listener (a compiled crane, a process of its own), each with its own
 // data directory. The embedded one dials out, and they sync both ways.
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
+import * as net from "node:net";
 import * as path from "node:path";
+import * as tls from "node:tls";
 import { memberIdOf } from "../src/network/memberId";
 import { Roster } from "../src/network/roster";
 import { NETWORK_DIR, RosterRecords } from "../src/network/rosterStore";
-import { loadOrCreateTlsIdentity } from "../src/security/tlsIdentity";
+import { createTlsIdentity, loadOrCreateTlsIdentity, TLS_SERVER_NAME } from "../src/security/tlsIdentity";
 import { pinnedRequest } from "../src/security/pinnedTls";
 import { standInForJoining } from "./support/standInForJoining";
 import { startCrane, type CraneProcess } from "testkit/crane";
@@ -31,6 +33,65 @@ async function openStopped(dir: string) {
 	const roster = await Roster.open(local, identity, members);
 	return { identity, roster, records: members.records };
 }
+
+/**
+ * The handshake messages a TLS server sends a client with no certificate, up
+ * to ServerHelloDone. TLS 1.2, where they travel in the clear (in 1.3 a
+ * CertificateRequest is encrypted): the server's bytes are read on a relay
+ * between the client and the port.
+ */
+async function serverHandshake(port: number): Promise<number[]> {
+	const fromServer: Buffer[] = [];
+	const relay = net.createServer((client) => {
+		const upstream = net.connect(port, "127.0.0.1");
+		client.pipe(upstream);
+		upstream.on("data", (chunk: Buffer) => {
+			fromServer.push(chunk);
+			client.write(chunk);
+		});
+		const end = () => {
+			client.destroy();
+			upstream.destroy();
+		};
+		client.on("close", end);
+		upstream.on("close", end);
+		client.on("error", end);
+		upstream.on("error", end);
+	});
+	await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
+	try {
+		const relayPort = (relay.address() as net.AddressInfo).port;
+		await new Promise<void>((resolve, reject) => {
+			const socket = tls.connect({ port: relayPort, host: "127.0.0.1", servername: TLS_SERVER_NAME, rejectUnauthorized: false, maxVersion: "TLSv1.2" }, () => {
+				socket.end();
+				resolve();
+			});
+			socket.on("error", reject);
+		});
+	} finally {
+		relay.close();
+	}
+	// records of type 22 (handshake) until the server's ChangeCipherSpec; after it, the rest is encrypted
+	const bytes = Buffer.concat(fromServer);
+	const handshake: Buffer[] = [];
+	for (let at = 0; at + 5 <= bytes.length; ) {
+		const type = bytes[at]!;
+		const length = bytes.readUInt16BE(at + 3);
+		if (type === 20) break;
+		if (type === 22) handshake.push(bytes.subarray(at + 5, at + 5 + length));
+		at += 5 + length;
+	}
+	const messages = Buffer.concat(handshake);
+	const types: number[] = [];
+	for (let at = 0; at + 4 <= messages.length; at += 4 + messages.readUIntBE(at + 1, 3)) {
+		types.push(messages[at]!);
+		if (messages[at] === 14) break;
+	}
+	return types;
+}
+
+const CERTIFICATE_REQUEST = 13;
+const SERVER_HELLO_DONE = 14;
 
 describe("links between running daemons", () => {
 	// Inventory: Core contract — the desktop app's own daemon, which nobody can dial, links out and syncs both ways.
@@ -97,10 +158,29 @@ describe("links between running daemons", () => {
 		stranger.roster.close();
 		const daemon = await startDaemon({ dataDir: strangerDir });
 		const status = () => daemon.instance.network.status().peers.find((p) => p.id === rackId)!;
-		await waitFor("the rack to refuse the stranger", () => status().reach.state === "dialing" && /refused the link \(403\)/.test((status().reach as { lastError?: string }).lastError ?? ""));
+		await waitFor("the rack to refuse the stranger", () => status().reach.state === "dialing" && /refused the link \(4003\)/.test((status().reach as { lastError?: string }).lastError ?? ""));
 		expect(status().sync.state).toBe("never");
 		// what the app asks of the rack's TLS port, with no certificate of its own, is answered as before
 		const health = await pinnedRequest(`https://127.0.0.1:${crane.port}/health`, rackCert);
 		expect(health.status).toBe(200);
+	});
+
+	// Inventory: Security — browsers, WebDAV clients and the app share the TLS port: it never asks a client for a certificate (a browser would show a picker).
+	test("the daemon's TLS port asks no client for a certificate", async () => {
+		const crane = await startCrane({ dataDir: dataDir(), host: "0.0.0.0" });
+		cranes.push(crane);
+		const types = await serverHandshake(crane.port);
+		expect(types).toContain(SERVER_HELLO_DONE);
+		expect(types).not.toContain(CERTIFICATE_REQUEST);
+
+		// the same reading of a server that does ask sees the request: the check above can fail
+		const identity = createTlsIdentity();
+		const asking = tls.createServer({ key: identity.key, cert: identity.cert, requestCert: true, rejectUnauthorized: false }, (socket) => socket.end());
+		await new Promise<void>((resolve) => asking.listen(0, "127.0.0.1", resolve));
+		try {
+			expect(await serverHandshake((asking.address() as net.AddressInfo).port)).toContain(CERTIFICATE_REQUEST);
+		} finally {
+			asking.close();
+		}
 	});
 });
