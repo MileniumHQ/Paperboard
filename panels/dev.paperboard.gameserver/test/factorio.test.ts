@@ -15,6 +15,7 @@ import { tempDir } from "./helpers/tmp";
 import { PANEL_ID } from "../src/servers";
 import { TRIGGER_IDS } from "../src/service/contract";
 import { startServerInstance, stopServerInstance } from "../src/service/lifecycle";
+import { waitUntil } from "../src/games/serviceKit";
 import { toolRunner, unpackRelease } from "../src/games/factorio/install";
 import { parseOnline } from "../src/games/factorio/lists";
 import { parseEvolution } from "../src/games/factorio/service";
@@ -153,12 +154,21 @@ describe("Factorio", () => {
         expect(fs.readFileSync(data(server, "player-data.json"), "utf8")).toContain("tok-4f1c9e");
         await expect(server.server.game.assertFileAccess!("data/player-data.json", false)).rejects.toThrow("keeps the join password and token");
         await expect(call(server, "runCommand", { command: "/quit" })).rejects.toThrow("Paperboard stops the server");
+        // the server reads its options only as it starts, so they wait for a stop, in the service as on the screen
+        await expect(call(server, "writeGameOptions", { patch: { whitelist: true } })).rejects.toThrow("Stop Factorio");
+        expect(server.server.settings.whitelist).toBeUndefined();
         await stop(server);
         await server.server.lifecycle.released;
         expect(fs.existsSync(data(server, ".server-settings.json"))).toBe(false);
         const kept = json(data(server, "player-data.json"));
         expect([kept["service-username"], kept["service-token"], kept["last-played"]["host-settings"]["password-hash"], kept.tips]).toEqual(["engineer", "", "", { seen: [] }]);
         await server.server.game.assertFileAccess!("data/player-data.json", false);
+        // a server that stopped while Paperboard was closed left both files with their secrets; setup takes them off
+        fs.writeFileSync(data(server, ".server-settings.json"), JSON.stringify({ game_password: "gearsandbelts", token: "tok-4f1c9e" }));
+        fs.writeFileSync(data(server, "player-data.json"), JSON.stringify({ "service-token": "tok-4f1c9e", "last-played": { "host-settings": { "password-hash": "gearsandbelts" } } }));
+        await server.server.game.initialize(false);
+        expect(fs.existsSync(data(server, ".server-settings.json"))).toBe(false);
+        expect(fs.readFileSync(data(server, "player-data.json"), "utf8")).not.toMatch(/tok-4f1c9e|gearsandbelts/);
         await server.server.waitFor((s) => s.serverEntries.some((e) => String(e.content).endsWith("Saving progress: 100.000000%")), "the save as it quit");
         expect(await call(server, "factorioStatus")).toEqual({ world: "World", spaceAge: false, evolution: null });
     });
@@ -277,6 +287,31 @@ describe("Factorio", () => {
         expect(await read("whitelisted-players")).toEqual(["dave"]);
         await run("ban-player", { player: "Eve" });
         expect(await read("banned-players")).toEqual(["eve"]);
+        await stop(server);
+    });
+
+    test("a stop ends the run's players: the roster read as the server goes offline has nobody online", async () => {
+        const server = await factorioServer();
+        await online(server);
+        playersOnline(server.dir, "Alice");
+        await server.server.waitFor((s) => s.onlinePlayers.includes("Alice"), "Alice to join");
+        // Alice is still on as the server stops; the Players tab reads again as it goes offline
+        const read = server.server.waitFor((s) => s.serverStatus === "offline", "the stop").then(() => call(server, "factorioPlayers") as Promise<{ online: string[] }>);
+        await stop(server);
+        expect((await read).online).toEqual([]);
+        expect(server.server.state.onlinePlayers).toEqual([]);
+    });
+
+    test("a start's own tools hold the server: Worlds and Files wait while it makes the map and matches its mods", async () => {
+        const server = await factorioServer();
+        const starting = startServerInstance(server.server);
+        await waitUntil(() => server.server.game.isMutating(), 20_000, "the start to run its tools", 1);
+        await expect(call(server, "factorioWorld", { name: "Elsewhere", create: true })).rejects.toThrow("Stop Factorio");
+        await expect(call(server, "factorioWorldDelete", { name: "World" })).rejects.toThrow("Stop Factorio");
+        await expect(server.server.game.assertFileAccess!("data/mods/mod-list.json", true)).rejects.toThrow("Stop Factorio before editing");
+        await starting;
+        await server.server.waitFor((s) => s.serverStatus === "online", "Factorio to finish starting");
+        expect(server.server.settings.save).toBe("World");
         await stop(server);
     });
 

@@ -116,9 +116,14 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         }
     }
 
-    /** Takes the secrets the server copied into player-data.json back out; only while it isn't running. */
-    async function scrubPlayerData() {
-        const file = path.join(await dataDir(), PLAYER_DATA);
+    /**
+     * Takes a run's secrets off the disk once the server is gone: the run's
+     * settings file, and what the server copied into player-data.json.
+     */
+    async function removeRunSecrets() {
+        const data = await dataDir();
+        await fs.rm(path.join(data, RUN_SETTINGS), { force: true });
+        const file = path.join(data, PLAYER_DATA);
         const text = await unlessMissing(fs.readFile(file, "utf8"), null);
         const scrubbed = text === null ? null : playerDataWithoutSecrets(text);
         if (scrubbed !== null) await fs.writeFile(file, scrubbed);
@@ -196,6 +201,56 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         return { installed, latest: newestRelease.version, updateAvailable: installed !== null && installed !== newestRelease.version };
     }
 
+    /** The start's files: the world (a first one made now), its mods matched, the run's settings; the command that plays it. */
+    async function launch() {
+        assertHost(factorio);
+        const release = await requireInstalled();
+        const password = await joinPassword.value();
+        const factorioToken = await token.value();
+        const problem = publicProblem(saved(), factorioToken);
+        if (problem) throw new Error(problem);
+        const data = await dataDir();
+        await fs.mkdir(savesDir(data), { recursive: true });
+
+        // the map a start plays: the one chosen, or a first one, made now
+        let world = activeName();
+        if (world === null) {
+            if ((await listWorlds(data, null)).length > 0) throw new Error("Choose the world to play in Worlds");
+            await createWorld(FIRST_WORLD, savedGeneration());
+            await ctx.updateSettings({ save: FIRST_WORLD });
+            world = FIRST_WORLD;
+        }
+        const file = saveFile(data, world);
+        if (!(await exists(file))) throw new Error(`The world ${world} is gone from the saves folder; choose another in Worlds`);
+        // the mods are matched to the map: loading a map without its mods would strip them from it as it saves
+        await tool(["--sync-mods", file], `match its mods to ${world}`, /^Mods synced$/);
+
+        const rconSecret = await rconPassword.ensure();
+        const rconPort = ctx.runPort("factorio-rcon", Number(saved().rconPort ?? DEFAULT_RCON_PORT));
+        const settingsFile = path.join(data, RUN_SETTINGS);
+        await writePrivate(settingsFile, JSON.stringify(serverSettings(saved(), { password, token: factorioToken }), null, 2));
+        connect(rconPort, rconSecret);
+        local.secrets = [rconSecret, password, factorioToken].filter(Boolean);
+        local.inGame = false;
+        local.saves = 0;
+
+        const list = (name: keyof typeof LIST_FILES) => lists().file(name);
+        const args = [
+            "-c", await configFile(),
+            "--start-server", file,
+            "--server-settings", settingsFile,
+            "--port", String(ctx.runPort(GAME, Number(setting("port", saved())))),
+            // the remote console answers this computer only
+            "--rcon-bind", `127.0.0.1:${rconPort}`, "--rcon-password", rconSecret,
+            "--server-adminlist", list("admins"), "--server-banlist", list("bans"),
+            ...(setting("whitelist", saved()) === true ? ["--use-server-whitelist", "--server-whitelist", list("whitelist")] : []),
+        ];
+        return {
+            message: `Starting Factorio ${release.version} with ${world}…`,
+            command: { executable: executableIn(await installDir()), args, cwd: data, env: {} },
+        };
+    }
+
     return {
         primaryProcessId: PROC, processIds: [PROC],
         backupExclude: ["install"],
@@ -233,8 +288,8 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
         },
         calls: async () => { const { sharedCalls } = await import("../../service/calls"); return { ...sharedCalls,
             readGameOptions: async (ctx) => { await loadOptions(); return ctx.state.gameSettings; },
-            writeGameOptions: async (ctx, { patch }) => {
-                if (local.busy) throw new Error("Wait for the Factorio operation to finish");
+            // locked while it runs: the server reads them only at its start, and setList goes by the saved whitelist
+            writeGameOptions: (ctx, { patch }) => exclusive(ctx, local, "Factorio", async () => {
                 if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("Options patch is required");
                 const current: Record<string, unknown> = {};
                 for (const option of options) if (option.kind !== "secret") current[option.id] = optionValue(option, saved());
@@ -250,7 +305,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
                 if (Object.keys(panel).length > 0) await ctx.updateSettings(panel);
                 await loadOptions();
                 return ctx.state.gameSettings;
-            },
+            }),
             factorioRelease: async () => ({ host: hostSupportHere(factorio), ...(await releaseStatus()), size: newestRelease.size }),
             factorioInstall: async () => { await install(); return true; },
             factorioStatus: async () => {
@@ -334,7 +389,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
                 players.start(true);
             } else {
                 // a server that stopped while Paperboard was closed left its secrets behind
-                await scrubPlayerData();
+                await removeRunSecrets();
             }
         },
         async beforeRemove() { if (local.busy) throw new Error("Wait for Factorio's current operation"); },
@@ -345,60 +400,16 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
             local.console.dispose();
         },
         async prepareLaunch() {
-            assertHost(factorio);
-            const release = await requireInstalled();
-            const password = await joinPassword.value();
-            const factorioToken = await token.value();
-            const problem = publicProblem(saved(), factorioToken);
-            if (problem) throw new Error(problem);
-            const data = await dataDir();
-            await fs.mkdir(savesDir(data), { recursive: true });
-
-            // the map a start plays: the one chosen, or a first one, made now
-            let world = activeName();
-            if (world === null) {
-                if ((await listWorlds(data, null)).length > 0) throw new Error("Choose the world to play in Worlds");
-                await createWorld(FIRST_WORLD, savedGeneration());
-                await ctx.updateSettings({ save: FIRST_WORLD });
-                world = FIRST_WORLD;
-            }
-            const file = saveFile(data, world);
-            if (!(await exists(file))) throw new Error(`The world ${world} is gone from the saves folder; choose another in Worlds`);
-            // the mods are matched to the map: loading a map without its mods would strip them from it as it saves
-            await tool(["--sync-mods", file], `match its mods to ${world}`, /^Mods synced$/);
-
-            const rconSecret = await rconPassword.ensure();
-            const rconPort = ctx.runPort("factorio-rcon", Number(saved().rconPort ?? DEFAULT_RCON_PORT));
-            const settingsFile = path.join(data, RUN_SETTINGS);
-            await writePrivate(settingsFile, JSON.stringify(serverSettings(saved(), { password, token: factorioToken }), null, 2));
-            connect(rconPort, rconSecret);
-            local.secrets = [rconSecret, password, factorioToken].filter(Boolean);
-            local.inGame = false;
-            local.saves = 0;
-            players.stop();
-
-            const list = (name: keyof typeof LIST_FILES) => lists().file(name);
-            const args = [
-                "-c", await configFile(),
-                "--start-server", file,
-                "--server-settings", settingsFile,
-                "--port", String(ctx.runPort(GAME, Number(setting("port", saved())))),
-                // the remote console answers this computer only
-                "--rcon-bind", `127.0.0.1:${rconPort}`, "--rcon-password", rconSecret,
-                "--server-adminlist", list("admins"), "--server-banlist", list("bans"),
-                ...(setting("whitelist", saved()) === true ? ["--use-server-whitelist", "--server-whitelist", list("whitelist")] : []),
-            ];
-            return {
-                message: `Starting Factorio ${release.version} with ${world}…`,
-                command: { executable: executableIn(await installDir()), args, cwd: data, env: {} },
-            };
+            // its tools run from install/ on the world: Worlds, uploads, installs and Files wait for them
+            if (local.busy) throw new Error("Wait for the Factorio operation to finish");
+            local.busy = true;
+            try { return await launch(); } finally { local.busy = false; }
         },
         async afterStop() {
             local.rcon?.close();
             local.rcon = null;
             local.inGame = false;
-            await fs.rm(path.join(await dataDir(), RUN_SETTINGS), { force: true });
-            await scrubPlayerData();
+            await removeRunSecrets();
         },
         isMutating: () => local.busy,
         // a big map takes a while to load; the console shows it working
@@ -466,7 +477,7 @@ export function factorioService(ctx: Server, run: ToolRunner = toolRunner(ctx)):
             name: "Factorio", processId: PROC, flag: () => local,
             announce: async () => { await rcon().exec("The server is stopping for a backup and will be back shortly."); },
             save,
-            clean: async () => { await fs.rm(path.join(await dataDir(), RUN_SETTINGS), { force: true }); await scrubPlayerData(); },
+            clean: removeRunSecrets,
             exitStamp: async () => String(local.saves),
         }),
     };
