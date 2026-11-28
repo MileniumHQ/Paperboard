@@ -547,6 +547,7 @@ const serverCalls: Omit<Handlers, ServersCallName> = {
     rustPlayers: game("rustPlayers"), rustKick: game("rustKick"), rustBan: game("rustBan"), rustUnban: game("rustUnban"),
     // Valheim's
     valheimSession: game("valheimSession"), valheimPlayers: game("valheimPlayers"), valheimList: game("valheimList"),
+    // Factorio's
     factorioRelease: game("factorioRelease"), factorioInstall: game("factorioInstall"), factorioStatus: game("factorioStatus"),
     factorioWorlds: game("factorioWorlds"), factorioWorld: game("factorioWorld"), factorioWorldDelete: game("factorioWorldDelete"),
     factorioWorldInspect: game("factorioWorldInspect"), factorioWorldImport: game("factorioWorldImport"), factorioWorldDiscard: game("factorioWorldDiscard"),
