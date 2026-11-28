@@ -23,6 +23,9 @@ type CreateEntry = (stored: StoredBot, hasToken: boolean) => BotEntry;
 // writes run one after another, each saving the list as it is then, so an
 // older write never lands after a newer one
 const writing = new SerialQueue();
+/** One change to a bot's saved fields at a time (its switch, its commands): each is made on what the last one left
+ * saved, so a failed save goes back to that and can't take a later change down with it. */
+export const changing = new SerialQueue();
 
 export function saveBots(): Promise<void> {
     const write = writing.run(async () => {

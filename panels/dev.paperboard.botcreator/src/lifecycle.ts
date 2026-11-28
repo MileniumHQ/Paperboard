@@ -4,7 +4,7 @@ import { secretsApi, errorMessage, problemsApi } from "@mileniumhq/paperapi";
 import { extractApplicationIdFromToken } from "./types";
 import { MAX_BOTS, PANEL_ID, isBotId, tokenName, type BotSummary, type DeleteBotResult } from "./bots";
 import { adding, bots, logFailure, publish, requireReadable, summary, type BotEntry } from "./registry";
-import { readToken, saveBots, takeNewToken } from "./persistence";
+import { changing, readToken, saveBots, takeNewToken } from "./persistence";
 import { tokenUser } from "./discord";
 import { botsChanged, createEntry, firePanelEvent, noteIdentity, noteOnline, registerBlocks } from "./blocksBridge";
 
@@ -40,18 +40,19 @@ async function follow(entry: BotEntry): Promise<void> {
 }
 
 export async function setEnabled(entry: BotEntry, enabled: boolean): Promise<void> {
-    if (entry.stored.enabled !== enabled) {
+    await changing.run(async () => {
+        if (entry.stored.enabled === enabled) return;
         entry.stored = { ...entry.stored, enabled };
         try {
             await saveBots();
         } catch (err) {
             // the switch goes back to what is saved, and says why; only the
-            // switch, so a change made meanwhile (a command, a rename) stays
+            // switch, so a change made meanwhile (a rename) stays
             entry.stored = { ...entry.stored, enabled: !enabled };
             throw err;
         }
         publish();
-    }
+    });
     await follow(entry);
 }
 

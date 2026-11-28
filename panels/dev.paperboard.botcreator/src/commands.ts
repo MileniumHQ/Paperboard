@@ -17,12 +17,8 @@ import {
     type CommandMutationResult,
 } from "./types";
 import { publish, requireReadable, type BotEntry } from "./registry";
-import { readToken, saveBots } from "./persistence";
-import { errorMessage, SerialQueue } from "@mileniumhq/paperapi";
-
-// one change at a time: each is made on the list the last one saved, so a
-// failed save can't take a later change down with it
-const changing = new SerialQueue();
+import { changing, readToken, saveBots } from "./persistence";
+import { errorMessage } from "@mileniumhq/paperapi";
 
 /**
  * The one way a bot's commands change: `change` makes the new list from the
