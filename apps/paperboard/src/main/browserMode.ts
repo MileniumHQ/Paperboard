@@ -65,7 +65,7 @@ function ensureBrowserHost(onServing: () => void): Promise<BrowserHost> {
             rendererDir: path.join(__dirname, "../renderer"),
             rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
             shell: shellServer<void>("browser", calls, { "renderer-log": logRendererMessage }),
-            servePanel: (computerId, panelId, pathname) => servePanelAsset(computerId, panelId, pathname, servedFrameLook()),
+            servePanel: (computerId, panelId, pathname) => servePanelAsset(computerId, panelId, pathname, servedFrameLook),
             panelFiles: {
                 stat: (args) => statPanelFileForBrowser(args, poolEndpoint),
                 read: (args) => readPanelFileForBrowser(args, poolEndpoint),

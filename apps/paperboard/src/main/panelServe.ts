@@ -67,13 +67,13 @@ async function readLocalFile(file: string): Promise<Buffer | null> {
 
 // Not found is a missing file; anything else (an unreadable file, a refused
 // credential, a computer that can't be reached) is a 500 or 502 that says why.
-// `look` is stamped on a panel document (main's appSettings servedFrameLook);
-// null leaves it to the shell's challenge
+// `look` is stamped on a panel document, and only read for one (main's
+// appSettings servedFrameLook); null leaves it to the shell's challenge
 export async function servePanelAsset(
     urlComp: string,
     panelId: string,
     pathname: string,
-    look: FrameLook | null,
+    look: () => FrameLook | null,
 ): Promise<Response> {
     try {
         // deliberately no fallback to active computer
@@ -124,7 +124,7 @@ export async function servePanelAsset(
             if (fileExt === ".html") {
                 const nonce = panelCspNonce();
                 headers["Content-Security-Policy"] = buildPanelCsp(nonce);
-                return new Response(await panelDocument(buffer.toString("utf8"), comp, cleanPanelId, nonce, look), { headers });
+                return new Response(await panelDocument(buffer.toString("utf8"), comp, cleanPanelId, nonce, look()), { headers });
             }
             return new Response(new Uint8Array(buffer), { headers });
         }
@@ -160,7 +160,7 @@ export async function servePanelAsset(
             const served = headerValue(res.headers["content-security-policy"]) ?? null;
             const nonce = panelCspNonce();
             headers["Content-Security-Policy"] = remotePanelHtmlCsp(served, nonce);
-            return new Response(await panelDocument(new TextDecoder().decode(buffer), comp, cleanPanelId, nonce, look), { headers });
+            return new Response(await panelDocument(new TextDecoder().decode(buffer), comp, cleanPanelId, nonce, look()), { headers });
         }
         return new Response(buffer, { headers });
     } catch (err: any) {

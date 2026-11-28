@@ -118,7 +118,7 @@ export function createShellInvokeHandlers(deps: ShellHandlerDeps): CallHandlers<
         "panel-listing-file": async ({ computerId, panelId, path: given }) => {
             const subpath = given.replace(/^\.?\/+/, "");
             if (!isListingFilePath(subpath)) throw new Error(`Not a listing file: ${subpath}`);
-            const res = await servePanelAsset(computerId, panelId, subpath, null);
+            const res = await servePanelAsset(computerId, panelId, subpath, () => null);
             if (!res.ok) throw new Error(`${subpath}: ${res.status} ${await res.text()}`);
             const bytes = Buffer.from(await res.arrayBuffer());
             if (bytes.byteLength > LISTING_FILE_MAX_BYTES) {

@@ -37,7 +37,7 @@ export function handleAppProtocols(rendererDir: string): void {
         const url = new URL(request.url);
         const scope = parsePanelHost(url.hostname);
         if (!scope) return new Response("Malformed panel URL: missing computer scope prefix", { status: 400 });
-        return servePanelAsset(scope.comp, scope.panelId, url.pathname, servedFrameLook());
+        return servePanelAsset(scope.comp, scope.panelId, url.pathname, servedFrameLook);
     });
     protocol.handle(SHELL_SCHEME, async (request: Request) => {
         const url = new URL(request.url);
