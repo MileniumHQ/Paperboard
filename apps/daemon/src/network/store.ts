@@ -312,7 +312,9 @@ export class RecordStore {
 
     /**
      * Takes no change from here on; resolves once the changes already
-     * queued are saved: a daemon stops only once it has.
+     * queued are saved. The daemon lets go of its data folder only after
+     * (core/folderClaim.ts), so a daemon started again at once never writes
+     * beside the last one's last writes.
      */
     close(): Promise<void> {
         if (!this.closed) {

@@ -19,6 +19,7 @@ import { writeFileAtomicSync } from "../core/storage";
 import { getDisplayHost } from "../core/util";
 import { DEFAULT_LISTEN_PORT } from "../cli/cli";
 import { getLocalDir, getPaperboardDir, ensurePrivateDir } from "../core/paths";
+import { claimDataFolder, FolderClaimedError, type FolderClaim } from "../core/folderClaim";
 import {
     craneHandshakePath, removeCraneHandshake,
     DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, isDaemonChallenge, daemonProof,
@@ -103,6 +104,8 @@ interface DaemonConfig {
     // computer's pinned identity. Plaintext exists only on loopback.
     tlsIdentity: TlsIdentity | null;
     roster: Roster;
+    /** this daemon's claim on its data folder (core/folderClaim.ts): ended once the roster is closed */
+    claim: FolderClaim;
     network: NetworkLinks;
     records: RecordStore;
     // the panels' and the shell's documents every computer holds
@@ -126,7 +129,9 @@ function writeCraneJson(file: string, port: number, token: string | null, startI
 // One daemon per data directory. A second one would overwrite crane.json,
 // hiding the first from every local client, and delete it on exit. Only a
 // daemon that proves it holds this folder's token counts: a stale crane.json
-// whose port another program now answers on owns nothing.
+// whose port another program now answers on owns nothing. The folder claim
+// (core/folderClaim.ts) is what stops two that start at once; this is asked
+// once it is held, for a daemon of a Paperboard before it, which takes none.
 async function refuseRunningDaemon(): Promise<void> {
     let status: Awaited<ReturnType<typeof readDaemonStatus>>;
     try {
@@ -143,6 +148,20 @@ async function refuseRunningDaemon(): Promise<void> {
     );
 }
 
+/** the data folder's claim; when another daemon holds it, which one, when its handshake says (read only: nothing is written without the claim) */
+async function claimFolder(): Promise<FolderClaim> {
+    try {
+        return await claimDataFolder();
+    } catch (err) {
+        if (!(err instanceof FolderClaimedError)) throw err;
+        const status = await readDaemonStatus().catch(() => null); // quiet: only names the daemon that holds the folder; the claim's own error is thrown either way
+        if (!status?.running) throw err;
+        throw new FolderClaimedError(
+            `A Paperboard server daemon is already running for ${status.dataDir}${status.pid !== undefined ? ` (PID ${status.pid})` : ""}. Stop it first, or start this one with another --data-dir.`,
+        );
+    }
+}
+
 export async function startPaperCraneServer(
     options: ServerOptions = {},
 ): Promise<ServerInstance> {
@@ -150,7 +169,17 @@ export async function startPaperCraneServer(
     if (options.noAuth && !isLoopbackHost(host)) {
         throw new Error(`--no-auth only runs on a loopback host, not ${host}`);
     }
-    await refuseRunningDaemon();
+    // the folder is this daemon's before anything in it is read or written: a second daemon started
+    // at the same moment stops here, with nothing written (core/folderClaim.ts)
+    const claim = await claimFolder();
+    try {
+        await refuseRunningDaemon();
+    } catch (err) {
+        await claim.releaseAfter(Promise.resolve());
+        throw err;
+    }
+    // what Paperboard can't guarantee for this folder, said where a person running it sees it
+    for (const limit of claim.limits) logger.warn(`[Paperboard Server] ${limit}`);
 
     // a rejection nobody handled must never kill the daemon wordlessly
     const g = globalThis as any;
@@ -166,57 +195,86 @@ export async function startPaperCraneServer(
     }
     // every daemon has its key, loopback-only too: it is who this computer
     // is in the roster, whether or not other computers can reach it yet
-    const localDir = ensurePrivateDir(getLocalDir());
-    const identity = loadOrCreateTlsIdentity(localDir);
-    const members = await RosterRecords.open(path.join(localDir, NETWORK_DIR), identity);
-    const roster = await Roster.open(localDir, identity, members);
+    let roster: Roster;
+    let members: RosterRecords;
+    let identity: TlsIdentity;
+    const localDir = getLocalDir();
     try {
-        // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
-        await importPairedComputers(localDir, roster);
+        ensurePrivateDir(localDir);
+        identity = loadOrCreateTlsIdentity(localDir);
+        members = await RosterRecords.open(path.join(localDir, NETWORK_DIR), identity);
+        roster = await Roster.open(localDir, identity, members);
     } catch (err) {
-        await roster.close();
-        throw new Error(`The paired computers couldn't be moved into the computer list (local/paired_computers.json is kept as it was, and the next start tries again): ${errorMessage(err)}`, { cause: err });
+        await claim.releaseAfter(Promise.resolve());
+        throw err;
     }
-    // what this computer is now, saved before anyone asks for the list
-    await roster.refreshSelfFacts().catch((err) => {
-        logger.error("[Paperboard Server] this computer's OS details couldn't be read; the computer list keeps the ones it had:", err); // quiet: the roster keeps the last details it read, and the next start reads them again
-    });
-    const config: DaemonConfig = {
-        options,
-        host,
-        noAuth,
-        headless: options.headless ?? false,
-        staticToken: options.staticToken ?? (noAuth ? null : crypto.randomBytes(24).toString("hex")),
-        tlsIdentity: isLoopbackHost(host) ? null : identity,
-        roster,
-        // a daemon on loopback only can't be dialed: it dials out
-        network: new NetworkLinks({ identity, roster, store: members.records, listening: !isLoopbackHost(host) }),
-        records: members.records,
-        shared: new SharedDocuments({ store: members.records, nameOf: (id) => roster.member(id)?.name }),
+    // from here on a start that fails closes what it opened, and the folder is free again: nothing throws past this without it
+    let shared: SharedDocuments | null = null;
+    const abandon = async (err: unknown): Promise<never> => {
+        shared?.close();
+        await claim.releaseAfter(roster.close());
+        throw err;
     };
+    let config: DaemonConfig;
+    try {
+        try {
+            // TODO(remove after v0.6): the desktop app's own list from 0.4 and before
+            await importPairedComputers(localDir, roster);
+        } catch (err) {
+            throw new Error(`The paired computers couldn't be moved into the computer list (local/paired_computers.json is kept as it was, and the next start tries again): ${errorMessage(err)}`, { cause: err });
+        }
+        // what this computer is now, saved before anyone asks for the list
+        await roster.refreshSelfFacts().catch((err) => {
+            logger.error("[Paperboard Server] this computer's OS details couldn't be read; the computer list keeps the ones it had:", err); // quiet: the roster keeps the last details it read, and the next start reads them again
+        });
+        shared = new SharedDocuments({ store: members.records, nameOf: (id) => roster.member(id)?.name });
+        config = {
+            options,
+            host,
+            noAuth,
+            headless: options.headless ?? false,
+            staticToken: options.staticToken ?? (noAuth ? null : crypto.randomBytes(24).toString("hex")),
+            tlsIdentity: isLoopbackHost(host) ? null : identity,
+            roster,
+            claim,
+            // a daemon on loopback only can't be dialed: it dials out
+            network: new NetworkLinks({ identity, roster, store: members.records, listening: !isLoopbackHost(host) }),
+            records: members.records,
+            shared,
+        };
+    } catch (err) {
+        return abandon(err);
+    }
 
     const port = options.port ?? DEFAULT_PORT;
     for (;;) {
+        let failure: any;
         try {
             return await listenOnce(config, port);
-        } catch (err: any) {
-            const inUse = err?.code === "EADDRINUSE" || /already in use|in use/i.test(err?.message || "");
-            if (inUse && (await killStalePaperCrane(port))) continue;
-            // this start is over: nothing reads the roster for it
-            config.shared.close();
-            await roster.close();
-            if (!inUse) throw err;
-            // Port is held by a foreign, non-PaperCrane application.
-            // The caller prints it (main.ts fatalCliError) or shows it
-            // (the desktop app): printing it here too said it twice
-            throw Object.assign(
+        } catch (err) {
+            failure = err;
+        }
+        const inUse = failure?.code === "EADDRINUSE" || /already in use|in use/i.test(failure?.message || "");
+        if (!inUse) return abandon(failure);
+        let freed: boolean;
+        try {
+            freed = await killStalePaperCrane(port);
+        } catch (err) {
+            return abandon(err);
+        }
+        if (freed) continue;
+        // Port is held by a foreign, non-PaperCrane application.
+        // The caller prints it (main.ts fatalCliError) or shows it
+        // (the desktop app): printing it here too said it twice
+        return abandon(
+            Object.assign(
                 new Error(
                     `Port ${port} is already in use by another application.\n` +
                     `  Run with --port <number> to choose a different port, or free up port ${port} first.`,
                 ),
                 { code: "EADDRINUSE", port },
-            );
-        }
+            ),
+        );
     }
 }
 
@@ -334,6 +392,25 @@ function daemonLifecycle(parts: DaemonParts) {
             else engine.killAllClients();
         }
     };
+    // The one way the data folder is let go, however the daemon stops: the
+    // links end at once, and a pull that is mid-write finishes its write and
+    // their last-seen times are saved; only then are the shared documents and
+    // the computer list closed, and once their last writes are saved the
+    // folder is free (core/folderClaim.ts). Whoever opens the folder again (an
+    // embedded daemon started right after) waits for it, so two never write
+    // one store.
+    let closing: Promise<void> | null = null;
+    const closeData = (): Promise<void> =>
+        (closing ??= config.claim.releaseAfter(
+            config.network
+                .stop()
+                .catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err))
+                .then(() => {
+                    try { config.shared.close(); }
+                    catch (err) { logger.error("[Paperboard Server] while stopping, closing the shared documents failed:", err); }
+                    return config.roster.close().catch((err) => logger.error("[Paperboard Server] while stopping, saving the computer list's last changes failed:", err));
+                }),
+        ));
     const onSignal = async () => {
         removeHandshake();
         leavingWorkloads = true;
@@ -342,13 +419,17 @@ function daemonLifecycle(parts: DaemonParts) {
             advertisement?.stop();
         } catch (err) { logger.warn("[Paperboard Server] the mDNS advertisement did not stop:", err); }
         await panelServices.stopAllServices();
-        // a pull mid-write finishes it before the process goes
-        await config.network.stop().catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err));
+        await closeData();
         removePidFile();
         process.exit(0);
     };
     let ended: Promise<void> = Promise.resolve();
-    const stop = (): Promise<void> => {
+    /**
+     * Stops the daemon. A daemon with a TUI ends its process once its data is
+     * closed, unless the stop is a start that failed (`exitAfter` false): that
+     * start rejects, and whoever started it says why.
+     */
+    const stop = (exitAfter = !config.noAuth && !config.headless): Promise<void> => {
         if (stopped) return ended;
         stopped = true;
         let handshakeFailure: unknown;
@@ -367,18 +448,8 @@ function daemonLifecycle(parts: DaemonParts) {
         // synchronous: an embedded daemon restarted right after
         // never overlaps the services of this one
         step("stopping panel services", () => panelServices.stopAll());
-        // The links end at once; a pull that is mid-write finishes its write
-        // and their last-seen times are saved, and only then are the shared
-        // documents and the computer list closed. The promise resolves after
-        // that: whoever opens this data folder again (an embedded daemon
-        // started right after) waits for it, so two never write one store.
-        ended = config.network.stop()
-            .catch((err) => logger.error("[Paperboard Server] while stopping, ending the links to the other computers failed:", err))
-            .then(async () => {
-                step("closing the shared documents", () => config.shared.close());
-                // resolves once the computer list's last writes are saved
-                await config.roster.close().catch((err) => logger.error("[Paperboard Server] while stopping, closing the computer list failed:", err));
-            });
+        // the data folder is let go as every stop lets it go: it resolves once it is free
+        ended = closeData();
         step("stopping the mDNS advertisement", () => {
             advertisement?.stop();
             advertisement = null;
@@ -392,7 +463,7 @@ function daemonLifecycle(parts: DaemonParts) {
             localServer?.close();
             server.close(() => {
                 // the process goes only once the record store is closed: a pull mid-write finishes it first
-                if (!config.noAuth && !config.headless) void ended.then(() => process.exit(0));
+                if (exitAfter) void ended.then(() => process.exit(0));
             });
         });
         if (handshakeFailure) throw handshakeFailure;
@@ -401,6 +472,7 @@ function daemonLifecycle(parts: DaemonParts) {
 
     return {
         stop,
+        stopped: () => stopped,
         // from here on the process's own end follows the policy above
         arm() {
             process.once("exit", onExit);
@@ -479,7 +551,30 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
         // ws re-emits bind errors, so handle them here too
         wss.on("error", onListenError);
 
+        // A start that fails once it is listening stops what it started, and rejects:
+        // whoever started it (the app's embedded daemon, the CLI) hears why, never waits
+        const failAfterListening = (err: unknown) => {
+            void Promise.resolve()
+                .then(() => lifecycle.stop(false))
+                .catch((stopErr) => logger.error("[Paperboard Server] stopping a start that failed didn't finish cleanly:", stopErr))
+                .then(() => reject(err));
+        };
+
         const onReady = (actualPort: number, localPort: number) => {
+            try {
+                ready(actualPort, localPort);
+            } catch (err) {
+                // before it is settled nothing has started: the attempt is only abandoned
+                if (!settled) {
+                    settled = true;
+                    abandon(err);
+                    return;
+                }
+                failAfterListening(err);
+            }
+        };
+
+        const ready = (actualPort: number, localPort: number) => {
             if (settled) return;
             // the handshake comes first: nothing starts behind a daemon
             // its own host cannot find
@@ -547,26 +642,6 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                 );
             }
 
-            if (noAuth || headless) {
-                console.log(
-                    `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${getDisplayHost(host)}:${actualPort}`,
-                );
-            } else {
-                // pairing opens only when asked: [p] in the TUI, or
-                // --start-pairing at launch. A daemon listening on the
-                // LAN never offers a pairing code on its own.
-                if (options.startPairing) {
-                    auth.startPairing();
-                }
-                new PaperCraneTui({
-                    host,
-                    port: actualPort,
-                    secure: tlsIdentity !== null,
-                    auth,
-                    onStop: lifecycle.stop,
-                }).start();
-            }
-
             // where the other computers dial this one, said by this one alone (nothing while only it can
             // reach itself), before the start is done: no write outlives a stop that follows
             const listensAt = tlsIdentity ? ownDial(host, actualPort) : null;
@@ -576,10 +651,24 @@ function listenOnce(config: DaemonConfig, port: number): Promise<ServerInstance>
                     logger.error("[Paperboard Server] where this computer listens couldn't be saved for the other computers; they dial it where they last reached it:", err); // quiet: the next start says it again
                 })
                 .then(() => {
-                    // links are taken and dialed once this daemon is the one listening
-                    config.network.start();
-                    resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: lifecycle.stop });
-                });
+                    // stopped while it was saying where it listens (an embedding app gave up): nothing more starts
+                    if (!lifecycle.stopped()) {
+                        // links are taken and dialed once this daemon is the one listening
+                        config.network.start();
+                        // the TUI last, once everything its stop ends is running
+                        if (noAuth || headless) {
+                            console.log(`[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${getDisplayHost(host)}:${actualPort}`);
+                        } else {
+                            // pairing opens only when asked: [p] in the TUI, or
+                            // --start-pairing at launch. A daemon listening on the
+                            // LAN never offers a pairing code on its own.
+                            if (options.startPairing) auth.startPairing();
+                            new PaperCraneTui({ host, port: actualPort, secure: tlsIdentity !== null, auth, onStop: () => lifecycle.stop() }).start();
+                        }
+                    }
+                    resolve({ server, wss, engine, auth, records: config.records, roster: config.roster, network: config.network, port: actualPort, localPort, host, stop: () => lifecycle.stop() });
+                })
+                .catch(failAfterListening);
         };
 
         const onListening = () => {
