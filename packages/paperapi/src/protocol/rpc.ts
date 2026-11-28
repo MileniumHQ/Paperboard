@@ -117,7 +117,7 @@ export interface RosterDial {
  * daemon's TLS key, never by an address. Nothing in it is a secret.
  */
 export interface RosterMember {
-    /** derived from the key its pinned certificate holds (network/memberId.ts) */
+    /** the hash of the key its pinned certificate holds (the daemon's network/memberId.ts) */
     id: string;
     /** the name the person gave it; absent until it is given one */
     name?: string;

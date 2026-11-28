@@ -55,8 +55,11 @@
 //
 // ─── Disk ────────────────────────────────────────────────────────────────────
 //
-//   <dir>/meta.json            {"log", "reservedSeq"}: sequence numbers below
-//                              reservedSeq may have been handed out
+//   <dir>/meta.json            {"log", "reservedSeq", "owner"}: sequence
+//                              numbers below reservedSeq may have been handed
+//                              out; owner is the member id whose key signs
+//                              and unwraps here (a store is one key's: opened
+//                              with another it throws RecordStoreOwnerError)
 //   <dir>/spaces/<hex>.json    {"records": [{"seq", "record"}]} per space,
 //                              its name as hex of UTF-8 (case-proof filenames)
 //   <dir>/held.json            {"records": [record]}
@@ -87,13 +90,13 @@ import { writeFileAtomic, writeJsonAtomicSync } from "../core/storage";
 import type { TlsIdentity } from "../security/tlsIdentity";
 import {
     KEYS_SPACE,
+    ROSTER_SPACE,
     type NetworkKey,
     type RecordHeader,
     type WireRecord,
     checkId,
     checkSpace,
     compareRecords,
-    fingerprintOf,
     headerOf,
     keysRecordId,
     newNetworkKey,
@@ -106,6 +109,7 @@ import {
     verifyRecord,
     wrapKeys,
 } from "./record";
+import { isMemberId, memberIdOf } from "./memberId";
 
 /**
  * How many authors' versions of one record are kept. A network is a
@@ -132,7 +136,7 @@ const MAX_COUNTER = 0xffff_ffff;
 
 /** Who may write, injected by the roster. */
 export interface Membership {
-    /** The certificate (PEM) of the computer with this fingerprint, or null when it isn't known. */
+    /** The certificate (PEM) of the computer with this member id, or null when it isn't known. The store checks its key hashes to the id. */
     certFor(author: string): string | null;
     /**
      * Whether a record with this header may be accepted, given what the
@@ -206,6 +210,18 @@ export interface RecordMeta {
 export type StoredRecord = RecordMeta &
     ({ state: "value"; value: unknown } | { state: "deleted" } | { state: "unreadable"; error: string });
 
+/** The store in this folder belongs to another key: its keys can't be opened and its records weren't signed here. */
+export class RecordStoreOwnerError extends Error {
+    constructor(
+        readonly dir: string,
+        readonly owner: string,
+        self: string,
+    ) {
+        super(`The record store in ${dir} belongs to computer ${owner}, not to this daemon's key (${self}).`);
+        this.name = "RecordStoreOwnerError";
+    }
+}
+
 export class RecordStoreCorruptError extends Error {
     constructor(file: string, reason: string) {
         super(
@@ -226,7 +242,8 @@ type Verdict = "accepted" | "known" | "held" | { reason: Refusal; message: strin
 const spaceFile = (space: string) => `${Buffer.from(space, "utf8").toString("hex")}.json`;
 
 export class RecordStore {
-    readonly fingerprint: string;
+    /** this computer's member id: the author of what it writes */
+    readonly self: string;
     private readonly dir: string;
     private readonly spacesDir: string;
     private readonly privateKey: crypto.KeyObject;
@@ -262,7 +279,7 @@ export class RecordStore {
         this.dir = options.dir;
         this.spacesDir = path.join(options.dir, "spaces");
         this.privateKey = crypto.createPrivateKey(options.identity.key);
-        this.fingerprint = fingerprintOf(options.identity.cert);
+        this.self = memberIdOf(options.identity.cert);
         this.membership = options.membership;
         this.now = options.now ?? Date.now;
     }
@@ -380,7 +397,7 @@ export class RecordStore {
         return this.change(() => {
             const epoch = Math.max(-1, ...[...this.keyring.values()].map((k) => k.epoch)) + 1;
             const key = newNetworkKey(epoch);
-            if (!memberCerts.some((c) => fingerprintOf(c) === this.fingerprint)) {
+            if (!memberCerts.some((c) => memberIdOf(c) === this.self)) {
                 throw new Error("A new key epoch must include this computer, or it couldn't read what it writes");
             }
             this.publishKeys(memberCerts, [...this.keyring.values(), key]);
@@ -562,9 +579,10 @@ export class RecordStore {
     private writeLocal(space: string, id: string, value: unknown, deleted: boolean): StoredRecord {
         const key = this.writeKey();
         if (!key) throw new Error("This computer holds no network key yet, so it can't write records");
-        const header: RecordHeader = { space, id, ...this.tick(), author: this.fingerprint, deleted, epoch: key.epoch, key: key.id };
+        const header: RecordHeader = { space, id, ...this.tick(), author: this.self, deleted, epoch: key.epoch, key: key.id };
         const body = deleted ? Buffer.alloc(0) : sealBody(header, key, value);
-        const record = signRecord(header, body, this.privateKey);
+        // held to the rules every other computer checks it by
+        const record = parseWireRecord(signRecord(header, body, this.privateKey));
         const digest = recordDigest(record);
         const verdict = this.consider(record, digest, "local");
         if (verdict !== "accepted") throw new Error(`This computer's write of ${space}/${id} was not accepted (${JSON.stringify(verdict)})`);
@@ -573,19 +591,19 @@ export class RecordStore {
 
     private publishKeys(memberCerts: string[], keys: NetworkKey[]): void {
         const epoch = Math.max(...keys.map((k) => k.epoch));
-        for (const cert of new Map(memberCerts.map((c) => [fingerprintOf(c), c])).values()) {
+        for (const [recipient, cert] of new Map(memberCerts.map((c) => [memberIdOf(c), c]))) {
             const header: RecordHeader = {
                 space: KEYS_SPACE,
-                id: keysRecordId(fingerprintOf(cert), this.fingerprint),
+                id: keysRecordId(recipient, this.self),
                 ...this.tick(),
-                author: this.fingerprint,
+                author: this.self,
                 deleted: false,
                 epoch,
                 key: "",
             };
             const record = signRecord(header, wrapKeys(header, cert, keys), this.privateKey);
             const verdict = this.consider(record, recordDigest(record), "local");
-            if (verdict !== "accepted") throw new Error(`This computer's keys for ${fingerprintOf(cert)} were not accepted (${JSON.stringify(verdict)})`);
+            if (verdict !== "accepted") throw new Error(`This computer's keys for ${recipient} were not accepted (${JSON.stringify(verdict)})`);
         }
     }
 
@@ -625,7 +643,7 @@ export class RecordStore {
             const cert = this.membership.certFor(record.author);
             if (cert === null) return this.hold(record, digest, origin);
             // the roster's own mistake, not the record's: fail the whole call
-            if (fingerprintOf(cert) !== record.author) throw new Error(`The roster's certificate for ${record.author} is another computer's`);
+            if (memberIdOf(cert) !== record.author) throw new Error(`The roster's certificate for ${record.author} is another computer's`);
             if (!verifyRecord(record, cert)) {
                 return { reason: "bad-signature", message: `${record.space}/${record.id} isn't signed by ${record.author}` };
             }
@@ -669,7 +687,7 @@ export class RecordStore {
     private rebuildKeyring(before: Set<string>): void {
         this.keyring = new Map();
         this.keyErrors = new Map();
-        const mine = `${this.fingerprint}/`;
+        const mine = `${this.self}/`;
         for (const [id, versions] of this.spaces.get(KEYS_SPACE) ?? []) {
             if (!id.startsWith(mine)) continue;
             try {
@@ -713,7 +731,7 @@ export class RecordStore {
         if (this.cursorsDirty) await writeFileAtomic(path.join(this.dir, "cursors.json"), JSON.stringify(this.cursors));
         if (this.nextSeq > this.reservedSeq) {
             this.reservedSeq = this.nextSeq + SEQ_BLOCK;
-            await writeFileAtomic(path.join(this.dir, "meta.json"), JSON.stringify({ log: this.log, reservedSeq: this.reservedSeq }));
+            await writeFileAtomic(path.join(this.dir, "meta.json"), JSON.stringify({ log: this.log, reservedSeq: this.reservedSeq, owner: this.self }));
         }
         // A record moving between held and a space is written where it
         // lands before it leaves where it was: held is first saved with
@@ -781,12 +799,13 @@ export class RecordStore {
         if (meta === null) {
             this.log = crypto.randomBytes(16).toString("hex");
             this.reservedSeq = 0;
-            writeJsonAtomicSync(metaFile, { log: this.log, reservedSeq: 0 });
+            writeJsonAtomicSync(metaFile, { log: this.log, reservedSeq: 0, owner: this.self });
         } else {
-            const m = meta as { log?: unknown; reservedSeq?: unknown };
-            if (typeof m.log !== "string" || !/^[0-9a-f]{32}$/.test(m.log) || !Number.isSafeInteger(m.reservedSeq) || (m.reservedSeq as number) < 0) {
-                throw new RecordStoreCorruptError(metaFile, "its log id or sequence is missing");
+            const m = meta as { log?: unknown; reservedSeq?: unknown; owner?: unknown };
+            if (typeof m.log !== "string" || !/^[0-9a-f]{32}$/.test(m.log) || !Number.isSafeInteger(m.reservedSeq) || (m.reservedSeq as number) < 0 || !isMemberId(m.owner)) {
+                throw new RecordStoreCorruptError(metaFile, "its log id, sequence or owner is missing");
             }
+            if (m.owner !== this.self) throw new RecordStoreOwnerError(this.dir, m.owner, this.self);
             this.log = m.log;
             this.reservedSeq = m.reservedSeq as number;
         }
@@ -855,9 +874,11 @@ function isCursor(c: unknown): c is ChangeCursor {
     return typeof log === "string" && log.length > 0 && Number.isSafeInteger(after) && (after as number) >= 0;
 }
 
+// "@keys" is the store's own (createEpoch, shareKeys); "@roster" is read and
+// written here like any space, by the roster alone (record.ts)
 function checkOwnSpace(space: string): void {
     checkSpace(space);
-    if (space.startsWith("@")) throw new Error(`${space} belongs to the record store itself`);
+    if (space.startsWith("@") && space !== ROSTER_SPACE) throw new Error(`${space} belongs to the record store itself`);
 }
 
 function count(result: ApplyResult, verdict: Verdict): void {

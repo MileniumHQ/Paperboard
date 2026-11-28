@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseHomeLayout } from "../../../src/renderer/src/lib/homeLayout";
-import { memberIdOf } from "daemon/network/roster";
+import { memberIdOf } from "daemon/network/memberId";
 import { BUILD_TIMEOUT_MS, buildApp, buildCrane, type BuiltApp, type BuiltCrane } from "./support/build";
 import { CraneSocket, startCrane, WAIT_MS } from "./support/crane";
 import { launchElectron, SHELL, shellReady } from "./support/electron";

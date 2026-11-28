@@ -8,7 +8,6 @@
 // (rosterStore.ts). The pairing token this computer holds for a member and
 // the ids an older Paperboard gave members are this computer's alone
 // (rosterPrivate.ts).
-import * as crypto from "crypto";
 import * as os from "os";
 import * as path from "path";
 import { logger } from "../core/logger";
@@ -17,19 +16,11 @@ import { errorMessage } from "@mileniumhq/paperapi/errors";
 import type { RosterDial, RosterFacts, RosterMember, RosterView } from "@mileniumhq/paperapi/protocol";
 import { readDial, readFacts, RosterFile, ROSTER_FILE, type RosterStore } from "./rosterStore";
 import { RosterPrivate, ROSTER_PRIVATE_FILE } from "./rosterPrivate";
+import { memberIdOf } from "./memberId";
 
 /** how the app and panels name this computer; never stored as an id */
 export const LOCAL_COMPUTER_ID = "local";
 const COMPUTER_NAME_MAX = 64;
-// hex of the first 160 bits of the key's SHA-256: one DNS label (a panel's
-// panel://<computer>.<panel> origin), and far past any collision
-const MEMBER_ID_LENGTH = 40;
-
-/** The member id of the computer whose daemon serves this certificate: the hash of the key it holds. */
-export function memberIdOf(certPem: string): string {
-    const key = new crypto.X509Certificate(certPem).publicKey.export({ type: "spki", format: "der" });
-    return crypto.createHash("sha256").update(key).digest("hex").slice(0, MEMBER_ID_LENGTH);
-}
 
 /** every address a computer is dialed at, its .local name first */
 export function dialHosts(dial: RosterDial): string[] {

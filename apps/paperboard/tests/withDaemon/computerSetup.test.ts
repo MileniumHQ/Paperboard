@@ -7,7 +7,7 @@ import { ComputerSetupJob, type ComputerSetupDeps } from "../../src/main/compute
 import { openSsh } from "../../src/main/computerSetup/ssh";
 import { readTlsCert } from "daemon/security/tlsIdentity";
 import { certFingerprint } from "daemon/security/pinnedTls";
-import { memberIdOf } from "daemon/network/roster";
+import { memberIdOf } from "daemon/network/memberId";
 import type { ComputerSetupState } from "../../src/shared/shellContract";
 import { craneBinary, startCrane, type CraneProcess } from "testkit/crane";
 import { dataDir, listTree, restoreEnv, tempDir } from "testkit/fs";

@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import connectionPool, { ConnectionPool } from "../../src/main/communication/papercrane/ConnectionPool";
 import { createShellInvokeHandlers } from "../../src/main/communication/shellHandlers";
-import { memberIdOf } from "daemon/network/roster";
+import { memberIdOf } from "daemon/network/memberId";
 import { createTlsIdentity } from "daemon/security/tlsIdentity";
 import { dataDir, restoreEnv } from "testkit/fs";
 import { TEST_TIMEOUT_MS, within } from "testkit/wait";

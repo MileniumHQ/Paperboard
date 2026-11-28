@@ -7,7 +7,6 @@ import {
 	KEYS_SPACE,
 	type RecordHeader,
 	type WireRecord,
-	fingerprintOf,
 	headerOf,
 	keysRecordId,
 	newNetworkKey,
@@ -16,6 +15,7 @@ import {
 	signRecord,
 	wrapKeys,
 } from "../src/network/record";
+import { memberIdOf } from "../src/network/memberId";
 import {
 	FUTURE_TOLERANCE_MS,
 	MAX_HELD,
@@ -23,6 +23,7 @@ import {
 	type Membership,
 	RecordStore,
 	RecordStoreCorruptError,
+	RecordStoreOwnerError,
 } from "../src/network/store";
 import { createTlsIdentity, type TlsIdentity } from "../src/security/tlsIdentity";
 import type { ChangeBatch, ChangeCursor, RecordSource } from "../src/network/store";
@@ -50,7 +51,7 @@ class Roster implements Membership {
 		return this.certs.has(header.author) && (removed === undefined || header.wall < removed);
 	}
 	know(...computers: Computer[]): this {
-		for (const c of computers) this.certs.set(c.fp, c.identity.cert);
+		for (const c of computers) this.certs.set(c.id, c.identity.cert);
 		return this;
 	}
 }
@@ -58,7 +59,7 @@ class Roster implements Membership {
 interface Computer {
 	name: string;
 	identity: TlsIdentity;
-	fp: string;
+	id: string;
 	dir: string;
 	roster: Roster;
 	offset: number;
@@ -74,7 +75,7 @@ function computer(name: string, roster = new Roster(), identity = createTlsIdent
 	const c = {
 		name,
 		identity,
-		fp: fingerprintOf(identity.cert),
+		id: memberIdOf(identity.cert),
 		dir: newDir(name),
 		roster,
 		offset: 0,
@@ -200,11 +201,11 @@ describe("records converge", () => {
 		for (const comp of computers.slice(0, 3)) expect(snapshot(comp.store, "notes", ["x", "y"])).toEqual(first as never);
 		expect(a.store.get("notes", "x")).toBeNull();
 		expect(a.store.versions("notes", "x").map((v) => [v.author, v.state])).toEqual([
-			[c.fp, "deleted"],
-			...[a, b].sort((p, q) => (p.fp < q.fp ? 1 : -1)).map((p) => [p.fp, "value"]),
+			[c.id, "deleted"],
+			...[a, b].sort((p, q) => (p.id < q.id ? 1 : -1)).map((p) => [p.id, "value"]),
 		]);
 		// a and b wrote y at the same clock: the author that sorts last wins
-		const yWinner = a.fp > b.fp ? { by: "a" } : "deleted";
+		const yWinner = a.id > b.id ? { by: "a" } : "deleted";
 		expect(value(a.store, "notes", "y") ?? "deleted").toEqual(yWinner);
 	});
 
@@ -227,7 +228,7 @@ describe("records converge", () => {
 
 	test("at the same clock the author that sorts last wins, whatever the digests", async () => {
 		const [a, b] = await network("a", "b");
-		const last = a.fp > b.fp ? a : b;
+		const last = a.id > b.id ? a : b;
 		for (let i = 0; i < 16; i++) {
 			wall = T0 + 1000 + i;
 			await a.store.put("notes", `k${i}`, "a");
@@ -237,7 +238,7 @@ describe("records converge", () => {
 		for (let i = 0; i < 16; i++) {
 			const [winner, loser] = a.store.versions("notes", `k${i}`);
 			expect([winner.wall, winner.counter]).toEqual([loser.wall, loser.counter]);
-			expect(winner.author).toBe(last.fp);
+			expect(winner.author).toBe(last.id);
 		}
 	});
 
@@ -274,7 +275,7 @@ describe("records that aren't the network's are refused", () => {
 		const { a, b, record } = await fromB();
 		const mallory = createTlsIdentity();
 		const forged = signRecord({ ...headerOf(record), counter: 1 }, Buffer.from(record.body, "base64"), crypto.createPrivateKey(mallory.key));
-		expect(forged.author).toBe(b.fp);
+		expect(forged.author).toBe(b.id);
 		const result = await a.store.apply([forged]);
 		expect(result.refused.map((r) => r.reason)).toEqual(["bad-signature"]);
 		expect(a.store.get("notes", "x")).toBeNull();
@@ -301,14 +302,46 @@ describe("records that aren't the network's are refused", () => {
 
 	test("a malformed record names what is wrong with it", async () => {
 		const { a, record } = await fromB();
-		const result = await a.store.apply([null, { ...record, v: 2 }, { ...record, author: "b" }, { ...record, space: "@roster" }, { ...record, sig: "!!" }]);
-		expect(result.refused.map((r) => r.reason)).toEqual(["malformed", "malformed", "malformed", "malformed", "malformed"]);
+		const result = await a.store.apply([
+			null,
+			{ ...record, v: 2 },
+			{ ...record, author: "b" },
+			// the certificate's SHA-256 fingerprint is no member id
+			{ ...record, author: crypto.createHash("sha256").update(record.author).digest("hex") },
+			{ ...record, space: "@other" },
+			{ ...record, space: "@roster" },
+			{ ...record, sig: "!!" },
+		]);
+		expect(result.refused.map((r) => r.reason)).toEqual(Array(7).fill("malformed"));
 		expect(result.refused[1].message).toContain("Unknown record version");
+		expect(result.refused[4].message).toContain("Unknown reserved space");
+		expect(result.refused[5].message).toContain("must be a member id");
+	});
+
+	test("the certificate handed back for an author must hold the key the author's id names", async () => {
+		const { a, b, record } = await fromB();
+		a.roster.certs.set(b.id, createTlsIdentity().cert);
+		await expect(a.store.apply([record])).rejects.toThrow(`The roster's certificate for ${b.id} is another computer's`);
+		expect(a.store.get("notes", "x")).toBeNull();
+		a.roster.know(b);
+		expect((await a.store.apply([record])).accepted).toBe(1);
+	});
+
+	test("only the roster's own space and ordinary ones are written through the store; its key records are its own", async () => {
+		const [a] = await network("a");
+		wall = T0 + 1000;
+		await expect(a.store.put(KEYS_SPACE, keysRecordId(a.id, a.id), 1)).rejects.toThrow("belongs to the record store itself");
+		await expect(a.store.put("@other", "x", 1)).rejects.toThrow("belongs to the record store itself");
+		// a roster record is named by the member it is about, here as on every other computer
+		await expect(a.store.put("@roster", "not-a-member", 1)).rejects.toThrow("must be a member id");
+		expect(a.store.get("@roster", "not-a-member")).toBeNull();
+		await a.store.put("@roster", a.id, { name: "A" });
+		expect(value(a.store, "@roster", a.id)).toEqual({ name: "A" });
 	});
 
 	test("a record from a computer that isn't a member waits, and is admitted once it is one", async () => {
 		const { a, b, record } = await fromB();
-		a.roster.certs.delete(b.fp);
+		a.roster.certs.delete(b.id);
 		const result = await a.store.apply([record]);
 		expect(result.held).toBe(1);
 		expect(a.store.get("notes", "x")).toBeNull();
@@ -335,7 +368,7 @@ describe("records that aren't the network's are refused", () => {
 		await c.store.put("notes", "x", "c, after its removal");
 		// b hears of the write before the removal, a after it
 		await b.store.pull("c", c.store);
-		for (const comp of [a, b]) comp.roster.removedFrom.set(c.fp, T0 + 2000);
+		for (const comp of [a, b]) comp.roster.removedFrom.set(c.id, T0 + 2000);
 		await a.store.pull("c", c.store);
 		expect(value(a.store, "notes", "x")).toBe("a, before");
 		expect(value(b.store, "notes", "x")).toBe("c, after its removal");
@@ -371,7 +404,7 @@ describe("records that aren't the network's are refused", () => {
 
 	test("this computer can't write once the network no longer admits it", async () => {
 		const [a] = await network("a", "b");
-		a.roster.certs.delete(a.fp);
+		a.roster.certs.delete(a.id);
 		await expect(a.store.put("notes", "x", 1)).rejects.toThrow("the network doesn't admit it");
 		expect(a.store.get("notes", "x")).toBeNull();
 	});
@@ -391,7 +424,7 @@ async function removal(...names: string[]): Promise<{ a: Computer; rest: Compute
 }
 
 async function learnRemoval(c: Computer, removed: Computer): Promise<void> {
-	c.roster.removedFrom.set(removed.fp, T0 + 5000);
+	c.roster.removedFrom.set(removed.id, T0 + 5000);
 	await c.store.readmit();
 }
 
@@ -441,7 +474,7 @@ describe("a removal converges", () => {
 			);
 			let someoneKeptY = false;
 			for (const { c, learn } of steps) {
-				if (learn && !c.roster.removedFrom.has(a.fp)) {
+				if (learn && !c.roster.removedFrom.has(a.id)) {
 					// X can never come in after this, so whoever still has Y keeps it
 					if (value(c.store, "p", "doc") === "Y") someoneKeptY = true;
 					await learnRemoval(c, a);
@@ -481,12 +514,12 @@ describe("a removal converges", () => {
 		// the sixteen newer ones push it out
 		await s2.store.pull(oldest.name, oldest.store);
 		await s1.store.pull("s2", s2.store);
-		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.fp);
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.id);
 		for (const w of newer) await s1.store.pull(w.name, w.store);
-		expect(s1.store.versions("p", "doc").map((v) => v.author)).not.toContain(oldest.fp);
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).not.toContain(oldest.id);
 
 		const removeRefused = async (c: Computer) => {
-			c.roster.removedFrom.set(refused.fp, T0 + 1500);
+			c.roster.removedFrom.set(refused.id, T0 + 1500);
 			await c.store.readmit();
 		};
 		await removeRefused(s1);
@@ -494,7 +527,7 @@ describe("a removal converges", () => {
 		for (const w of writers) await s2.store.pull(w.name, w.store);
 		await syncAll([s1, s2]);
 		expect(snapshot(s1.store, "p", ["doc"])).toEqual(snapshot(s2.store, "p", ["doc"]));
-		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.fp);
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.id);
 	});
 
 	test("a pull that was running when readmit() forgot the cursors starts over instead of saving its old one", async () => {
@@ -534,7 +567,7 @@ describe("a full held list", () => {
 			id: `r${i}`,
 			wall: T0,
 			counter: 0,
-			author: fingerprintOf(strangers[i % strangers.length].cert),
+			author: memberIdOf(strangers[i % strangers.length].cert),
 			deleted: true,
 			epoch: 0,
 			key: "0000000000000000",
@@ -544,14 +577,14 @@ describe("a full held list", () => {
 		expect((await a.store.apply(flood)).held).toBe(MAX_HELD);
 
 		wall = T0 + 1000;
-		a.roster.certs.delete(b.fp);
+		a.roster.certs.delete(b.id);
 		await b.store.put("notes", "x", "kept later");
 		await expect(a.store.pull("b", b.store)).rejects.toThrow(`1 records from b weren't kept: ${MAX_HELD} records already wait to be admitted`);
 		await expect(a.store.pull("b", b.store)).rejects.toThrow("weren't kept");
 
 		// once the strangers are known their forgeries are refused, held drains, and the pull takes what it skipped
 		a.roster.know(b);
-		for (const s of strangers) a.roster.certs.set(fingerprintOf(s.cert), s.cert);
+		for (const s of strangers) a.roster.certs.set(memberIdOf(s.cert), s.cert);
 		expect((await a.store.readmit()).refused.length).toBe(MAX_HELD);
 		expect(a.store.heldCount).toBe(0);
 		expect((await a.store.pull("b", b.store)).accepted).toBe(1);
@@ -721,7 +754,7 @@ describe("network keys", () => {
 
 	test("a key record can't carry a key for a later epoch than its header says, which is what the roster judged", async () => {
 		const [a, b] = await network("a", "b");
-		const header: RecordHeader = { space: KEYS_SPACE, id: keysRecordId(a.fp, b.fp), wall: T0 + 1000, counter: 0, author: b.fp, deleted: false, epoch: 0, key: "" };
+		const header: RecordHeader = { space: KEYS_SPACE, id: keysRecordId(a.id, b.id), wall: T0 + 1000, counter: 0, author: b.id, deleted: false, epoch: 0, key: "" };
 		const sneaky = signRecord(header, wrapKeys(header, a.identity.cert, [newNetworkKey(5)]), crypto.createPrivateKey(b.identity.key));
 		expect((await a.store.apply([sneaky])).accepted).toBe(1);
 		const keys = a.store.networkKeys();
@@ -758,7 +791,7 @@ describe("on disk", () => {
 		const [a, b] = await network("a", "b");
 		wall = T0 + 1000;
 		await b.store.put("notes", "x", "moved");
-		a.roster.certs.delete(b.fp);
+		a.roster.certs.delete(b.id);
 		await a.store.pull("b", b.store);
 		const heldFile = path.join(a.dir, "held.json");
 		const heldBefore = fs.readFileSync(heldFile, "utf8");
@@ -796,9 +829,9 @@ describe("on disk", () => {
 		await a.store.put("notes", "x", 1);
 		await b.store.pull("a", a.store);
 		// x, the newest record a has, goes back to held
-		a.roster.removedFrom.set(a.fp, T0 + 500);
+		a.roster.removedFrom.set(a.id, T0 + 500);
 		await a.store.readmit();
-		a.roster.removedFrom.delete(a.fp);
+		a.roster.removedFrom.delete(a.id);
 		a.reopen();
 		wall = T0 + 2000;
 		await a.store.put("notes", "y", 2);
@@ -821,6 +854,18 @@ describe("on disk", () => {
 		// a record that parses but isn't one is damage too
 		fs.writeFileSync(path.join(a.dir, "held.json"), JSON.stringify({ records: [{ v: 1 }] }));
 		expect(() => a.reopen()).toThrow(RecordStoreCorruptError);
+	});
+
+	test("a store is one key's: opened with another, it refuses and changes nothing", async () => {
+		const [a] = await network("a");
+		const files = () => fs.readdirSync(a.dir, { recursive: true }).map(String).sort().map((f) => [f, fs.statSync(path.join(a.dir, f)).isFile() ? fs.readFileSync(path.join(a.dir, f), "utf8") : null]);
+		const before = files();
+		const stranger = createTlsIdentity();
+		expect(() => RecordStore.open({ dir: a.dir, identity: stranger, membership: a.roster })).toThrow(RecordStoreOwnerError);
+		expect(() => RecordStore.open({ dir: a.dir, identity: stranger, membership: a.roster })).toThrow(`belongs to computer ${a.id}`);
+		expect(files()).toEqual(before);
+		a.reopen();
+		expect(a.store.networkKeys().current?.epoch).toBe(0);
 	});
 });
 
@@ -855,6 +900,8 @@ describe("the record format", () => {
 			body,
 		]);
 		const publicKey = new crypto.X509Certificate(a.identity.cert).publicKey;
+		// the author is the first 20 bytes of SHA-256 over the public key's SubjectPublicKeyInfo DER, in lowercase hex
+		expect(r.author).toBe(crypto.createHash("sha256").update(publicKey.export({ type: "spki", format: "der" })).digest().subarray(0, 20).toString("hex"));
 		expect(crypto.verify("sha256", signed, { key: publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(r.sig, "base64"))).toBe(true);
 		expect(recordDigest(r)).toBe(crypto.createHash("sha256").update(signed).digest("hex"));
 		// WebCrypto, which a non-Node client would use, checks it too

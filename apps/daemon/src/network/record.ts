@@ -5,15 +5,16 @@
 //
 // ─── Fields ──────────────────────────────────────────────────────────────────
 //
-//   space    namespace, 1-64 of [A-Za-z0-9._:@-]; "@" opens the spaces the
-//            store itself owns ("@keys")
+//   space    namespace, 1-64 of [A-Za-z0-9._:@-]; "@" opens the network's
+//            own spaces (below), and no other space may start with it
 //   id       the record within its space, 1-512 bytes of well-formed UTF-8
 //   wall     hybrid logical clock, milliseconds since the Unix epoch,
 //            0 ≤ wall ≤ 2^53 - 1
 //   counter  hybrid logical clock, the tie counter, 0 ≤ counter ≤ 2^32 - 1
-//   author   the authoring computer: the SHA-256 fingerprint of its TLS
-//            certificate's DER, as 32 uppercase hex pairs joined by ":"
-//            (Node's X509Certificate.fingerprint256)
+//   author   the authoring computer's member id: the first 20 bytes of
+//            SHA-256 over its TLS public key as SubjectPublicKeyInfo DER, as
+//            40 lowercase hex characters (memberId.ts). It names the key, so
+//            a certificate reissued for the same key signs as the same author.
 //   deleted  true for a delete; a delete has an empty body
 //   epoch    the network key's generation the body is written under,
 //            0 ≤ epoch ≤ 2^32 - 1
@@ -47,9 +48,24 @@
 //   sig = ECDSA P-256 with SHA-256 over `signed`, in IEEE P1363 form (r ‖ s,
 //   64 bytes): what WebCrypto produces. The key is the author's TLS key.
 //
+//   A record verifies when `sig` verifies under the public key of a
+//   certificate whose key hashes to `author` (memberId.ts): a certificate
+//   handed over for an author is checked to be that author's, never trusted
+//   for being handed over.
+//
 //   A record's identity is SHA-256(signed): its digest. Two copies with the
 //   same digest are the same record, whatever their signature bytes (ECDSA
 //   signatures are malleable).
+//
+// ─── The network's own spaces ────────────────────────────────────────────────
+//
+//   "@keys"    network keys carried to one computer (Body, below). Its id is
+//              <recipient's member id>/<author's member id>; never deleted;
+//              its key id is empty.
+//   "@roster"  one record per computer of the network: its id is that
+//              computer's member id. Otherwise like any space (encrypted,
+//              deletable); the body's value is the roster's (rosterStore.ts).
+//   Any other space starting with "@" is refused.
 //
 // ─── Body ────────────────────────────────────────────────────────────────────
 //
@@ -66,13 +82,14 @@
 //   counter, then author (bytewise), then digest (bytewise). Every
 //   computer sorts the same way, so every computer picks the same winner.
 import * as crypto from "crypto";
+import { isMemberId } from "./memberId";
 
 export const KEYS_SPACE = "@keys";
+export const ROSTER_SPACE = "@roster";
 export const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_ID_BYTES = 512;
 const MAX_COUNTER = 0xffff_ffff;
 const SPACE_RE = /^[A-Za-z0-9._:@-]{1,64}$/;
-const FINGERPRINT_RE = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/;
 const KEY_ID_RE = /^[0-9a-f]{16}$/;
 const MAGIC = Buffer.from("PBR1", "ascii");
 const NONCE_BYTES = 12;
@@ -119,14 +136,6 @@ function fail(message: string): never {
     throw new RecordFormatError(message);
 }
 
-export function isFingerprint(value: unknown): value is string {
-    return typeof value === "string" && FINGERPRINT_RE.test(value);
-}
-
-export function fingerprintOf(certPem: string): string {
-    return new crypto.X509Certificate(certPem).fingerprint256;
-}
-
 /** The space a computer may write in, or a RecordFormatError saying why not. */
 export function checkSpace(space: unknown): asserts space is string {
     if (typeof space !== "string" || !SPACE_RE.test(space)) fail(`Invalid record space ${JSON.stringify(space)}`);
@@ -156,7 +165,7 @@ export function parseWireRecord(value: unknown): WireRecord {
     checkId(r.id);
     if (!isUint(r.wall, Number.MAX_SAFE_INTEGER)) fail(`Invalid record clock ${JSON.stringify(r.wall)}`);
     if (!isUint(r.counter, MAX_COUNTER)) fail(`Invalid record counter ${JSON.stringify(r.counter)}`);
-    if (!isFingerprint(r.author)) fail(`Invalid record author ${JSON.stringify(r.author)}`);
+    if (!isMemberId(r.author)) fail(`Invalid record author ${JSON.stringify(r.author)}`);
     if (typeof r.deleted !== "boolean") fail("A record's deleted flag must be true or false");
     if (!isUint(r.epoch, 0xffff_ffff)) fail(`Invalid record epoch ${JSON.stringify(r.epoch)}`);
     if (typeof r.key !== "string") fail("A record's key id must be a string");
@@ -167,14 +176,15 @@ export function parseWireRecord(value: unknown): WireRecord {
 
     if (r.space === KEYS_SPACE) {
         const [recipient, creator, ...rest] = (r.id as string).split("/");
-        if (rest.length || !isFingerprint(recipient) || creator !== r.author) {
+        if (rest.length || !isMemberId(recipient) || creator !== r.author) {
             fail(`A ${KEYS_SPACE} record's id must be <recipient>/<its author>`);
         }
         if (r.deleted || r.key !== "") fail(`A ${KEYS_SPACE} record can't be deleted and names no key`);
         if (body.length < SPKI_BYTES + NONCE_BYTES + TAG_BYTES) fail(`A ${KEYS_SPACE} record's body is too short`);
-    } else if ((r.space as string).startsWith("@")) {
+    } else if ((r.space as string).startsWith("@") && r.space !== ROSTER_SPACE) {
         fail(`Unknown reserved space ${JSON.stringify(r.space)}`);
     } else {
+        if (r.space === ROSTER_SPACE && !isMemberId(r.id)) fail(`A ${ROSTER_SPACE} record's id must be a member id`);
         if (!KEY_ID_RE.test(r.key)) fail(`Invalid record key id ${JSON.stringify(r.key)}`);
         if (r.deleted ? body.length !== 0 : body.length < NONCE_BYTES + TAG_BYTES) {
             fail(r.deleted ? "A delete has an empty body" : "A record's body is too short");
@@ -238,7 +248,7 @@ export function signRecord(h: RecordHeader, body: Buffer, privateKey: crypto.Key
     return { v: 1, ...h, body: body.toString("base64"), sig: sig.toString("base64") };
 }
 
-/** Whether `r` was signed by the key in `certPem`. The caller checks the certificate is the author's. */
+/** Whether `r` was signed by the key in `certPem`. The caller checks the certificate is the author's (memberIdOf). */
 export function verifyRecord(r: WireRecord, certPem: string): boolean {
     const publicKey = new crypto.X509Certificate(certPem).publicKey;
     return crypto.verify("sha256", signedBytes(r, Buffer.from(r.body, "base64")), { key: publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(r.sig, "base64"));

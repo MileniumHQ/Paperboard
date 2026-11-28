@@ -14,7 +14,8 @@ import { readStateFileSync } from "../core/storage";
 import { errorCode } from "@mileniumhq/paperapi/errors";
 import { isSafeId, type RosterMember } from "@mileniumhq/paperapi/protocol";
 import { readDial, readFacts } from "./rosterStore";
-import { LOCAL_COMPUTER_ID, memberIdOf, type Roster } from "./roster";
+import { LOCAL_COMPUTER_ID, type Roster } from "./roster";
+import { memberIdOf } from "./memberId";
 
 const PAIRED_COMPUTERS_FILE = "paired_computers.json";
 // what 0.4 named this computer until the person gave it a name
