@@ -607,7 +607,7 @@ describe("proving who dials", () => {
 				socket.write(`GET ${LINK_PATH} HTTP/1.1\r\nHost: a\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`),
 			);
 			let got = "";
-			socket.on("data", (data) => {
+			socket.on("data", (data: Buffer) => {
 				got += data;
 			});
 			socket.on("close", () => resolve(got));
