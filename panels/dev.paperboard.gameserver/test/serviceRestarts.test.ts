@@ -216,7 +216,12 @@ describe("servers through restarts", () => {
         expect(fs.readFileSync(path.join(serverDir("s-a"), "world", "level.dat"), "utf8")).toBe("s-a world");
         const back = await state.waitFor("s-a", (s) => s.serverStatus === "online" && runs("s-a").at(-1) !== pid, "s-a started again on the restored files");
         expect(alive(pid!)).toBe(false);
-        expect(back.serverEntries.slice(seen).map((e) => e.content).join("\n")).not.toContain("stopped while Paperboard was not running");
+        const since = back.serverEntries.slice(seen).map((e) => String(e.content));
+        expect(since.join("\n")).not.toContain("stopped while Paperboard was not running");
+        // the restore says why it stops the server, before the stop it causes
+        const stopping = since.indexOf("[Server] Stopping to restore a backup...");
+        expect(stopping).toBeGreaterThanOrEqual(0);
+        expect(since.indexOf("[Server] Process stopped.", stopping)).toBeGreaterThan(stopping);
         await serverCalls("s-a").stopServer();
         await state.waitFor("s-a", (s) => s.serverStatus === "offline", "s-a to stop");
     });
