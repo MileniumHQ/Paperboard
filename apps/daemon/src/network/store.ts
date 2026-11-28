@@ -32,9 +32,26 @@
 // yet (an author the roster doesn't know, a header the rule refuses, a clock
 // too far ahead) is held, not dropped, and readmit() tries it again; a
 // record that is accepted and that the rule refuses later goes back to held.
-// So what a computer holds depends only on the records it has seen and the
-// rule's answers, never on the order they came in. A forged or malformed
-// record is refused for good.
+// A forged or malformed record is refused for good.
+//
+// What is guaranteed:
+//  - While Membership's answers stay the same, the versions a store keeps
+//    are a function of the set of records it has considered, in any order
+//    and with any repeats: per author the newest, of those the newest
+//    MAX_VERSIONS.
+//  - Accepting a version throws away the ones it outranks (its author's
+//    older one, or the oldest past MAX_VERSIONS). When readmit() later
+//    takes an accepted version back to held, what it outranked is gone
+//    here, so readmit() forgets every pull cursor and the next pulls fetch
+//    everything again: any computer or relay that still has those versions
+//    gives them back. Once computers that sync with each other (directly
+//    or through a relay) have the same answers and have pulled from each
+//    other since their last readmit(), all of them hold the same.
+//  - That is all of it. A version no remaining computer or relay kept (all
+//    of them accepted its replacement before hearing it was refused) is
+//    gone everywhere alike.
+//  - A pull never moves its cursor past a record it didn't keep: when held
+//    is full it fails instead (MAX_HELD).
 //
 // ─── Disk ────────────────────────────────────────────────────────────────────
 //
@@ -222,12 +239,15 @@ export class RecordStore {
     private spaces = new Map<string, Map<string, Version[]>>();
     private held = new Map<string, WireRecord>();
     private cursors: Record<string, ChangeCursor | PushCursor> = {};
+    /** bumped whenever readmit() forgets the pull cursors, so a pull that was running can't put an old one back */
+    private pullGeneration = 0;
     private keyring = new Map<string, NetworkKey>();
     private keyErrors = new Map<string, string>();
 
     // what the running change touched, saved and announced by flush()
     private dirtySpaces = new Set<string>();
     private heldDirty = false;
+    private cursorsDirty = false;
     /** held records accepted by the running change, until flush() has saved them in their space */
     private leavingHeld = new Map<string, WireRecord>();
     private changed = new Map<string, Set<string>>();
@@ -415,7 +435,8 @@ export class RecordStore {
      * Asks Membership again about every record: accepted ones it now
      * refuses go back to held, held ones it admits (or whose clock is no
      * longer ahead) are accepted. Call it when the roster changes, and now
-     * and then for clocks.
+     * and then for clocks. Taking any accepted record back forgets every
+     * pull cursor, so the next pulls fetch everything again.
      */
     readmit(): Promise<ApplyResult> {
         return this.change(() => {
@@ -424,6 +445,8 @@ export class RecordStore {
                 for (const [id, versions] of ids) {
                     const kept = versions.filter((v) => this.membership.admits(headerOf(v.record)));
                     if (kept.length === versions.length) continue;
+                    // what these outranked is gone here: pull everything again (see the top of this file)
+                    this.forgetPullCursors();
                     for (const v of versions) if (!kept.includes(v)) this.held.set(v.digest, v.record);
                     this.heldDirty = true;
                     if (kept.length) ids.set(id, kept);
@@ -446,12 +469,17 @@ export class RecordStore {
         });
     }
 
-    /** Takes what `peer` has that this store hasn't seen from it yet, batch by batch, remembering where it got to. */
+    /**
+     * Takes what `peer` has that this store hasn't seen from it yet, batch
+     * by batch, remembering where it got to. Fails, keeping its cursor
+     * before them, when records it was given couldn't be kept.
+     */
     pull(peer: string, source: RecordSource, limit = 500): Promise<ApplyResult> {
         const key = `pull:${peer}`;
         return this.peerLines.run(key, async () => {
             const total: ApplyResult = { accepted: 0, known: 0, held: 0, refused: [] };
             for (;;) {
+                const generation = this.pullGeneration;
                 const cursor = this.cursors[key] ?? null;
                 const batch = await source.changes(cursor, limit);
                 if (!batch || !Array.isArray(batch.records) || typeof batch.more !== "boolean" || !isCursor({ log: batch.log, after: batch.next })) {
@@ -466,7 +494,15 @@ export class RecordStore {
                 total.known += result.known;
                 total.held += result.held;
                 total.refused.push(...result.refused);
-                await this.saveCursor(key, { log: batch.log, after: batch.next });
+                const full = result.refused.filter((r) => r.reason === "held-full").length;
+                if (full) {
+                    throw new Error(
+                        `${full} records from ${peer} weren't kept: ${MAX_HELD} records already wait to be admitted (their computers aren't in the network yet, or their clocks are ahead). ` +
+                            "Add those computers to the network, or wait for their clocks, then readmit() and pull again: the pull kept its place before the records it couldn't keep.",
+                    );
+                }
+                // a readmit() that forgot the cursors meanwhile wins: start over
+                if (!(await this.saveCursor(key, { log: batch.log, after: batch.next }, generation))) continue;
                 if (!batch.more) return total;
             }
         });
@@ -666,6 +702,9 @@ export class RecordStore {
     }
 
     private async flush(): Promise<void> {
+        // forgotten cursors first: a crash after this re-pulls for nothing,
+        // one before it can't keep a cursor past what was thrown away
+        if (this.cursorsDirty) await writeFileAtomic(path.join(this.dir, "cursors.json"), JSON.stringify(this.cursors));
         if (this.nextSeq > this.reservedSeq) {
             this.reservedSeq = this.nextSeq + SEQ_BLOCK;
             await writeFileAtomic(path.join(this.dir, "meta.json"), JSON.stringify({ log: this.log, reservedSeq: this.reservedSeq }));
@@ -684,6 +723,7 @@ export class RecordStore {
         if (this.leavingHeld.size) await this.writeHeld([...this.held.values()]);
         this.dirtySpaces.clear();
         this.heldDirty = false;
+        this.cursorsDirty = false;
         this.leavingHeld.clear();
     }
 
@@ -705,13 +745,23 @@ export class RecordStore {
         }
     }
 
-    // in the store's line, so two peers' cursors never overwrite each other
-    private saveCursor(key: string, cursor: ChangeCursor | PushCursor): Promise<void> {
+    // In the store's line, so two peers' cursors never overwrite each other.
+    // A pull cursor read before readmit() forgot the cursors is not saved:
+    // false.
+    private saveCursor(key: string, cursor: ChangeCursor | PushCursor, generation?: number): Promise<boolean> {
         return this.queue.run(async () => {
+            if (generation !== undefined && generation !== this.pullGeneration) return false;
             const cursors = { ...this.cursors, [key]: cursor };
             await writeFileAtomic(path.join(this.dir, "cursors.json"), JSON.stringify(cursors));
             this.cursors = cursors;
+            return true;
         });
+    }
+
+    private forgetPullCursors(): void {
+        this.cursors = Object.fromEntries(Object.entries(this.cursors).filter(([key]) => !key.startsWith("pull:")));
+        this.pullGeneration++;
+        this.cursorsDirty = true;
     }
 
     private load(): void {
@@ -787,6 +837,7 @@ export class RecordStore {
 
         this.dirtySpaces = new Set();
         this.heldDirty = false;
+        this.cursorsDirty = false;
         this.leavingHeld = new Map();
         this.rebuildKeyring(new Set());
         this.changed = new Map();

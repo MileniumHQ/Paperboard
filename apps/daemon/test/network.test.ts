@@ -18,6 +18,8 @@ import {
 } from "../src/network/record";
 import {
 	FUTURE_TOLERANCE_MS,
+	MAX_HELD,
+	MAX_VERSIONS,
 	type Membership,
 	RecordStore,
 	RecordStoreCorruptError,
@@ -372,6 +374,188 @@ describe("records that aren't the network's are refused", () => {
 		a.roster.certs.delete(a.fp);
 		await expect(a.store.put("notes", "x", 1)).rejects.toThrow("the network doesn't admit it");
 		expect(a.store.get("notes", "x")).toBeNull();
+	});
+});
+
+// a, about to be removed from T0 + 5000, wrote Y while still a member and
+// then X after; every other computer has Y and has pulled past it
+async function removal(...names: string[]): Promise<{ a: Computer; rest: Computer[] }> {
+	const computers = await network("a", ...names);
+	const [a] = computers;
+	wall = T0 + 1000;
+	await a.store.put("p", "doc", "Y");
+	await syncAll(computers);
+	wall = T0 + 10_000;
+	await a.store.put("p", "doc", "X");
+	return { a, rest: computers.slice(1) };
+}
+
+async function learnRemoval(c: Computer, removed: Computer): Promise<void> {
+	c.roster.removedFrom.set(removed.fp, T0 + 5000);
+	await c.store.readmit();
+}
+
+describe("a removal converges", () => {
+	test("whether a computer accepted the removed one's write before or after hearing of the removal", async () => {
+		const { a, rest } = await removal("s1", "s2");
+		const [s1, s2] = rest;
+		await s1.store.pull("a", a.store);
+		expect(value(s1.store, "p", "doc")).toBe("X");
+		await learnRemoval(s1, a);
+		await learnRemoval(s2, a);
+		await s2.store.pull("a", a.store);
+		await syncAll([a, s1, s2]);
+		expect(value(s1.store, "p", "doc")).toBe("Y");
+		expect(value(s2.store, "p", "doc")).toBe("Y");
+	});
+
+	test("with the removed computer gone, the others give back what it replaced", async () => {
+		const { a, rest } = await removal("s1", "s2");
+		const [s1, s2] = rest;
+		await s1.store.pull("a", a.store);
+		await learnRemoval(s1, a);
+		await learnRemoval(s2, a);
+		await s2.store.pull("a", a.store);
+		// a is never reached again, and s1 restarts first
+		s1.reopen();
+		await syncAll([s1, s2]);
+		expect(snapshot(s1.store, "p", ["doc"])).toEqual(snapshot(s2.store, "p", ["doc"]));
+		expect(value(s1.store, "p", "doc")).toBe("Y");
+	});
+
+	test("when every computer accepted the write before hearing of the removal, all agree it is gone", async () => {
+		const { a, rest } = await removal("s1", "s2", "s3");
+		for (const c of rest) await c.store.pull("a", a.store);
+		for (const c of rest) await learnRemoval(c, a);
+		await syncAll(rest);
+		for (const c of rest) expect(c.store.versions("p", "doc")).toEqual([]);
+	});
+
+	test("four computers hearing the write and the removal in any order, from each other, agree", async () => {
+		for (let seed = 1; seed <= 12; seed++) {
+			const next = random(seed);
+			const { a, rest } = await removal("s1", "s2", "s3", "s4");
+			const steps = shuffle(
+				rest.flatMap((c) => [{ c, learn: true }, { c, learn: false }, { c, learn: false }]),
+				next,
+			);
+			let someoneKeptY = false;
+			for (const { c, learn } of steps) {
+				if (learn && !c.roster.removedFrom.has(a.fp)) {
+					// X can never come in after this, so whoever still has Y keeps it
+					if (value(c.store, "p", "doc") === "Y") someoneKeptY = true;
+					await learnRemoval(c, a);
+				} else if (!learn) {
+					const from = [a, ...rest][Math.floor(next() * (rest.length + 1))];
+					if (from !== c) await c.store.pull(from.name, from.store);
+				}
+			}
+			await syncAll(rest);
+			const expected = snapshot(rest[0].store, "p", ["doc"]);
+			for (const c of rest) expect(snapshot(c.store, "p", ["doc"])).toEqual(expected);
+			expect(value(rest[0].store, "p", "doc")).toBe(someoneKeptY ? "Y" : null);
+		}
+	});
+
+	test("a version pushed out by the MAX_VERSIONS bound comes back when one that outranked it is refused", async () => {
+		wall = T0;
+		const roster = new Roster();
+		const s1 = computer("s1", roster);
+		const s2 = computer("s2", new Roster());
+		const writers = Array.from({ length: MAX_VERSIONS + 1 }, (_, i) => computer(`w${i}`, roster));
+		const all = [s1, s2, ...writers];
+		roster.know(...all);
+		s2.roster.know(...all);
+		await s1.store.createEpoch(all.map((c) => c.identity.cert));
+		for (const c of [s2, ...writers]) await c.store.pull("s1", s1.store);
+
+		const [oldest, ...newer] = writers;
+		const refused = newer[newer.length - 1];
+		wall = T0 + 1000;
+		await oldest.store.put("p", "doc", "oldest");
+		for (const [i, w] of newer.entries()) {
+			wall = T0 + 2000 + i;
+			await w.store.put("p", "doc", w.name);
+		}
+		// s1 takes the oldest through s2, so its cursor on s2 is past it, then
+		// the sixteen newer ones push it out
+		await s2.store.pull(oldest.name, oldest.store);
+		await s1.store.pull("s2", s2.store);
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.fp);
+		for (const w of newer) await s1.store.pull(w.name, w.store);
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).not.toContain(oldest.fp);
+
+		const removeRefused = async (c: Computer) => {
+			c.roster.removedFrom.set(refused.fp, T0 + 1500);
+			await c.store.readmit();
+		};
+		await removeRefused(s1);
+		await removeRefused(s2);
+		for (const w of writers) await s2.store.pull(w.name, w.store);
+		await syncAll([s1, s2]);
+		expect(snapshot(s1.store, "p", ["doc"])).toEqual(snapshot(s2.store, "p", ["doc"]));
+		expect(s1.store.versions("p", "doc").map((v) => v.author)).toContain(oldest.fp);
+	});
+
+	test("a pull that was running when readmit() forgot the cursors starts over instead of saving its old one", async () => {
+		const { a, rest } = await removal("s1", "s2");
+		const [s1, s2] = rest;
+		await s1.store.pull("a", a.store);
+		await learnRemoval(s2, a);
+		// s1 asks s2 for what is past its cursor (nothing), and readmit() runs before the answer lands
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let calls = 0;
+		const slow: RecordSource = {
+			async changes(cursor, limit) {
+				const batch = await s2.store.changes(cursor, limit);
+				if (calls++ === 0) await gate;
+				return batch;
+			},
+		};
+		const pulling = s1.store.pull("s2", slow);
+		await learnRemoval(s1, a);
+		release();
+		await pulling;
+		expect(value(s1.store, "p", "doc")).toBe("Y");
+	});
+});
+
+describe("a full held list", () => {
+	test("fails the pull loudly and keeps its cursor before what it couldn't keep", async () => {
+		const [a, b] = await network("a", "b");
+		// a flood from computers nobody knows yet: held unread, so a made-up signature gets it in
+		const strangers = Array.from({ length: 4 }, () => createTlsIdentity());
+		const flood = Array.from({ length: MAX_HELD }, (_, i) => ({
+			v: 1,
+			space: "flood",
+			id: `r${i}`,
+			wall: T0,
+			counter: 0,
+			author: fingerprintOf(strangers[i % strangers.length].cert),
+			deleted: true,
+			epoch: 0,
+			key: "0000000000000000",
+			body: "",
+			sig: Buffer.alloc(64).toString("base64"),
+		}));
+		expect((await a.store.apply(flood)).held).toBe(MAX_HELD);
+
+		wall = T0 + 1000;
+		a.roster.certs.delete(b.fp);
+		await b.store.put("notes", "x", "kept later");
+		await expect(a.store.pull("b", b.store)).rejects.toThrow(`1 records from b weren't kept: ${MAX_HELD} records already wait to be admitted`);
+		await expect(a.store.pull("b", b.store)).rejects.toThrow("weren't kept");
+
+		// once the strangers are known their forgeries are refused, held drains, and the pull takes what it skipped
+		a.roster.know(b);
+		for (const s of strangers) a.roster.certs.set(fingerprintOf(s.cert), s.cert);
+		expect((await a.store.readmit()).refused.length).toBe(MAX_HELD);
+		expect(a.store.heldCount).toBe(0);
+		expect((await a.store.pull("b", b.store)).accepted).toBe(1);
+		expect(value(a.store, "notes", "x")).toBe("kept later");
 	});
 });
 
